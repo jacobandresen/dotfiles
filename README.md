@@ -12,7 +12,7 @@ scripts/        — theme switcher
 
 ## Setup
 
-You'll need Neovim ≥ 0.9, git, and a [Nerd Font](https://www.nerdfonts.com/).
+You'll need Neovim ≥ 0.9, git, and [Terminess Nerd Font](https://www.nerdfonts.com/font-downloads) (TerminessTTF).
 
 Clone the repo somewhere and symlink the configs into place:
 
@@ -31,11 +31,11 @@ Then open Neovim — [lazy.nvim](https://github.com/folke/lazy.nvim) installs ev
 [WezTerm](https://wezfurlong.org/wezterm/) is a GPU-accelerated terminal written in Rust. The config leans into a deliberately minimal, retro CMD.EXE look:
 
 - **80×25 initial window** — classic terminal dimensions
-- **Andale Mono / Courier New** at 14pt
+- **Terminess Nerd Font Mono** at 14pt — bitmap-derived, DOS-era terminal feel
 - **Blinking block cursor** at 530ms
 - **No tab bar, no scroll bar** — just the title bar and a resize border
 - **4px padding** all around for edge-to-edge text
-- **[darkmoss (base16)](https://github.com/tinted-theming/base16-schemes)** as the default color scheme
+- **[Tokyo City Terminal Dark (base16)](https://github.com/tinted-theming/base16-schemes)** as the default color scheme
 
 ## Neovim
 
@@ -68,7 +68,7 @@ Confirming a selection rewrites the `config.color_scheme` line in `~/.wezterm.lu
 
 ## How WezTerm and Neovim stay in sync
 
-Neovim reads `~/.wezterm.lua` at startup and looks for the `config.color_scheme` line. As long as the scheme name ends in `(base16)` — like `"darkmoss (base16)"` — it translates that into the matching [nvim-base16](https://github.com/RRethy/nvim-base16) name and applies it. If the file isn't there or the scheme doesn't match, it falls back to a classic Borland colorscheme.
+Neovim reads `~/.wezterm.lua` at startup and looks for the `config.color_scheme` line. As long as the scheme name ends in `(base16)` — like `"Tokyo City Terminal Dark (base16)"` — it translates that into the matching [nvim-base16](https://github.com/RRethy/nvim-base16) name and applies it. If the file isn't there or the scheme doesn't match, it falls back to a classic Borland colorscheme.
 
 That means you only ever set the theme in one place. To switch manually, just edit `.wezterm.lua`:
 

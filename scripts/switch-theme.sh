@@ -31,20 +31,26 @@ if [ ! -d "$BASE16_DIR" ]; then
   exit 1
 fi
 
-# Pick a scheme
+# Pick a scheme — build "name<TAB>path" pairs so fzf shows the YAML name
+# (which matches WezTerm's internal scheme name) while preview gets the path.
 chosen=$(
-  find "$BASE16_DIR" -name "*.yaml" -printf "%f\n" \
-    | sed 's/\.yaml$//' \
+  find "$BASE16_DIR" -name "*.yaml" | while IFS= read -r yaml; do
+    name=$(grep -m1 '^name:' "$yaml" | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
+    [ -n "$name" ] && printf '%s\t%s\n' "$name" "$yaml"
+  done \
     | sort \
     | fzf \
+        --delimiter=$'\t' \
+        --with-nth=1 \
         --prompt="theme> " \
-        --preview="$PREVIEW_SCRIPT $BASE16_DIR/{}.yaml" \
+        --preview="$PREVIEW_SCRIPT {2}" \
         --preview-window="right:45%"
 ) || exit 0  # user cancelled
 
 [ -z "$chosen" ] && exit 0
 
-new_line="config.color_scheme = \"$chosen (base16)\""
+scheme_name=$(printf '%s' "$chosen" | cut -f1)
+new_line="config.color_scheme = \"$scheme_name (base16)\""
 
 # Update ~/.wezterm.lua
 if [ ! -f "$WEZTERM_CFG" ]; then
@@ -53,7 +59,7 @@ if [ ! -f "$WEZTERM_CFG" ]; then
 fi
 
 sed -i "s|config\.color_scheme\s*=.*|$new_line|" "$WEZTERM_CFG"
-echo "updated $WEZTERM_CFG → $chosen (base16)"
+echo "updated $WEZTERM_CFG → $scheme_name (base16)"
 
 # Sync dotfiles copy if it differs from the live config
 if [ -f "$DOTFILES_CFG" ] && [ "$DOTFILES_CFG" != "$WEZTERM_CFG" ]; then
