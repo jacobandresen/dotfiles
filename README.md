@@ -18,9 +18,9 @@ nvim/           — editor (LazyVim-based)
 - **Blinking block cursor** at 530ms — matches the old `CMD.EXE` feel
 - **No tab bar, no scroll bar** — just title bar + resize border
 - **Tight 4px padding** on all sides for edge-to-edge text
-- **[darkmoss (base16)](https://github.com/tinted-theming/tinted-theming)** color scheme by default
+- **[darkmoss (base16)](https://github.com/tinted-theming/base16-schemes)** color scheme by default
 
-Any [base16 scheme](https://github.com/tinted-theming/tinted-theming) works — change one line to switch both WezTerm and Neovim simultaneously (see below).
+Any [base16 scheme](https://github.com/tinted-theming/base16-schemes) works — change one line to switch both WezTerm and Neovim simultaneously (see below).
 
 ## Neovim
 
@@ -51,7 +51,7 @@ To switch themes, just change this one line in `.wezterm.lua`:
 config.color_scheme = "gruvbox-dark-hard (base16)"
 ```
 
-Any [base16 scheme](https://github.com/tinted-theming/tinted-theming) works.
+Any [base16 scheme](https://github.com/tinted-theming/base16-schemes) works.
 
 ## Setup
 
