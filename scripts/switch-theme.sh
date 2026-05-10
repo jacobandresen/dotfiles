@@ -24,6 +24,7 @@ else
 fi
 
 BASE16_DIR="$SCHEMES_DIR/base16"
+PREVIEW_SCRIPT="$(cd "$(dirname "$0")" && pwd)/preview-theme.sh"
 
 if [ ! -d "$BASE16_DIR" ]; then
   echo "error: base16 schemes not found at $BASE16_DIR" >&2
@@ -37,8 +38,8 @@ chosen=$(
     | sort \
     | fzf \
         --prompt="theme> " \
-        --preview="cat $BASE16_DIR/{}.yaml" \
-        --preview-window="right:50%:wrap"
+        --preview="$PREVIEW_SCRIPT $BASE16_DIR/{}.yaml" \
+        --preview-window="right:45%"
 ) || exit 0  # user cancelled
 
 [ -z "$chosen" ] && exit 0
