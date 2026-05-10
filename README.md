@@ -30,11 +30,11 @@ Then open Neovim — [lazy.nvim](https://github.com/folke/lazy.nvim) installs ev
 
 [WezTerm](https://wezfurlong.org/wezterm/) is a GPU-accelerated terminal written in Rust. The config leans into a deliberately minimal, retro CMD.EXE look:
 
-- **80×25 initial window** — classic terminal dimensions
-- **Terminess Nerd Font Mono** at 14pt — bitmap-derived, DOS-era terminal feel
+- **120×40 initial window** — a bit more breathing room than the classic 80×25
+- **14pt font** — WezTerm's default font; swap in whatever you like
 - **Blinking block cursor** at 530ms
-- **No tab bar, no scroll bar** — just the title bar and a resize border
-- **4px padding** all around for edge-to-edge text
+- **Tab bar and scroll bar enabled**
+- **4px padding** all around for a tight, edge-to-edge feel
 - **[Atelier Forest Light (base16)](https://github.com/tinted-theming/base16-schemes)** as the default color scheme
 
 ## Neovim
