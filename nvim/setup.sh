@@ -7,7 +7,7 @@ case "$(uname -r)" in *microsoft* | *Microsoft*) IS_WSL=1 ;; esac
 if [ "$(uname)" = "Darwin" ]; then
   brew install neovim make gcc node python jq git fpc
 elif [ -f /etc/arch-release ]; then
-  sudo pacman -S --needed neovim ttf-terminus-nerd base-devel make gcc nodejs npm python jq git fpc
+  sudo pacman -S --needed neovim ttf-terminus-nerd base-devel make gcc nodejs npm python jq git fpc wl-clipboard
 elif [ -f /etc/debian_version ]; then
   sudo apt-get update
   # The apt neovim is often outdated; use the upstream PPA for a recent stable release

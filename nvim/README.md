@@ -104,7 +104,7 @@ Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 | [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) | Status line |
 | [bamboo.nvim](https://github.com/ribru17/bamboo.nvim) | Default colorscheme |
 | [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) | Rendered Markdown in buffer |
-| [baleia.nvim](https://github.com/m00qek/baleia.nvim) | Colorize ANSI escape sequences |
+| [ansify.nvim](https://github.com/tmccombs/ansify.nvim) | Colorize ANSI escape sequences |
 | [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo) | Better folding |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) | Icon provider |
 
@@ -135,3 +135,4 @@ Managed by Mason, auto-installed on startup:
 | `python3` | URL/HTML encode-decode transforms |
 | `jq` | JSON formatting (`formatprg`) and transforms |
 | `pi` | CLI backend for CodeCompanion AI |
+| `wl-clipboard` | System clipboard support on Wayland (`wl-copy`/`wl-paste`) |
