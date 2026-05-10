@@ -35,7 +35,7 @@ Then open Neovim — [lazy.nvim](https://github.com/folke/lazy.nvim) installs ev
 - **Blinking block cursor** at 530ms
 - **No tab bar, no scroll bar** — just the title bar and a resize border
 - **4px padding** all around for edge-to-edge text
-- **[Tokyo City Terminal Dark (base16)](https://github.com/tinted-theming/base16-schemes)** as the default color scheme
+- **[Atelier Forest Light (base16)](https://github.com/tinted-theming/base16-schemes)** as the default color scheme
 
 ## Neovim
 
@@ -73,7 +73,7 @@ Neovim reads `~/.wezterm.lua` at startup and looks for the `config.color_scheme`
 That means you only ever set the theme in one place. To switch manually, just edit `.wezterm.lua`:
 
 ```lua
-config.color_scheme = "gruvbox-dark-hard (base16)"
+config.color_scheme = "Atelier Forest Light (base16)"
 ```
 
 Any [base16 scheme](https://github.com/tinted-theming/base16-schemes) works. Or use the script above and never touch the file by hand.
