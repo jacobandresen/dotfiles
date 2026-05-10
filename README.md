@@ -39,6 +39,18 @@ Highlights:
 
 See [`nvim/README.md`](nvim/README.md) for the full plugin list, TurboVim keybindings, and setup instructions.
 
+## Switching themes
+
+```sh
+bash scripts/switch-theme.sh
+```
+
+On first run it clones [tinted-theming/schemes](https://github.com/tinted-theming/schemes) (shallow, base16 only) into `~/.local/share/tinted-theming/schemes`. Subsequent runs do a fast-forward pull to keep the list current.
+
+Pick a scheme with fzf — the YAML preview shows the palette and author. On confirmation it rewrites the `config.color_scheme` line in `~/.wezterm.lua`. WezTerm picks up the change on reload; Neovim picks it up on next start.
+
+**Dependencies:** `git`, `fzf`
+
 ## The WezTerm / Neovim connection
 
 **Neovim reads your WezTerm config at startup to pick its color scheme.** Set the theme once in `.wezterm.lua` and both the terminal and editor update together.
