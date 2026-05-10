@@ -1,6 +1,12 @@
+# Neovim Config
+
+My personal Neovim setup. Includes a custom Turbo Pascal 7-style menu bar (TurboVim), a curated plugin list, and a setup script for Arch, Ubuntu/Debian (including WSL), and macOS.
+
 ## TurboVim
 
 A built-in menu bar inspired by Turbo Pascal 7, implemented as a local plugin (`dev/turbovim/`).
+
+![TurboVim menu bar active in Neovim, showing the top menu strip (File | Edit | Search | Code | Run | Window | Help), a neo-tree file explorer on the left, and Rust source code in the main editor pane — all rendered with the bamboo colorscheme.](screenshot/turbovim.png)
 
 ```
 ████████╗██╗   ██╗██████╗ ██████╗  ██████╗ ██╗   ██╗██╗███╗   ███╗
@@ -37,7 +43,7 @@ A built-in menu bar inspired by Turbo Pascal 7, implemented as a local plugin (`
 
 Search and file operations use Telescope. Code operations use the active LSP server.
 
-### Plugin structure
+### Structure
 
 ```
 dev/turbovim/lua/turbovim/
@@ -100,7 +106,7 @@ Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 ### UI
 | Plugin | Purpose |
 |--------|---------|
-| turbovim *(local)* | Turbo Pascal 7-style menu bar — see [TurboVim](#turbovim) |
+| [TurboVim](#turbovim) *(local)* | Turbo Pascal 7-style menu bar |
 | [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) | Status line |
 | [bamboo.nvim](https://github.com/ribru17/bamboo.nvim) | Default colorscheme |
 | [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) | Rendered Markdown in buffer |
