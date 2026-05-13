@@ -49,6 +49,18 @@ function M.get()
       },
     },
     {
+      label = "Database", key = "d",
+      items = {
+        { label = "Toggle UI",       key = "d", hint = "DBUIToggle",        action = function() vim.cmd("DBUIToggle") end },
+        { label = "Add Connection",  key = "a", hint = "DBUIAddConnection", action = function() vim.cmd("DBUIAddConnection") end },
+        { label = "Find Buffer",     key = "f", hint = "DBUIFindBuffer",    action = function() vim.cmd("DBUIFindBuffer") end },
+        { label = "Rename Buffer",   key = "r", hint = "DBUIRenameBuffer",  action = function() vim.cmd("DBUIRenameBuffer") end },
+        { sep = true },
+        { label = "Execute Query",   key = "e", hint = "<leader>S",        action = function() vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<leader>S", true, true, true), "n", false) end },
+        { label = "Last Query Info", key = "i", hint = "DBUILastQueryInfo", action = function() vim.cmd("DBUILastQueryInfo") end },
+      },
+    },
+    {
       label = "Run", key = "r",
       items = {
         { label = "Make", key = "m", hint = ":make", action = function() vim.cmd("make") end },

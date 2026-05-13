@@ -2,7 +2,6 @@
 
 My hackbox setup — [WezTerm](https://wezfurlong.org/wezterm/) and [Neovim](https://neovim.io/) configs, wired together so they share a single color scheme.
 
-Suggestions and PRs are welcome. Feel free to [open an issue](https://github.com/jacobandresen/dotfiles/issues) if you spot something broken or have ideas.
 
 ```
 .wezterm.lua    — terminal
@@ -31,7 +30,7 @@ Then open Neovim — [lazy.nvim](https://github.com/folke/lazy.nvim) installs ev
 [WezTerm](https://wezfurlong.org/wezterm/) is a GPU-accelerated terminal written in Rust. The config leans into a deliberately minimal, retro CMD.EXE look:
 
 - **120×40 initial window** — a bit more breathing room than the classic 80×25
-- **14pt font** — WezTerm's default font; swap in whatever you like
+
 - **Blinking block cursor** at 530ms
 - **Tab bar and scroll bar enabled**
 - **4px padding** all around for a tight, edge-to-edge feel
