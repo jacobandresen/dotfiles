@@ -62,16 +62,8 @@ return {
       dap.listeners.after.event_initialized["dapui_config"] = function() dapui.open() end
       dap.listeners.before.event_terminated["dapui_config"] = function() dapui.close() end
       dap.listeners.before.event_exited["dapui_config"] = function() dapui.close() end
-    end,
-  },
 
-  {
-    "mfussenegger/nvim-dap",
-    ft = { "c", "cpp" },
-    config = function()
-      local dap = require("dap")
       local codelldb = vim.fn.stdpath("data") .. "/mason/bin/codelldb"
-
       dap.adapters.codelldb = {
         type = "server",
         port = "${port}",
@@ -97,7 +89,6 @@ return {
           cwd = "${workspaceFolder}",
         },
       }
-
       dap.configurations.cpp = dap.configurations.c
     end,
   },
@@ -107,13 +98,6 @@ return {
     ft = { "rust" },
     config = function()
       local dap = require("dap")
-      local codelldb = vim.fn.stdpath("data") .. "/mason/bin/codelldb"
-
-      dap.adapters.codelldb = dap.adapters.codelldb or {
-        type = "server",
-        port = "${port}",
-        executable = { command = codelldb, args = { "--port", "${port}" } },
-      }
 
       dap.configurations.rust = {
         {
