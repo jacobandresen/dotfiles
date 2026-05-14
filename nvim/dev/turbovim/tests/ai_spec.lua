@@ -1,11 +1,16 @@
 local menus   = require("turbovim.menus").get()
-local ai_menu = menus[7]   -- AI is at index 7 (File/Edit/Search/Code/Database/Run/AI/Window/Help)
+local ai_menu
+local ai_idx
+for i, m in ipairs(menus) do
+  if m.label == "AI" then ai_menu = m; ai_idx = i; break end
+end
 
 -- ── Structure ────────────────────────────────────────────────────────────────
 
 describe("AI menu: structure", function()
 
-  it("is at index 7 with label 'AI' and key 'a'", function()
+  it("exists in the menu list with label 'AI' and key 'a'", function()
+    assert.is_not_nil(ai_menu, "AI menu not found")
     assert.equals("AI",  ai_menu.label)
     assert.equals("a",   ai_menu.key)
   end)
@@ -40,6 +45,46 @@ describe("AI menu: structure", function()
     assert.equals("i",           item.key)
     assert.equals("<leader>ci",  item.hint)
     assert.is_function(item.action)
+  end)
+
+end)
+
+-- ── Inline AI specific behavior ──────────────────────────────────────────────
+
+describe("AI menu: Inline specific behavior", function()
+  local orig_cmd, calls
+
+  before_each(function()
+    orig_cmd = vim.cmd
+    calls    = {}
+    vim.cmd  = function(c) table.insert(calls, c) end
+  end)
+
+  after_each(function()
+    vim.cmd = orig_cmd
+  end)
+
+  it("dispatches exactly 'CodeCompanion', not Chat or Actions", function()
+    ai_menu.items[3].action()
+    assert.equals(1, #calls)
+    assert.equals("CodeCompanion", calls[1])
+  end)
+
+  it("can be invoked multiple times without error", function()
+    for _ = 1, 3 do ai_menu.items[3].action() end
+    assert.equals(3, #calls)
+    for _, c in ipairs(calls) do
+      assert.equals("CodeCompanion", c)
+    end
+  end)
+
+  it("key 'i' is distinct from Chat ('c') and Actions ('a')", function()
+    assert.is_not.equals(ai_menu.items[3].key, ai_menu.items[1].key)
+    assert.is_not.equals(ai_menu.items[3].key, ai_menu.items[2].key)
+  end)
+
+  it("hint matches the registered keymap '<leader>ci'", function()
+    assert.equals("<leader>ci", ai_menu.items[3].hint)
   end)
 
 end)
@@ -124,6 +169,8 @@ describe("all menu entries: no warnings on dispatch", function()
     local noop = setmetatable({}, { __index = function() return function() end end })
     package.loaded["telescope.builtin"] = noop
     package.loaded["turbovim.splash"]   = { show = function() end }
+    package.loaded["dap"]               = noop
+    package.loaded["dapui"]             = noop
   end)
 
   after_each(function()
@@ -140,6 +187,8 @@ describe("all menu entries: no warnings on dispatch", function()
 
     package.loaded["telescope.builtin"] = nil
     package.loaded["turbovim.splash"]   = nil
+    package.loaded["dap"]               = nil
+    package.loaded["dapui"]             = nil
   end)
 
   for _, menu in ipairs(menus) do

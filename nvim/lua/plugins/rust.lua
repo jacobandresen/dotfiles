@@ -13,6 +13,15 @@ return {
     "mrcjkb/rustaceanvim",
     version = "^5",
     ft = { "rust" },
+    keys = {
+      { "<leader>rb", "<cmd>make build<cr>", ft = "rust", desc = "Cargo build" },
+    },
+    init = function()
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "rust",
+        callback = function() vim.bo.makeprg = "cargo" end,
+      })
+    end,
     config = function()
       vim.g.rustaceanvim = {
         server = {
