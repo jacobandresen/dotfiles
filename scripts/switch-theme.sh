@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCHEMES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tinted-theming/schemes"
-WEZTERM_CFG="$(realpath "$HOME/.wezterm.lua" 2>/dev/null || echo "$HOME/.wezterm.lua")"
+WEZTERM_CFG="$HOME/.wezterm.lua"
 DOTFILES_CFG="$(cd "$(dirname "$0")/.." && pwd)/.wezterm.lua"
 
 # Dependencies
@@ -58,7 +58,7 @@ if [ ! -f "$WEZTERM_CFG" ]; then
   exit 1
 fi
 
-sed -i '' "s|config\.color_scheme[[:space:]]*=.*|$new_line|" "$WEZTERM_CFG"
+sed -i "s|config\.color_scheme\s*=.*|$new_line|" "$WEZTERM_CFG"
 echo "updated $WEZTERM_CFG → $scheme_name (base16)"
 
 # Sync dotfiles copy if it differs from the live config
@@ -66,7 +66,7 @@ if [ -f "$DOTFILES_CFG" ] && [ "$DOTFILES_CFG" != "$WEZTERM_CFG" ]; then
   if ! diff -q "$WEZTERM_CFG" "$DOTFILES_CFG" &>/dev/null; then
     read -r -p "sync $DOTFILES_CFG too? [y/N] " ans
     if [[ "$ans" =~ ^[Yy]$ ]]; then
-      sed -i '' "s|config\.color_scheme[[:space:]]*=.*|$new_line|" "$DOTFILES_CFG"
+      sed -i "s|config\.color_scheme\s*=.*|$new_line|" "$DOTFILES_CFG"
       echo "updated $DOTFILES_CFG"
     fi
   fi
