@@ -52,7 +52,7 @@ dev/turbovim/lua/turbovim/
 ## Setup
 
 ```sh
-./setup.sh
+scripts/setup.sh
 ```
 
 Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).

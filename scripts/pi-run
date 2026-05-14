@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Launch pi in offline/standalone mode (skips version checks and network ops).
+# Passes all args through, so interactive and headless use both work:
+#   pi-run                          # interactive
+#   pi-run -p "do X"                # one-shot headless
+#   pi-run --continue "keep going"  # resume last session
+exec env PI_OFFLINE=1 pi "$@"

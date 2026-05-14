@@ -1,0 +1,11 @@
+# OAuth tokens and API keys written by pi on login
+auth.json
+
+# Runtime: conversation history (may contain private code/data)
+sessions/
+
+# Compiled tool binaries (fd, rg) — platform-specific, not source-controlled
+bin/
+
+# Package cache — managed by `pi install`, not manual edits
+packages/

@@ -1,0 +1,25 @@
+{
+  "defaultModel": "gemma4",
+  "defaultProvider": "ollama",
+  "lastChangelogVersion": "0.74.0",
+  "packages": [
+    "npm:@ollama/pi-web-search"
+  ],
+  "quietStartup": true,
+  "enableSkillCommands": true,
+  "retry": {
+    "enabled": true,
+    "maxRetries": 5,
+    "baseDelayMs": 5000,
+    "provider": {
+      "timeoutMs": 600000,
+      "maxRetries": 1,
+      "maxRetryDelayMs": 0
+    }
+  },
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  }
+}

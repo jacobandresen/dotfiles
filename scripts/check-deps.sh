@@ -18,20 +18,20 @@ need() {
 }
 
 echo "Core"
-need "neovim"         nvim      "setup.sh"
-need "git"            git       "setup.sh"
-need "make"           make      "setup.sh"
-need "gcc"            gcc       "setup.sh"
+need "neovim"         nvim      "scripts/setup.sh"
+need "git"            git       "scripts/setup.sh"
+need "make"           make      "scripts/setup.sh"
+need "gcc"            gcc       "scripts/setup.sh"
 
 echo ""
 echo "Language runtimes"
-need "node"           node      "setup.sh"
+need "node"           node      "scripts/setup.sh"
 need "npm"            npm       "setup.sh (included with node)"
-need "python3"        python3   "setup.sh"
+need "python3"        python3   "scripts/setup.sh"
 
 echo ""
 echo "Tools"
-need "fzf"            fzf       "setup.sh"
+need "fzf"            fzf       "scripts/setup.sh"
 need "ripgrep (rg)"   rg        "setup.sh  [telescope live_grep]"
 need "fd"             fd        "setup.sh  [telescope find_files]"
 need "jq"             jq        "setup.sh  [JSON formatting]"
@@ -40,13 +40,26 @@ need "fpc"            fpc       "setup.sh  [Free Pascal]"
 echo ""
 echo "AI backend"
 need "pi"             pi        "npm install -g @earendil-works/pi-coding-agent"
+need "ollama"         ollama    "setup.sh  [local model server]"
+
+echo ""
+echo "AI models"
+if command -v ollama > /dev/null 2>&1; then
+  if ollama list 2>/dev/null | grep -q 'gemma4'; then
+    ok "gemma4"
+  else
+    miss "gemma4" "ollama pull gemma4"
+  fi
+else
+  miss "gemma4" "install ollama first"
+fi
 
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "All $PASS dependencies present."
 else
   echo "$FAIL missing, $PASS present."
-  echo "Run ./setup.sh to install system packages."
+  echo "Run scripts/setup.sh to install system packages."
   echo "For pi: npm install -g @earendil-works/pi-coding-agent"
 fi
 

@@ -6,7 +6,8 @@ My hackbox setup — [WezTerm](https://wezfurlong.org/wezterm/) and [Neovim](htt
 ```
 .wezterm.lua    — terminal
 nvim/           — editor (LazyVim-based)
-scripts/        — theme switcher
+scripts/        — theme switcher + pi standalone launcher
+pi/agent/       — pi coding agent config (settings, models, skills)
 ```
 
 ## Setup
@@ -21,6 +22,7 @@ cd ~/dotfiles
 
 ln -sf "$(pwd)/.wezterm.lua" ~/.wezterm.lua
 ln -sf "$(pwd)/nvim" ~/.config/nvim
+ln -sf "$(pwd)/pi/agent" ~/.pi/agent
 ```
 
 Then open Neovim — [lazy.nvim](https://github.com/folke/lazy.nvim) installs everything on first launch.
@@ -50,6 +52,74 @@ Built on [LazyVim](https://www.lazyvim.org/) with a curated plugin set and a cus
 - **Folding** via [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo)
 
 See [`nvim/README.md`](nvim/README.md) for the full plugin list, TurboVim keybindings, and setup notes.
+
+## pi agent
+
+[pi](https://github.com/badlogic/pi) is a local-first AI coding assistant backed by [Ollama](https://ollama.com/). It runs entirely on-device — no cloud API keys required.
+
+The config lives in `pi/agent/` and is symlinked to `~/.pi/agent/` on setup. The following are **not** tracked:
+
+- `auth.json` — OAuth tokens written by `pi login`; never committed
+- `sessions/` — conversation history; may contain private code
+- `bin/` — platform binaries (`fd`, `rg`); not portable
+
+### Default model
+
+`gemma4` (9.6 GB, 131k context, reasoning). Make sure it's pulled:
+
+```sh
+ollama pull gemma4
+```
+
+### Standalone launcher
+
+`scripts/pi-run` wraps `pi` with `PI_OFFLINE=1` to skip version checks and startup network calls — useful on air-gapped machines or when you just want a fast start.
+
+```sh
+# interactive
+scripts/pi-run
+
+# one-shot headless
+scripts/pi-run -p "explain this function" @src/main.ts
+
+# resume last session
+scripts/pi-run --continue
+```
+
+All other `pi` flags pass through unchanged.
+
+### Settings (`~/.pi/agent/settings.json`)
+
+Key tunables for long-running local sessions:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `retry.provider.timeoutMs` | 600 000 ms | gemma4 can take several minutes per turn |
+| `retry.maxRetries` | 5 | agent-level retry with exponential back-off |
+| `compaction.enabled` | true | auto-compact at ~72% of the 131k context window |
+| `quietStartup` | true | no startup banner in headless/piped use |
+
+### Skills (`~/.pi/agent/skills/`)
+
+Skills are loaded automatically and available as `/skill:name` commands.
+
+| Skill | Trigger |
+|-------|---------|
+| `git-workflow` | committing, branching, PRs, reviewing diffs |
+| `task-planner` | complex multi-step tasks; creates `.pi/task.md` checkpoints for resumable sessions |
+| `shell-scripts` | writing or debugging bash/zsh scripts |
+| `nvim-config` | editing Lua configs in this repo; headless testing with `luac -p` and `nvim --headless` |
+| `supabase` | any Supabase or Postgres work |
+
+Invoke explicitly with `/skill:name args` or let pi pick the right one based on context.
+
+### Long-running sessions
+
+For tasks that span multiple sessions:
+
+1. Start with `/skill:task-planner` — it creates a `.pi/task.md` checklist in the working directory.
+2. Resume any time with `pi --continue` (or `scripts/pi-run --continue`).
+3. pi auto-compacts context when it approaches the 131k limit, so sessions can run indefinitely.
 
 ## Switching themes
 

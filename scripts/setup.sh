@@ -5,10 +5,10 @@ IS_WSL=0
 case "$(uname -r)" in *microsoft* | *Microsoft*) IS_WSL=1 ;; esac
 
 if [ "$(uname)" = "Darwin" ]; then
-  brew install neovim make gcc node python jq git fpc fzf ripgrep fd
+  brew install neovim make gcc node python jq git fpc fzf ripgrep fd ollama
   brew install --cask font-terminess-ttf-nerd-font
 elif [ -f /etc/arch-release ]; then
-  sudo pacman -S --needed neovim ttf-terminus-nerd base-devel make gcc nodejs npm python jq git fpc fzf wl-clipboard ripgrep fd
+  sudo pacman -S --needed neovim ttf-terminus-nerd base-devel make gcc nodejs npm python jq git fpc fzf wl-clipboard ripgrep fd ollama
 elif [ -f /etc/debian_version ]; then
   sudo apt-get update
   # The apt neovim is often outdated; use the upstream PPA for a recent stable release
@@ -20,6 +20,8 @@ elif [ -f /etc/debian_version ]; then
   if command -v fdfind > /dev/null 2>&1 && [ ! -e /usr/local/bin/fd ]; then
     sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
   fi
+  # ollama — official install script (covers x86-64 and arm64)
+  curl -fsSL https://ollama.com/install.sh | sh
   if [ "$IS_WSL" = "1" ]; then
     echo "Note: install Terminess Nerd Font on your Windows host (not inside WSL)."
     echo "Download TerminessTTF from https://www.nerdfonts.com/font-downloads and install via Windows Font Settings."
@@ -34,3 +36,6 @@ fi
 
 # AI backend — installed via npm on all platforms
 npm install -g @earendil-works/pi-coding-agent
+
+# Pull the default local model (ollama auto-starts its server if needed)
+ollama pull gemma4
