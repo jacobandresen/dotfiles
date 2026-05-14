@@ -103,6 +103,51 @@ return {
   },
 
   {
+    "mfussenegger/nvim-dap",
+    ft = { "rust" },
+    config = function()
+      local dap = require("dap")
+      local codelldb = vim.fn.stdpath("data") .. "/mason/bin/codelldb"
+
+      dap.adapters.codelldb = dap.adapters.codelldb or {
+        type = "server",
+        port = "${port}",
+        executable = { command = codelldb, args = { "--port", "${port}" } },
+      }
+
+      dap.configurations.rust = {
+        {
+          name = "Launch binary",
+          type = "codelldb",
+          request = "launch",
+          program = function()
+            return vim.fn.input("Executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
+          end,
+          cwd = "${workspaceFolder}",
+          stopOnEntry = false,
+        },
+        {
+          name = "Launch binary (release)",
+          type = "codelldb",
+          request = "launch",
+          program = function()
+            return vim.fn.input("Executable: ", vim.fn.getcwd() .. "/target/release/", "file")
+          end,
+          cwd = "${workspaceFolder}",
+          stopOnEntry = false,
+        },
+        {
+          name = "Attach to process",
+          type = "codelldb",
+          request = "attach",
+          pid = function() return require("dap.utils").pick_process() end,
+          cwd = "${workspaceFolder}",
+        },
+      }
+    end,
+  },
+
+  {
     "mxsdev/nvim-dap-vscode-js",
     dependencies = { "mfussenegger/nvim-dap" },
     ft = { "javascript", "typescript", "javascriptreact", "typescriptreact" },

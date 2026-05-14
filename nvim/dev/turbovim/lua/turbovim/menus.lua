@@ -61,6 +61,26 @@ function M.get()
       },
     },
     {
+      label = "Debug", key = "b",
+      items = {
+        { label = "Continue",         key = "c", hint = "F5",        action = function() require("dap").continue() end },
+        { label = "Stop",             key = "s", hint = "F4",        action = function() require("dap").terminate() end },
+        { label = "Restart",          key = "R", hint = "F9",        action = function() require("dap").restart() end },
+        { sep = true },
+        { label = "Step Over",        key = "o", hint = "F10",       action = function() require("dap").step_over() end },
+        { label = "Step Into",        key = "i", hint = "F11",       action = function() require("dap").step_into() end },
+        { label = "Step Out",         key = "u", hint = "F12",       action = function() require("dap").step_out() end },
+        { sep = true },
+        { label = "Breakpoint",       key = "b", hint = "<leader>db", action = function() require("dap").toggle_breakpoint() end },
+        { label = "Cond. Breakpoint", key = "B", hint = "<leader>dB", action = function() require("dap").set_breakpoint(vim.fn.input("Condition: ")) end },
+        { label = "Clear Breakpoints",key = "x", hint = "<leader>dC", action = function() require("dap").clear_breakpoints() end },
+        { sep = true },
+        { label = "Toggle UI",        key = "U", hint = "<leader>du", action = function() require("dapui").toggle() end },
+        { label = "Eval",             key = "e", hint = "<leader>de", action = function() require("dapui").eval() end },
+        { label = "REPL",             key = "r", hint = "<leader>dr", action = function() require("dap").repl.open() end },
+      },
+    },
+    {
       label = "Run", key = "r",
       items = {
         { label = "Make", key = "m", hint = ":make", action = function() vim.cmd("make") end },
