@@ -2,11 +2,12 @@
 set -euo pipefail
 
 SCHEMES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tinted-theming/schemes"
+BASE16_DIR="$SCHEMES_DIR/base16"
 WEZTERM_CFG="$HOME/.wezterm.lua"
 DOTFILES_CFG="$(cd "$(dirname "$0")/.." && pwd)/.wezterm.lua"
+THEME_LUA="$(cd "$(dirname "$0")" && pwd)/theme.lua"
 
-# Dependencies
-for cmd in git fzf sed; do
+for cmd in git fzf lua; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "error: $cmd is required but not installed" >&2
     exit 1
@@ -23,42 +24,25 @@ else
   git -C "$SCHEMES_DIR" sparse-checkout set base16
 fi
 
-BASE16_DIR="$SCHEMES_DIR/base16"
-PREVIEW_SCRIPT="$(cd "$(dirname "$0")" && pwd)/preview-theme.sh"
+[ -d "$BASE16_DIR" ] || { echo "error: base16 schemes not found at $BASE16_DIR" >&2; exit 1; }
 
-if [ ! -d "$BASE16_DIR" ]; then
-  echo "error: base16 schemes not found at $BASE16_DIR" >&2
-  exit 1
-fi
-
-# Pick a scheme — build "name<TAB>path" pairs so fzf shows the YAML name
-# (which matches WezTerm's internal scheme name) while preview gets the path.
 chosen=$(
-  find "$BASE16_DIR" -name "*.yaml" | while IFS= read -r yaml; do
-    name=$(grep -m1 '^name:' "$yaml" | sed 's/^name:[[:space:]]*//' | tr -d '"' | tr -d "'")
-    [ -n "$name" ] && printf '%s\t%s\n' "$name" "$yaml"
-  done \
-    | sort \
+  lua "$THEME_LUA" list "$BASE16_DIR" \
     | fzf \
         --delimiter=$'\t' \
         --with-nth=1 \
         --prompt="theme> " \
-        --preview="$PREVIEW_SCRIPT {2}" \
+        --preview="lua $THEME_LUA preview {2}" \
         --preview-window="right:45%"
-) || exit 0  # user cancelled
+) || exit 0
 
 [ -z "$chosen" ] && exit 0
 
 scheme_name=$(printf '%s' "$chosen" | cut -f1)
-new_line="config.color_scheme = \"$scheme_name (base16)\""
 
-# Update ~/.wezterm.lua
-if [ ! -f "$WEZTERM_CFG" ]; then
-  echo "error: $WEZTERM_CFG not found" >&2
-  exit 1
-fi
+[ -f "$WEZTERM_CFG" ] || { echo "error: $WEZTERM_CFG not found" >&2; exit 1; }
 
-sed -i "s|config\.color_scheme\s*=.*|$new_line|" "$WEZTERM_CFG"
+lua "$THEME_LUA" set "$WEZTERM_CFG" "$scheme_name"
 echo "updated $WEZTERM_CFG → $scheme_name (base16)"
 
 # Sync dotfiles copy if it differs from the live config
@@ -66,7 +50,7 @@ if [ -f "$DOTFILES_CFG" ] && [ "$DOTFILES_CFG" != "$WEZTERM_CFG" ]; then
   if ! diff -q "$WEZTERM_CFG" "$DOTFILES_CFG" &>/dev/null; then
     read -r -p "sync $DOTFILES_CFG too? [y/N] " ans
     if [[ "$ans" =~ ^[Yy]$ ]]; then
-      sed -i "s|config\.color_scheme\s*=.*|$new_line|" "$DOTFILES_CFG"
+      lua "$THEME_LUA" set "$DOTFILES_CFG" "$scheme_name"
       echo "updated $DOTFILES_CFG"
     fi
   fi
