@@ -1,25 +1,25 @@
 {
-  "defaultModel": "gemma4",
+  "compaction": {
+    "enabled": true,
+    "keepRecentTokens": 20000,
+    "reserveTokens": 16384
+  },
+  "defaultModel": "granite3.3:8b",
   "defaultProvider": "ollama",
+  "enableSkillCommands": true,
   "lastChangelogVersion": "0.74.0",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
   "quietStartup": true,
-  "enableSkillCommands": true,
   "retry": {
+    "baseDelayMs": 50000,
     "enabled": true,
     "maxRetries": 5,
-    "baseDelayMs": 50000,
     "provider": {
-      "timeoutMs": 1200000,
       "maxRetries": 1,
-      "maxRetryDelayMs": 0
+      "maxRetryDelayMs": 0,
+      "timeoutMs": 1200000
     }
-  },
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 16384,
-    "keepRecentTokens": 20000
   }
 }

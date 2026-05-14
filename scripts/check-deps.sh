@@ -38,6 +38,16 @@ need "jq"             jq        "setup.sh  [JSON formatting]"
 need "fpc"            fpc       "setup.sh  [Free Pascal]"
 
 echo ""
+echo "Static analysis"
+need "java"           java          "scripts/setup.sh  [sonarqube/scanner runtime]"
+need "sonar-scanner"  sonar-scanner "scripts/setup.sh"
+if [ -d /opt/sonarqube ]; then
+  ok "sonarqube CE  (/opt/sonarqube)"
+else
+  miss "sonarqube CE" "scripts/setup.sh  [local analysis server]"
+fi
+
+echo ""
 echo "AI backend"
 need "pi"             pi        "npm install -g @earendil-works/pi-coding-agent"
 need "ollama"         ollama    "setup.sh  [local model server]"

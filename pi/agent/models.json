@@ -8,21 +8,20 @@
         {
           "_launch": true,
           "contextWindow": 131072,
-          "id": "gemma3:4b",
-          "input": [
-            "text",
-            "image"
-          ]
-        },
-        {
-          "_launch": true,
-          "contextWindow": 131072,
           "id": "gemma4",
           "input": [
             "text",
             "image"
           ],
           "reasoning": true
+        },
+        {
+          "_launch": true,
+          "contextWindow": 131072,
+          "id": "granite3.3:8b",
+          "input": [
+            "text"
+          ]
         }
       ]
     }

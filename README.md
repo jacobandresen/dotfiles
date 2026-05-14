@@ -1,6 +1,6 @@
 # dotfiles
 
-My hackbox setup — [WezTerm](https://wezfurlong.org/wezterm/) and [Neovim](https://neovim.io/) configs, wired together so they share a single color scheme.
+My personal, opinionated hackbox setup — not a minimal starter kit, but a reflection of my own preferences. [WezTerm](https://wezfurlong.org/wezterm/) and [Neovim](https://neovim.io/) configs, wired together so they share a single color scheme.
 
 
 ```
@@ -65,10 +65,10 @@ The config lives in `pi/agent/` and is symlinked to `~/.pi/agent/` on setup. The
 
 ### Default model
 
-`gemma4` (9.6 GB, 131k context, reasoning). Make sure it's pulled:
+`granite3.3:8b` (131k context). Make sure it's pulled:
 
 ```sh
-ollama pull gemma4
+ollama pull granite3.3:8b
 ```
 
 ### Standalone launcher
@@ -120,6 +120,20 @@ For tasks that span multiple sessions:
 1. Start with `/skill:task-planner` — it creates a `.pi/task.md` checklist in the working directory.
 2. Resume any time with `pi --continue` (or `scripts/pi-run --continue`).
 3. pi auto-compacts context when it approaches the 131k limit, so sessions can run indefinitely.
+
+### Planning → Code → Analysis feedback loop
+
+The workflow I use for non-trivial features and bug fixes:
+
+1. **Plan** — invoke `/skill:task-planner`. It writes a `PLAN.md` in the project root with concrete, checkable steps. Each step has a clear done condition; nothing vague survives.
+
+2. **Code** — invoke `/skill:code-agent`. It picks up `PLAN.md`, works through each `[ ]` task in a tight loop: write code → write test → compile → run → fix until green, then mark `[x]` and commit. It never pauses between increments unless a hard blocker requires input.
+
+3. **Static analysis** — after each task, code-agent runs `sonar-scanner` against a local [SonarQube Community Edition](https://www.sonarsource.com/products/sonarqube/) instance (installed by `scripts/setup.sh` to `/opt/sonarqube`, no Docker). BLOCKER and CRITICAL issues block the task from being marked done — they must be fixed before moving on. MAJOR issues are fixed if local and obvious; otherwise noted. The scanner uses the `sonar-cxx` plugin for C/C++ rule coverage and, for CMake builds, a compilation database for deeper analysis.
+
+4. **Repeat** — the agent loops back to the next `[ ]` in `PLAN.md` without user input until all tasks are `[x]` or a genuine blocker surfaces.
+
+This means the feedback cycle is: plan once → execute autonomously → static analysis gates each increment → commit only clean code. The plan file doubles as a resumable checkpoint — if the session is cut short, `pi --continue` picks up exactly where it left off.
 
 ## Switching themes
 
