@@ -67,6 +67,14 @@ function M.get()
       },
     },
     {
+      label = "AI", key = "a",
+      items = {
+        { label = "Chat",    key = "c", hint = "<leader>cc", action = function() vim.cmd("CodeCompanionChat Toggle") end },
+        { label = "Actions", key = "a", hint = "<leader>ca", action = function() vim.cmd("CodeCompanionActions") end },
+        { label = "Inline",  key = "i", hint = "<leader>ci", action = function() vim.cmd("CodeCompanion") end },
+      },
+    },
+    {
       label = "Window", key = "w",
       items = {
         { label = "Split Horiz",  key = "h", hint = ":sp",    action = function() vim.cmd("split") end },
