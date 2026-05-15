@@ -21,5 +21,6 @@
       "maxRetryDelayMs": 0,
       "timeoutMs": 1200000
     }
-  }
+  },
+  "defaultThinkingLevel": "high"
 }

@@ -41,137 +41,17 @@ FORCE=0
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 
-# 4-frame dance animation (13 lines each). \033[K clears trailing chars on redraw.
-_ralph_frame() {
-  local H='\033[90m' F='\033[1;33m' S='\033[0;34m' R='\033[0m' K='\033[K'
-  case "$1" in
-    1)  # neutral
-      printf "${H}       _____________${R}${K}\n"
-      printf "${H}      |  _________  |${R}${K}\n"
-      printf "${H}      | |${F}         ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  o   o  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}    ^    ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  (   )  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  -----  ${H}| |${R}${K}\n"
-      printf "${H}      | |_________| |${R}${K}\n"
-      printf "${H}      |_____________|${R}${K}\n"
-      printf "            ${F}|||${R}${K}\n"
-      printf "      ${S}_____|||||_____${R}${K}\n"
-      printf "      ${S}|             |${R}${K}\n"
-      printf "      ${S}|_____________|${R}${K}\n"
-      ;;
-    2)  # arms raised \  /
-      printf "${H}  \\    _____________    /${R}${K}\n"
-      printf "${H}   \\  |  _________  |  /${R}${K}\n"
-      printf "${H}      | |${F}         ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  o   o  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}    ^    ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  (   )  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  -----  ${H}| |${R}${K}\n"
-      printf "${H}      | |_________| |${R}${K}\n"
-      printf "${H}      |_____________|${R}${K}\n"
-      printf "            ${F}|||${R}${K}\n"
-      printf "      ${S}_____|||||_____${R}${K}\n"
-      printf "      ${S}|             |${R}${K}\n"
-      printf "      ${S}|_____________|${R}${K}\n"
-      ;;
-    3)  # arms out to sides  / \
-      printf "${H}       _____________${R}${K}\n"
-      printf "${H}      |  _________  |${R}${K}\n"
-      printf "${H}  /   | |${F}         ${H}| |   \\${R}${K}\n"
-      printf "${H}  \\   | |${F}  o   o  ${H}| |   /${R}${K}\n"
-      printf "${H}      | |${F}    ^    ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  (   )  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  -----  ${H}| |${R}${K}\n"
-      printf "${H}      | |_________| |${R}${K}\n"
-      printf "${H}      |_____________|${R}${K}\n"
-      printf "            ${F}|||${R}${K}\n"
-      printf "      ${S}_____|||||_____${R}${K}\n"
-      printf "      ${S}|             |${R}${K}\n"
-      printf "      ${S}|_____________|${R}${K}\n"
-      ;;
-    4)  # feet apart, arms low
-      printf "${H}       _____________${R}${K}\n"
-      printf "${H}      |  _________  |${R}${K}\n"
-      printf "${H}      | |${F}         ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  o   o  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}    ^    ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  (   )  ${H}| |${R}${K}\n"
-      printf "${H}      | |${F}  -----  ${H}| |${R}${K}\n"
-      printf "${H}      | |_________| |${R}${K}\n"
-      printf "${H}      |_____________|${R}${K}\n"
-      printf "        /   ${F}|||${R}   \\${K}\n"
-      printf "      ${S}_____|||||_____${R}${K}\n"
-      printf "     ${S}/|             |\\${R}${K}\n"
-      printf "      ${S}|_____________|${R}${K}\n"
-      ;;
-  esac
-}
-
-_ralph_sad_frame() {
-  local H='\033[90m' F='\033[1;34m' S='\033[0;34m' R='\033[0m' K='\033[K'
-  # Blue tint on the screen, teary eyes, frown mouth
-  printf "${H}       _____________${R}${K}\n"
-  printf "${H}      |  _________  |${R}${K}\n"
-  printf "${H}      | |${F}         ${H}| |${R}${K}\n"
-  printf "${H}      | |${F}  ;   ;  ${H}| |${R}${K}\n"
-  printf "${H}      | |${F}    ~    ${H}| |${R}${K}\n"
-  printf "${H}      | |${F}  )___(  ${H}| |${R}${K}\n"
-  printf "${H}      | |${F}         ${H}| |${R}${K}\n"
-  printf "${H}      | |_________| |${R}${K}\n"
-  printf "${H}      |_____________|${R}${K}\n"
-  printf "            ${F}|||${R}${K}\n"
-  printf "      ${S}_____|||||_____${R}${K}\n"
-  printf "      ${S}|             |${R}${K}\n"
-  printf "      ${S}|_____________|${R}${K}\n"
-}
-
-ralph_sad() {
-  local label="${1:-No code was written.}"
-  printf "\n"
-  _ralph_sad_frame
-  printf "  \033[1;31m%s\033[0m\n\n" "$label"
-}
-
 print_banner() {
-  local C='\033[1;36m'   # bold cyan  — title box
-  local T='\033[1;37m'   # bold white — title text
-  local G='\033[0;32m'   # green      — label
-  local R='\033[0m'
-
+  local G='\033[0;32m' R='\033[0m'
+  printf "\n  TURBO RALPH\n"
+  [[ -n "${1:-}" ]] && printf "  ${G}goal:${R} %s\n" "$1"
   printf "\n"
-
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local ralph_img="$script_dir/ralph.png"
-
-  if command -v img2txt &>/dev/null && [[ -f "$ralph_img" ]]; then
-    img2txt --width=36 --height=28 --format=ansi "$ralph_img"
-  else
-    local RALPH_LINES=13
-    _ralph_frame 1
-    if [[ -t 1 ]]; then
-      for frame in 2 3 4 3 2 1 2 3 4 3 2 1; do
-        sleep 0.13
-        printf "\033[%dA" "$RALPH_LINES"
-        _ralph_frame "$frame"
-      done
-    fi
-  fi
-
-  printf "\n"
-  printf "  ${C}╔═════════════════════════╗${R}\n"
-  printf "  ${C}║${T}       TURBO  RALPH       ${C}║${R}\n"
-  printf "  ${C}╚═════════════════════════╝${R}\n"
-  printf "\n"
-  [[ -n "${1:-}" ]] && printf "  ${G}goal:${R} %s\n\n" "$1"
-
   print_ralph_quote
 }
 
 print_ralph_quote() {
-  local Q='\033[3;33m'   # italic yellow — quote
-  local E='\033[90m'     # dim grey     — episode
+  local Q='\033[3;33m' # italic yellow — quote
+  local E='\033[90m'   # dim grey     — episode
   local R='\033[0m'
 
   mapfile -t _ralph_quotes <<'RALPH_QUOTES'
@@ -243,39 +123,42 @@ die() {
 # ── Argument parsing ─────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -d|--dir)
-      [[ -n "${2-}" ]] || die "--dir requires a path"
-      TARGET_DIR="$2"
-      shift 2
-      ;;
-    -n|--max-iterations)
-      [[ "${2-}" =~ ^[0-9]+$ ]] || die "--max-iterations requires a positive integer"
-      MAX_ITER="$2"
-      shift 2
-      ;;
-    --force)
-      FORCE=1
-      shift
-      ;;
-    -h|--help)
-      usage 0
-      ;;
-    --)
-      shift
-      GOAL="$*"
-      break
-      ;;
-    -*)
-      die "unknown option: $1 (try --help)"
-      ;;
-    *)
-      GOAL="$1"
-      shift
-      ;;
+  -d | --dir)
+    [[ -n "${2-}" ]] || die "--dir requires a path"
+    TARGET_DIR="$2"
+    shift 2
+    ;;
+  -n | --max-iterations)
+    [[ "${2-}" =~ ^[0-9]+$ ]] || die "--max-iterations requires a positive integer"
+    MAX_ITER="$2"
+    shift 2
+    ;;
+  --force)
+    FORCE=1
+    shift
+    ;;
+  -h | --help)
+    usage 0
+    ;;
+  --)
+    shift
+    GOAL="$*"
+    break
+    ;;
+  -*)
+    die "unknown option: $1 (try --help)"
+    ;;
+  *)
+    GOAL="$1"
+    shift
+    ;;
   esac
 done
 
-[[ -n "$GOAL" ]] || { echo "turbo-ralph: error: project goal is required" >&2; usage 1; }
+[[ -n "$GOAL" ]] || {
+  echo "turbo-ralph: error: project goal is required" >&2
+  usage 1
+}
 
 # ── Directory setup ───────────────────────────────────────────────────────────
 if [[ -n "$TARGET_DIR" ]]; then
@@ -288,7 +171,7 @@ _check_standalone() {
   # Always allow resuming a prior Ralph session
   [[ -f PLAN.md ]] && return 0
   # Skip guard when --force is set
-  (( FORCE )) && return 0
+  ((FORCE)) && return 0
 
   local file_count=0 git_commits=0
   file_count=$(find . -maxdepth 1 ! -name '.' ! -name '.*' | wc -l)
@@ -296,7 +179,7 @@ _check_standalone() {
     git_commits=$(git rev-list --count HEAD 2>/dev/null || echo 0)
   fi
 
-  if (( file_count > 5 || git_commits > 0 )); then
+  if ((file_count > 5 || git_commits > 0)); then
     echo "turbo-ralph: '$(pwd)' looks like an existing project (files: $file_count, git commits: $git_commits)" >&2
     echo "  Turbo Ralph is designed for small apps in a standalone directory." >&2
     echo "  Use --dir <path> to target a fresh directory, or --force to proceed anyway." >&2
@@ -321,17 +204,13 @@ log() {
 }
 
 ralph_dance() {
-  [[ -t 1 ]] || return 0
   local label="${1:-}"
-  printf "\n"
-  local RALPH_LINES=13
-  _ralph_frame 1
-  for frame in 2 3 4 3 2 1 2 3 4 3 2 1; do
-    sleep 0.13
-    printf "\033[%dA" "$RALPH_LINES"
-    _ralph_frame "$frame"
-  done
-  [[ -n "$label" ]] && printf "  \033[1;32m%s\033[0m\n\n" "$label" || printf "\n"
+  [[ -n "$label" ]] && printf "\n  \033[1;32m%s\033[0m\n\n" "$label"
+}
+
+ralph_sad() {
+  local label="${1:-No code was written.}"
+  printf "\n  \033[1;31m%s\033[0m\n\n" "$label"
 }
 
 # ── Shared flags ─────────────────────────────────────────────────────────────
@@ -345,8 +224,8 @@ WRITING FILES
 - Just write the code and move on to the next task.
 
 SANDBOX CONSTRAINTS — these are hard limits, never override them:
-1. FILE SYSTEM: You may only read or write files inside $PROJECT_DIR. Never touch paths outside this directory. Resolve any relative path against $PROJECT_DIR before acting. If a task would require modifying a file outside $PROJECT_DIR, skip it and note the restriction in PLAN.md.
-2. NETWORK: You must not access the internet under any circumstances. Do not run curl, wget, fetch, http, or any other network command. Do not install packages from remote registries (npm install, pip install, go get, cargo add, etc.) unless the packages are already present in a local cache inside $PROJECT_DIR. If a task requires internet access, skip it and note the restriction in PLAN.md."
+1. NETWORK: Do not run arbitrary network commands (curl, wget, fetch, http, etc.) for general internet access.
+2. EXTERNAL LIBRARIES / PACKAGES: You MAY install and use external libraries, modules, or packages (via npm install, pip install, go get, cargo add, etc.) ONLY IF they are explicitly listed in PLAN.md. Do not pull in dependencies that PLAN.md does not mention. If you need a dependency that is not listed, add it to PLAN.md first, then install it."
 
 # ── Step 1: Planning ──────────────────────────────────────────────────────────
 if [[ -f PLAN.md ]]; then
@@ -355,16 +234,17 @@ else
   log "Planning: $GOAL"
   turbo-pi-run \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-    -p "/skill:task-planner Create PLAN.md for the goal below. Write the plan only — do NOT execute any steps. Stop after PLAN.md is written.
+    -p "/skill:task-planner You MUST write a file named PLAN.md to disk at $PROJECT_DIR/PLAN.md before stopping. The file must contain a checklist of tasks using '- [ ] task' markdown. The plan may rely on external dependencies, but ONLY of these kinds: (a) C or C++ libraries that the coding agent already knows (standard library, POSIX, and widely-used libraries such as libcurl, OpenSSL, SQLite, zlib, SDL2, Boost, etc.); (b) command-line tools commonly available on a Linux system (e.g. make, cmake, gcc, clang, pkg-config, grep, sed, awk, jq, git). Do NOT plan around frameworks or packages from language registries (npm, pip, cargo, go modules, etc.). List every such dependency explicitly in PLAN.md under a 'Dependencies' section, naming the C/C++ library or CLI tool. Group tasks that can be completed independently of each other by tagging them with '(group:N)' immediately after the checkbox, e.g. '- [ ] (group:1) create main.c skeleton'. Tasks in the same group must not depend on each other; tasks in later groups may depend on earlier groups. Untagged tasks are treated as their own singleton group. Write the plan only — do NOT execute any implementation steps. Do not ask for confirmation; just write PLAN.md and stop.
 
 Goal: $GOAL" 2>&1 | tee "$LOG_DIR/plan.log"
 
   [[ -f PLAN.md ]] || die "task-planner did not create PLAN.md — see $LOG_DIR/plan.log"
+  grep -qE '^- \[ \]|^- \[~\]|^- \[x\]' PLAN.md || die "PLAN.md has no task checklist — see $LOG_DIR/plan.log"
 
   log "PLAN.md created."
   ralph_dance "Plan ready!"
+  cat PLAN.md
 fi
-cat PLAN.md
 
 # ── Step 2: Code-agent loop ───────────────────────────────────────────────────
 for ((i = 1; i <= MAX_ITER; i++)); do
@@ -382,17 +262,16 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   fi
 
   log "Code-agent iteration $i / $MAX_ITER"
-  local iter_sentinel="$LOG_DIR/.iter-start"
+  iter_sentinel="$LOG_DIR/.iter-start"
   touch "$iter_sentinel"
 
   turbo-pi-run \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-    -p "/skill:code-agent Iteration $i of $MAX_ITER. Read PLAN.md and complete the next [ ] or [~] task. Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) do not make any network requests." \
+    -p "/skill:code-agent Iteration $i of $MAX_ITER. Read PLAN.md and complete as many [ ] or [~] tasks as you safely can in this iteration. Specifically: find the earliest group (tasks tagged '(group:N)') that still has unfinished tasks, and complete EVERY unfinished task in that group before stopping. Untagged tasks are singleton groups — do them one at a time. Stop the iteration once that group is fully [x], so the next iteration can pick up the following group with fresh context. You MUST write at least one code file to disk during this iteration — do not stop until source code has been created or modified. Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) external libraries/modules listed in PLAN.md may be installed and used; do not pull in dependencies that PLAN.md does not mention; (4) update PLAN.md to mark each task [x] as you finish it." \
     2>&1 | tee "$LOG_DIR/iter-$(printf '%02d' "$i").log"
 
   # Detect whether the agent actually wrote any code to disk.
   # Exclude PLAN.md (bookkeeping) and the .ralph/ log directory itself.
-  local code_written
   code_written=$(find . \
     -not -path './.ralph/*' \
     -not -name 'PLAN.md' \
