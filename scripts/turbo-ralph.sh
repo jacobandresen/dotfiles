@@ -54,7 +54,11 @@ print_ralph_quote() {
   local E='\033[90m'   # dim grey     — episode
   local R='\033[0m'
 
-  mapfile -t _ralph_quotes <<'RALPH_QUOTES'
+  # mapfile requires bash 4+; use while-read for bash 3.2 (macOS default)
+  local _ralph_quotes=() _rline
+  while IFS= read -r _rline; do
+    [[ -n "$_rline" ]] && _ralph_quotes+=("$_rline")
+  done <<'RALPH_QUOTES'
 "Me fail English? That's unpossible."|S6E8 · Lisa on Ice
 "Hi, Super Nintendo Chalmers! I'm learneding."|S10E7 · Lisa Gets an 'A'
 "Oh boy, sleep! That's where I'm a Viking!"|S7E5 · Lisa the Vegetarian
