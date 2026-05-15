@@ -6,10 +6,11 @@ case "$(uname -r)" in *microsoft* | *Microsoft*) IS_WSL=1 ;; esac
 
 if [ "$(uname)" = "Darwin" ]; then
   brew install neovim make gcc llvm node python jq git fpc fzf ripgrep fd ollama
-  # clang-tidy ships inside llvm; symlink it into PATH if not already there
+  # clang-tidy ships inside llvm; symlink it into brew's bin (works on both Intel and Apple Silicon)
   LLVM_BIN="$(brew --prefix llvm)/bin"
-  if [ ! -e /usr/local/bin/clang-tidy ] && [ -f "${LLVM_BIN}/clang-tidy" ]; then
-    sudo ln -sf "${LLVM_BIN}/clang-tidy" /usr/local/bin/clang-tidy
+  BREW_BIN="$(brew --prefix)/bin"
+  if [ ! -e "${BREW_BIN}/clang-tidy" ] && [ -f "${LLVM_BIN}/clang-tidy" ]; then
+    ln -sf "${LLVM_BIN}/clang-tidy" "${BREW_BIN}/clang-tidy"
   fi
   brew install --cask font-terminess-ttf-nerd-font
 elif [ -f /etc/arch-release ]; then
