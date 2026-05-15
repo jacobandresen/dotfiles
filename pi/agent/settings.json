@@ -4,7 +4,7 @@
     "keepRecentTokens": 20000,
     "reserveTokens": 16384
   },
-  "defaultModel": "granite3.3:8b",
+  "defaultModel": "gemma4",
   "defaultProvider": "ollama",
   "enableSkillCommands": true,
   "lastChangelogVersion": "0.74.0",

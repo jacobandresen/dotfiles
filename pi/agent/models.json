@@ -14,14 +14,6 @@
             "image"
           ],
           "reasoning": true
-        },
-        {
-          "_launch": true,
-          "contextWindow": 131072,
-          "id": "granite3.3:8b",
-          "input": [
-            "text"
-          ]
         }
       ]
     }
