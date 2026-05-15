@@ -1,212 +1,107 @@
 ---
 name: code-agent
-description: Deliver working C/C++ code with tests in small increments. Use when building features, fixing bugs, or exploring a codebase that uses a C/C++ compiler and SDL2. Maintains PLAN.md as a living task document and marks tasks done only after a test has been written and compiled.
+description: Deliver working C code with tests in small increments. Use when building features, fixing bugs, or exploring a codebase that uses C and a Makefile. Maintains PLAN.md as a living task document and marks tasks done only after a test has been written and compiled.
 ---
 
 # Code Agent
 
-A focused skill for delivering code with tests in a C/C++ + SDL2 environment.
+Deliver simple, readable C with tests, in small increments.
 
-## Environment Assumptions
+## Rules
 
-- C or C++ compiler (`gcc`/`g++` or `clang`/`clang++`) is on PATH
-- SDL2 and SDL2_image/SDL2_ttf/SDL2_mixer may be linked with `-lSDL2`
-- A `Makefile` or `CMakeLists.txt` is expected; create one if absent
-- Tests are compiled and run as part of the build, not deferred
-- `clang-tidy` is on PATH (installed by `scripts/turbo-setup.sh`)
-- A `.clang-tidy` config file exists at the project root (see Linting below)
+- **C only.** No C++, no classes, no templates.
+- **Makefile only.** Hand-written, under 50 lines. No CMake, no autotools.
+- **libc first.** No dependencies unless the alternative is hundreds of lines.
+- **Readable beats clever.** Meaningful names (`customer_count`, not `n`). One idea per line. Guard clauses over nested `if`. Three indent levels is a smell. Named constants, never bare numbers. Comments explain *why*, not *what*.
+- **Few, flat files.** One `.c` per concept. No deep trees.
+- **No speculative abstractions.** Generalize on the second real use case.
+- When in doubt, delete code.
 
-## Starting a Session
+## Loop
 
-```bash
-cat PLAN.md 2>/dev/null || echo "No PLAN.md yet"
-```
+Never pause for confirmation. Ambiguous → simplest assumption, log under `## Notes`, continue. After each `[x]`, start the next `[ ]` immediately.
 
-If `PLAN.md` exists with `[ ]` or `[~]` tasks, immediately resume from the first incomplete one — do not acknowledge, do not ask, just begin the increment loop.
+1. `cat PLAN.md` — if `[ ]`/`[~]` tasks exist, resume the first; else draft a plan.
+2. Mark task `[~]`.
+3. Write the smallest code that can pass a test. **Write to disk immediately** — partial-on-disk beats complete-in-context.
+4. Write the test.
+5. `make test` until green.
+6. `clang-tidy src/*.c -- -std=c11 -Wall` — all warnings are errors. No `// NOLINT` without an external-constraint comment.
+7. Mark `[x]`, note surprises, commit.
+8. Loop. Keep cycles in seconds.
 
-If no plan exists, draft one from the task description before writing any code.
+When all `[x]`: final `make test` + `clang-tidy`, one-line summary under `## Notes`, then `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`.
 
-## WRITE CODE TO DISK IMMEDIATELY — NON-NEGOTIABLE
-
-**Write every file to disk the moment you have any content to write. Do not hold code in memory, do not defer writes, do not wait until code is "ready" or "complete".**
-
-- The instant you know what a file should contain — even partially — write it.
-- A partial file on disk is always better than a complete file that only exists in context.
-- If the session ends, crashes, or is interrupted, anything not written to disk is lost. Code in your context window does not exist.
-- Never compose an entire implementation mentally and then write it all at once. Write each function, each struct, each header as soon as you draft it.
-- Compiling, linting, and testing only verify code that is already on disk. Write first, verify second.
-
-**There is no valid reason to delay writing a file. When in doubt: write it now.**
-
----
-
-## Autonomous Execution
-
-Never pause for confirmation or clarification. If a requirement is ambiguous, make the simplest reasonable assumption, document it under `## Notes`, and continue. Do not stop between increments — after each `[x]`, immediately loop to the next `[ ]` without user input. Only block when a hard dependency is missing (absent file, unknown API) that cannot be resolved without external input.
-
-## PLAN.md Format
-
-Keep `PLAN.md` as the single source of truth for what is planned and what is done.
+## PLAN.md
 
 ```markdown
-# Plan: <project or feature name>
+# Plan: <name>
 
 ## Tasks
-- [ ] T1: <what done looks like — one line>
-- [ ] T2: ...
+- [ ] T1: <what done looks like>
 
 ## Notes
 - decisions, constraints, surprises
 ```
 
-Status markers:
-- `[ ]` — not started
-- `[~]` — in progress
-- `[x]` — **done: code written AND test written AND test passes**
+`[ ]` not started · `[~]` in progress · `[x]` code + test written and passing. Update after every increment, never batch.
 
-A task is only `[x]` when a test exists that exercises it and compiles/passes.
-Update `PLAN.md` after every increment — never batch updates.
+## Layout
 
-## Working in Increments
-
-Do not stop between increments. After completing a task, immediately begin the next `[ ]` task without pausing for user input. Continue until all tasks are `[x]` or a blocking error requires user input (missing dependency, ambiguous requirement).
-
-Each increment:
-1. Read `PLAN.md`, find first `[ ]` task, mark `[~]`
-2. Write the implementation (smallest working unit)
-3. Write a test for it (see Testing below)
-4. Compile and run — fix until green
-5. Run clang-tidy — fix all warnings before continuing (see Linting below)
-6. Mark task `[x]` in `PLAN.md`, add a note if anything was surprising
-7. Commit
-8. Loop back to step 1 — continue immediately with the next task
-
-Keep increments small enough that a compile-run cycle takes seconds, not minutes.
-
-## Compiling
-
-Detect the build system and use it:
-
-```bash
-# CMake
-cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
-
-# Make
-make
-
-# Direct compile (fallback)
-gcc -Wall -Wextra -o out src/main.c -lSDL2
-g++ -Wall -Wextra -std=c++17 -o out src/main.cpp -lSDL2
+```
+project/
+  PLAN.md  Makefile  .clang-tidy
+  src/   main.c foo.c foo.h
+  tests/ test_foo.c
 ```
 
-Always compile with warnings enabled (`-Wall -Wextra`). Fix warnings before moving on.
+## Makefile template
 
-## Linting
+```make
+CC      = gcc
+CFLAGS  = -Wall -Wextra -std=c11 -g
+LDFLAGS =
 
-Run clang-tidy after every successful compilation. All warnings are errors — do not proceed until the output is clean.
+SRC = $(wildcard src/*.c)
+OBJ = $(SRC:.c=.o)
+BIN = app
+TEST_SRC = $(wildcard tests/test_*.c)
+TESTS    = $(TEST_SRC:.c=)
 
-```bash
-# With a compilation database (CMake — preferred)
-clang-tidy -p build src/*.c
-clang-tidy -p build src/*.cpp
-
-# Without a compilation database (fallback)
-clang-tidy src/*.c -- -std=c11 -Wall
-clang-tidy src/*.cpp -- -std=c++17 -Wall
+all: $(BIN)
+$(BIN): $(OBJ); $(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+tests/test_%: tests/test_%.c $(filter-out src/main.o,$(OBJ))
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+test: $(TESTS); @for t in $(TESTS); do ./$$t || exit 1; done
+clean:; rm -f $(OBJ) $(BIN) $(TESTS)
+.PHONY: all test clean
 ```
 
-If the project has no `.clang-tidy` file, create one at the root before the first lint run:
+## .clang-tidy (if missing)
+
+C-oriented — do not enable `cppcoreguidelines-*` or `modernize-*`.
 
 ```yaml
-Checks: >
-  clang-analyzer-*,
-  cppcoreguidelines-*,
-  modernize-*,
-  performance-*,
-  readability-*,
-  bugprone-*
+Checks: > clang-analyzer-*, bugprone-*, readability-*, performance-*
 WarningsAsErrors: "*"
 HeaderFilterRegex: "src/.*"
 ```
 
-Common clang-tidy warnings and fixes:
+## Test harness
 
-| Warning | Fix |
-|---|---|
-| `cppcoreguidelines-pro-bounds-*` | Replace raw array indexing with bounds-checked access or `at()` |
-| `bugprone-use-after-move` | Don't use a value after `std::move` |
-| `modernize-use-nullptr` | Replace `NULL` / `0` with `nullptr` |
-| `readability-magic-numbers` | Extract literals into named constants |
-| `performance-unnecessary-copy-initialization` | Use `const&` or `std::move` |
-| `clang-analyzer-unix.Malloc` | Ensure every `malloc` has a matching `free` |
-
-Never suppress a warning with `// NOLINT` unless a comment explains an external constraint that makes the fix impossible.
-
-## Testing
-
-Tests live in a `tests/` directory alongside `src/`. Each test file maps to one unit.
-
-### Minimal test harness (no external deps)
+No frameworks (no CMocka/Unity/Check).
 
 ```c
-/* tests/test_foo.c */
 #include <stdio.h>
-#include <assert.h>
 #include "../src/foo.h"
 
 static int passed = 0, failed = 0;
-
-#define CHECK(expr) do { \
-  if (expr) { passed++; } \
-  else { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #expr); failed++; } \
-} while(0)
+#define CHECK(e) do { if (e) passed++; \
+  else { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #e); failed++; } } while(0)
 
 int main(void) {
   CHECK(foo_add(1, 2) == 3);
-  CHECK(foo_add(0, 0) == 0);
-
   printf("%d passed, %d failed\n", passed, failed);
   return failed ? 1 : 0;
 }
 ```
-
-Compile and run the test before marking the task done:
-
-```bash
-gcc -Wall -o tests/test_foo tests/test_foo.c src/foo.c && ./tests/test_foo
-```
-
-### SDL2 unit tests
-
-For SDL2 logic (rendering, input), isolate the logic from the SDL calls so it can be tested without a display. Pass SDL types through thin wrappers; test the wrappers independently.
-
-If a headless test is impossible (pure rendering code), note it in `PLAN.md` and add a manual smoke-test step instead.
-
-## Error Handling
-
-- Compilation errors: read the full error, fix the root cause, recompile
-- Linker errors: check `-lSDL2` is present; check header paths with `-I`
-- SDL init failures: always check return values — `SDL_Init` returns non-zero on failure
-- Never ignore compiler warnings by casting to `void` or `(void)` to silence them — fix them
-
-## File Layout
-
-```
-project/
-  PLAN.md
-  Makefile  (or CMakeLists.txt)
-  src/
-    main.c
-    foo.c
-    foo.h
-  tests/
-    test_foo.c
-```
-
-## Finishing
-
-When all tasks are `[x]`:
-1. Run all tests one final time
-2. Run clang-tidy across all source files — output must be clean
-3. Write a one-line summary under `## Notes` in `PLAN.md`
-4. Archive: `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`
