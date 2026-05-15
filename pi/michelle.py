@@ -8,6 +8,8 @@ import argparse
 import getpass
 import json
 import os
+import platform
+import plistlib
 import re
 import subprocess
 import sys
@@ -17,8 +19,10 @@ from pathlib import Path
 # ── constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_MODEL = "gemma4"
+IS_MACOS = platform.system() == "Darwin"
 OLLAMA_SRC = Path("/var/lib/ollama")
 OLLAMA_DST = Path("/opt/ollama")
+OLLAMA_LAUNCHD_PLIST = Path.home() / "Library" / "LaunchAgents" / "homebrew.mxcl.ollama.plist"
 SETTINGS_PATH = Path(__file__).parent / "agent" / "settings.json"
 MODELS_PATH = Path(__file__).parent / "agent" / "models.json"
 
@@ -68,9 +72,9 @@ def die(msg: str) -> None:
 
 
 def sudo(password: str, *args: str) -> None:
-    cmd = f"echo {password!r} | sudo -S {' '.join(args)}"
     result = subprocess.run(
-        ["script", "-q", "-c", cmd, "/dev/null"],
+        ["sudo", "-S"] + list(args),
+        input=password + "\n",
         capture_output=True,
         text=True,
     )
@@ -79,9 +83,9 @@ def sudo(password: str, *args: str) -> None:
 
 
 def validate_password(password: str) -> None:
-    cmd = f"echo {password!r} | sudo -S -v"
     result = subprocess.run(
-        ["script", "-q", "-c", cmd, "/dev/null"],
+        ["sudo", "-S", "true"],
+        input=password + "\n",
         capture_output=True,
         text=True,
     )
@@ -119,6 +123,8 @@ def remove_model(model: str) -> None:
 
 def cmd_move_storage(_args: argparse.Namespace) -> None:
     """Move ollama library to /opt/ollama and symlink back."""
+    if IS_MACOS:
+        die("move-storage is not supported on macOS (ollama stores data in ~/.ollama)")
     password = getpass.getpass("sudo password: ")
     validate_password(password)
 
@@ -262,7 +268,41 @@ def _lscpu_field(output: str, key: str) -> str:
     return ""
 
 
+def _sysctl(key: str) -> str:
+    return run(["sysctl", "-n", key]).stdout.strip()
+
+
 def detect_system() -> SystemInfo:
+    if IS_MACOS:
+        cpu_model = _sysctl("machdep.cpu.brand_string") or f"Apple {platform.machine()}"
+        physical_cores = int(_sysctl("hw.physicalcpu") or 1)
+        logical_threads = int(_sysctl("hw.logicalcpu") or physical_cores)
+        ram_mb = int(_sysctl("hw.memsize") or 0) // (1024 * 1024)
+
+        if platform.machine() == "arm64":
+            gpu_vendor, gpu_name = "apple", "Apple Silicon (Metal)"
+        else:
+            gpu_vendor, gpu_name = "none", ""
+            sp = run(["system_profiler", "SPDisplaysDataType"]).stdout.lower()
+            if "amd" in sp or "radeon" in sp:
+                gpu_vendor = "amd"
+                m2 = re.search(r"chipset model:\s*(.+)", sp)
+                gpu_name = m2.group(1).strip() if m2 else "AMD GPU"
+            elif "nvidia" in sp:
+                gpu_vendor = "nvidia"
+                m2 = re.search(r"chipset model:\s*(.+)", sp)
+                gpu_name = m2.group(1).strip() if m2 else "NVIDIA GPU"
+
+        return SystemInfo(
+            cpu_model=cpu_model,
+            physical_cores=physical_cores,
+            logical_threads=logical_threads,
+            ram_mb=ram_mb,
+            gpu_vendor=gpu_vendor,
+            gpu_name=gpu_name,
+            governors=[],
+        )
+
     lscpu = run(["env", "LC_ALL=C", "lscpu"]).stdout
 
     cpu_model = _lscpu_field(lscpu, "Model name")
@@ -347,8 +387,24 @@ def _build_override(settings: dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _write_launchd_env(settings: dict[str, str]) -> None:
+    """Update EnvironmentVariables in the homebrew ollama launchd plist."""
+    if not OLLAMA_LAUNCHD_PLIST.exists():
+        die(
+            f"launchd plist not found: {OLLAMA_LAUNCHD_PLIST}\n"
+            "Start ollama as a brew service first: brew services start ollama"
+        )
+    with open(OLLAMA_LAUNCHD_PLIST, "rb") as f:
+        plist = plistlib.load(f)
+    plist.setdefault("EnvironmentVariables", {}).update(settings)
+    with open(OLLAMA_LAUNCHD_PLIST, "wb") as f:
+        plistlib.dump(plist, f)
+    print(f"Written: {OLLAMA_LAUNCHD_PLIST} ✓")
+    print(yellow("Note: re-run 'michelle.py optimize' after 'brew services stop/start ollama'."))
+
+
 def cmd_optimize(_args: argparse.Namespace) -> None:
-    """Detect hardware and write an optimised ollama systemd override."""
+    """Detect hardware and write an optimised ollama config."""
     print("Detecting system...")
     info = detect_system()
 
@@ -357,7 +413,8 @@ def cmd_optimize(_args: argparse.Namespace) -> None:
     print(f"  RAM   : {info.ram_mb} MB ({info.ram_mb // 1024} GB)")
     gpu_label = f"{info.gpu_name} ({info.gpu_vendor})" if info.gpu_vendor != "none" else "none detected"
     print(f"  GPU   : {gpu_label}")
-    print(f"  CPU governors: {', '.join(info.governors) or 'unavailable'}")
+    if not IS_MACOS:
+        print(f"  CPU governors: {', '.join(info.governors) or 'unavailable'}")
     print()
 
     settings = compute_ollama_settings(info)
@@ -366,34 +423,42 @@ def cmd_optimize(_args: argparse.Namespace) -> None:
         print(f"  {k}={v}")
     print()
 
-    password = getpass.getpass("sudo password: ")
-    validate_password(password)
-
-    # Write systemd override via a temp file then sudo-move into place
-    override_content = _build_override(settings)
-    sudo(password, "mkdir", "-p", str(OLLAMA_OVERRIDE.parent))
-
-    tmp = Path("/tmp/ollama_override.conf")
-    tmp.write_text(override_content)
-    sudo(password, "cp", str(tmp), str(OLLAMA_OVERRIDE))
-    sudo(password, "chmod", "644", str(OLLAMA_OVERRIDE))
-    tmp.unlink(missing_ok=True)
-    print(f"Written: {OLLAMA_OVERRIDE} ✓")
-
-    # Set CPU governor to performance if available
-    if "performance" in info.governors:
-        print("Setting CPU governor to performance...")
-        for cpu in Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_governor"):
-            sudo(password, "sh", "-c", f"echo performance > {cpu}")
-        print("CPU governor: performance ✓")
+    if IS_MACOS:
+        _write_launchd_env(settings)
+        print("Restarting ollama...")
+        result = subprocess.run(["brew", "services", "restart", "ollama"], capture_output=True, text=True)
+        if result.returncode != 0:
+            die(f"failed to restart ollama: {result.stderr.strip()}")
+        print("ollama restarted ✓")
     else:
-        print("CPU governor: performance mode not available, skipping")
+        password = getpass.getpass("sudo password: ")
+        validate_password(password)
 
-    # Reload and restart
-    print("Reloading systemd daemon...")
-    sudo(password, "systemctl", "daemon-reload")
-    print("Restarting ollama...")
-    sudo(password, "systemctl", "restart", "ollama")
+        # Write systemd override via a temp file then sudo-move into place
+        override_content = _build_override(settings)
+        sudo(password, "mkdir", "-p", str(OLLAMA_OVERRIDE.parent))
+
+        tmp = Path("/tmp/ollama_override.conf")
+        tmp.write_text(override_content)
+        sudo(password, "cp", str(tmp), str(OLLAMA_OVERRIDE))
+        sudo(password, "chmod", "644", str(OLLAMA_OVERRIDE))
+        tmp.unlink(missing_ok=True)
+        print(f"Written: {OLLAMA_OVERRIDE} ✓")
+
+        # Set CPU governor to performance if available
+        if "performance" in info.governors:
+            print("Setting CPU governor to performance...")
+            for cpu in Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_governor"):
+                sudo(password, "sh", "-c", f"echo performance > {cpu}")
+            print("CPU governor: performance ✓")
+        else:
+            print("CPU governor: performance mode not available, skipping")
+
+        # Reload and restart
+        print("Reloading systemd daemon...")
+        sudo(password, "systemctl", "daemon-reload")
+        print("Restarting ollama...")
+        sudo(password, "systemctl", "restart", "ollama")
 
     print("\nDone.")
 
