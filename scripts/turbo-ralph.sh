@@ -234,9 +234,48 @@ else
   log "Planning: $GOAL"
   turbo-pi-run \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-    -p "/skill:task-planner You MUST call the Write tool to create the file $PROJECT_DIR/PLAN.md before stopping. Do NOT emit the plan as a chat message or fenced code block — invoke the Write tool with the plan contents as the file body. If you finish your turn without a Write tool call that targets PLAN.md, you have failed the task. The file must contain a checklist of tasks using '- [ ] task' markdown. The plan may rely on external dependencies, but ONLY of these kinds: (a) C or C++ libraries that the coding agent already knows (standard library, POSIX, and widely-used libraries such as libcurl, OpenSSL, SQLite, zlib, SDL2, Boost, etc.); (b) command-line tools commonly available on a Linux system (e.g. make, cmake, gcc, clang, pkg-config, grep, sed, awk, jq, git). Do NOT plan around frameworks or packages from language registries (npm, pip, cargo, go modules, etc.). List every such dependency explicitly in PLAN.md under a 'Dependencies' section, naming the C/C++ library or CLI tool. Group tasks that can be completed independently of each other by tagging them with '(group:N)' immediately after the checkbox, e.g. '- [ ] (group:1) create main.c skeleton'. Tasks in the same group must not depend on each other; tasks in later groups may depend on earlier groups. Untagged tasks are treated as their own singleton group. Write the plan only — do NOT execute any implementation steps. Do not ask for confirmation; just write PLAN.md and stop.
+    -p "/skill:task-planner
 
-Goal: $GOAL" 2>&1 | tee "$LOG_DIR/plan.log"
+GOAL: $GOAL
+
+HARD REQUIREMENTS — failing any of these means the task failed:
+
+1. You MUST invoke the Write tool with file_path '$PROJECT_DIR/PLAN.md'. Emitting the plan as chat text or inside a fenced code block does NOT create the file and counts as failure.
+
+2. Every task line in PLAN.md MUST start with literal '- [ ] '. Numbered lists ('1.', '2.', '- 1.', '* '), bullet lists without checkboxes, and bold/heading task lines are REJECTED by downstream tooling. Example of an acceptable line:
+       - [ ] (group:1) create src/main.c with an empty main()
+   Example of REJECTED lines:
+       1. Create src/main.c
+       - Create src/main.c
+       **Create source file**: ...
+
+3. Group independent tasks with '(group:N)' right after the checkbox: '- [ ] (group:1) ...'. Tasks in the same group must not depend on each other; later groups may depend on earlier ones. Untagged tasks become their own singleton group.
+
+4. Dependencies: the plan may use (a) C/C++ libraries the coding agent already knows (libc, POSIX, libcurl, OpenSSL, SQLite, zlib, SDL2, Boost, etc.) and (b) common Linux CLI tools (make, cmake, gcc, clang, pkg-config, grep, sed, awk, jq, git). Do NOT use language-registry packages (npm, pip, cargo, go modules, etc.). List every dependency under a '## Dependencies' section by name.
+
+5. Plan only — do NOT implement. Do not ask for confirmation. Write PLAN.md and stop." 2>&1 | tee "$LOG_DIR/plan.log"
+
+  # Fallback: planner sometimes emits the plan as a fenced ```markdown block
+  # instead of invoking the Write tool. Recover by extracting the first such
+  # block from the chat log and saving it as PLAN.md.
+  if [[ ! -f PLAN.md ]]; then
+    awk '
+      /^[[:space:]]*```([Mm]arkdown|md)?[[:space:]]*$/ {
+        if (!in_block) { in_block = 1; next }
+      }
+      /^[[:space:]]*```[[:space:]]*$/ {
+        if (in_block) { exit }
+      }
+      in_block { print }
+    ' "$LOG_DIR/plan.log" > PLAN.md.recovered
+
+    if [[ -s PLAN.md.recovered ]]; then
+      mv PLAN.md.recovered PLAN.md
+      log "Recovered PLAN.md from fenced block in $LOG_DIR/plan.log (planner did not call Write)."
+    else
+      rm -f PLAN.md.recovered
+    fi
+  fi
 
   [[ -f PLAN.md ]] || die "task-planner did not create PLAN.md — see $LOG_DIR/plan.log"
   grep -qE '^- \[ \]|^- \[~\]|^- \[x\]' PLAN.md || die "PLAN.md has no task checklist — see $LOG_DIR/plan.log"

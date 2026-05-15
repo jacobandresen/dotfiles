@@ -11,7 +11,9 @@ Use this skill at the start of any task that is complex, multi-step, or likely t
 
 First check if `PLAN.md` already exists with `[ ]` or `[~]` tasks. If it does, skip planning and immediately resume from the first incomplete step — do not acknowledge, do not ask, just begin.
 
-If no plan exists, create `PLAN.md` in the project root:
+If no plan exists, create `PLAN.md` in the project root by **invoking the Write tool** with the path `PLAN.md` and the body below. Do not emit the plan as a chat message or fenced code block — that does not create a file. If your turn ends without a Write tool call targeting `PLAN.md`, you have failed the task.
+
+Body format (every task line MUST start with `- [ ] `; numbered lists like `1.` or `2.` are not accepted by downstream tooling):
 
 ```markdown
 # Plan: <goal in one line>
@@ -53,7 +55,7 @@ Pick up from the first `[ ]` or `[~]` step. Re-read any relevant notes before co
 
 ## Handoff to Code Agent
 
-When the plan involves implementation work, write `PLAN.md` to the **project root** (the directory containing `src/`, `Makefile`, or `CMakeLists.txt`). The `code-agent` skill picks it up by running `cat PLAN.md` from that same directory.
+When the plan involves implementation work, write `PLAN.md` to the **current working directory** — this is the project root, whether or not `src/`, `Makefile`, or `CMakeLists.txt` exists yet (greenfield projects start empty). The `code-agent` skill picks it up by running `cat PLAN.md` from that same directory.
 
 The code-agent only understands **C and C++**. When writing steps that involve code:
 - Specify C or C++ explicitly if relevant
