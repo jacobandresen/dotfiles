@@ -26,6 +26,20 @@ If `PLAN.md` exists with `[ ]` or `[~]` tasks, immediately resume from the first
 
 If no plan exists, draft one from the task description before writing any code.
 
+## WRITE CODE TO DISK IMMEDIATELY — NON-NEGOTIABLE
+
+**Write every file to disk the moment you have any content to write. Do not hold code in memory, do not defer writes, do not wait until code is "ready" or "complete".**
+
+- The instant you know what a file should contain — even partially — write it.
+- A partial file on disk is always better than a complete file that only exists in context.
+- If the session ends, crashes, or is interrupted, anything not written to disk is lost. Code in your context window does not exist.
+- Never compose an entire implementation mentally and then write it all at once. Write each function, each struct, each header as soon as you draft it.
+- Compiling, linting, and testing only verify code that is already on disk. Write first, verify second.
+
+**There is no valid reason to delay writing a file. When in doubt: write it now.**
+
+---
+
 ## Autonomous Execution
 
 Never pause for confirmation or clarification. If a requirement is ambiguous, make the simplest reasonable assumption, document it under `## Notes`, and continue. Do not stop between increments — after each `[x]`, immediately loop to the next `[ ]` without user input. Only block when a hard dependency is missing (absent file, unknown API) that cannot be resolved without external input.

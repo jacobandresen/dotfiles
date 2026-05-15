@@ -27,6 +27,7 @@
 #   0   Goal complete (all tasks done or PLAN.md archived by agent)
 #   1   Bad arguments or planner failed to produce PLAN.md
 #   2   Max iterations reached with tasks still remaining
+#   3   Iteration produced no code — stalled, Ralph is sad
 #
 # CONTACT
 #   Jacob Andresen <jacob.andresen@gmail.com>
@@ -105,6 +106,31 @@ _ralph_frame() {
       printf "      ${S}|_____________|${R}${K}\n"
       ;;
   esac
+}
+
+_ralph_sad_frame() {
+  local H='\033[90m' F='\033[1;34m' S='\033[0;34m' R='\033[0m' K='\033[K'
+  # Blue tint on the screen, teary eyes, frown mouth
+  printf "${H}       _____________${R}${K}\n"
+  printf "${H}      |  _________  |${R}${K}\n"
+  printf "${H}      | |${F}         ${H}| |${R}${K}\n"
+  printf "${H}      | |${F}  ;   ;  ${H}| |${R}${K}\n"
+  printf "${H}      | |${F}    ~    ${H}| |${R}${K}\n"
+  printf "${H}      | |${F}  )___(  ${H}| |${R}${K}\n"
+  printf "${H}      | |${F}         ${H}| |${R}${K}\n"
+  printf "${H}      | |_________| |${R}${K}\n"
+  printf "${H}      |_____________|${R}${K}\n"
+  printf "            ${F}|||${R}${K}\n"
+  printf "      ${S}_____|||||_____${R}${K}\n"
+  printf "      ${S}|             |${R}${K}\n"
+  printf "      ${S}|_____________|${R}${K}\n"
+}
+
+ralph_sad() {
+  local label="${1:-No code was written.}"
+  printf "\n"
+  _ralph_sad_frame
+  printf "  \033[1;31m%s\033[0m\n\n" "$label"
 }
 
 print_banner() {
@@ -356,10 +382,29 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   fi
 
   log "Code-agent iteration $i / $MAX_ITER"
+  local iter_sentinel="$LOG_DIR/.iter-start"
+  touch "$iter_sentinel"
+
   turbo-pi-run \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
     -p "/skill:code-agent Iteration $i of $MAX_ITER. Read PLAN.md and complete the next [ ] or [~] task. Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) do not make any network requests." \
     2>&1 | tee "$LOG_DIR/iter-$(printf '%02d' "$i").log"
+
+  # Detect whether the agent actually wrote any code to disk.
+  # Exclude PLAN.md (bookkeeping) and the .ralph/ log directory itself.
+  local code_written
+  code_written=$(find . \
+    -not -path './.ralph/*' \
+    -not -name 'PLAN.md' \
+    -newer "$iter_sentinel" \
+    -type f 2>/dev/null | head -1)
+
+  if [[ -z "$code_written" ]]; then
+    ralph_sad "Ralph tried really hard but wrote no code. Giving up."
+    log "Iteration $i produced no code files — stalled."
+    exit 3
+  fi
+
   ralph_dance "Iteration $i done"
 done
 
