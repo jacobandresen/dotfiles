@@ -35,7 +35,7 @@ Use the `mcp__ollama__ollama_generate` tool with `model = "gemma4:latest"`. Writ
 Before declaring a setup change done, run:
 
 ```sh
-../scripts/check-deps.sh
+../scripts/turbo-check-deps.sh
 ```
 
-All entries should show `[OK]`. Missing entries mean `scripts/setup.sh` needs updating.
+All entries should show `[OK]`. Missing entries mean `scripts/turbo-setup.sh` needs updating.

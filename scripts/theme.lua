@@ -141,6 +141,41 @@ local function cmd_preview(yaml_path)
   print()
 end
 
+-- ── set-claude <settings_path> <yaml_path> ───────────────────────────────────
+
+local function cmd_set_claude(settings_path, yaml_path)
+  local scheme, err = parse_scheme(yaml_path)
+  if not scheme then
+    io.stderr:write("error: " .. (err or "cannot read " .. yaml_path) .. "\n")
+    os.exit(1)
+  end
+
+  local claude_theme = (scheme.variant == "light") and "light-ansi" or "dark-ansi"
+
+  local file, ferr = io.open(settings_path, "r")
+  if not file then
+    io.stderr:write("error: cannot read " .. settings_path .. ": " .. (ferr or "") .. "\n")
+    os.exit(1)
+  end
+  local content = file:read("*a")
+  file:close()
+
+  local updated, n = content:gsub('"theme"%s*:%s*"[^"]*"', '"theme": "' .. claude_theme .. '"')
+  if n == 0 then
+    io.stderr:write("warning: no \"theme\" key found in " .. settings_path .. "\n")
+    os.exit(1)
+  end
+
+  local out, werr = io.open(settings_path, "w")
+  if not out then
+    io.stderr:write("error: cannot write " .. settings_path .. ": " .. (werr or "") .. "\n")
+    os.exit(1)
+  end
+  out:write(updated)
+  out:close()
+  io.write(claude_theme .. "\n")
+end
+
 -- ── set <config_path> <scheme_name> ──────────────────────────────────────────
 
 local function cmd_set(config_path, scheme_name)
@@ -175,6 +210,12 @@ if subcmd == "list" then
   cmd_list(arg[2] or (io.stderr:write("usage: theme.lua list <dir>\n") and os.exit(1)))
 elseif subcmd == "preview" then
   cmd_preview(arg[2] or (io.stderr:write("usage: theme.lua preview <yaml_path>\n") and os.exit(1)))
+elseif subcmd == "set-claude" then
+  if not arg[2] or not arg[3] then
+    io.stderr:write("usage: theme.lua set-claude <settings_path> <yaml_path>\n")
+    os.exit(1)
+  end
+  cmd_set_claude(arg[2], arg[3])
 elseif subcmd == "set" then
   if not arg[2] or not arg[3] then
     io.stderr:write("usage: theme.lua set <config_path> <scheme_name>\n")

@@ -75,6 +75,29 @@ local function term_width()
   return math.min(w or 120, 160)
 end
 
+-- ── platform ─────────────────────────────────────────────────────────────────
+
+local IS_LINUX = (function()
+  local h = io.popen("uname -s 2>/dev/null")
+  local s = h and h:read("*l") or ""
+  if h then h:close() end
+  return s == "Linux"
+end)()
+
+local function stat_cmd(root, xdev, min_size)
+  if IS_LINUX then
+    -- GNU stat: -c format, %d=dev %i=ino %s=size %n=name
+    return ("find %s %s -type f -size +%dc -print0 2>/dev/null"
+         .. " | xargs -0 stat -c '%%d %%i %%s %%n' 2>/dev/null"):format(
+              shell_quote(root), xdev, min_size - 1)
+  else
+    -- BSD/macOS stat: -f format, %d=dev %i=ino %z=size %N=name
+    return ("find %s %s -type f -size +%dc -print0 2>/dev/null"
+         .. " | xargs -0 stat -f '%%d %%i %%z %%N' 2>/dev/null"):format(
+              shell_quote(root), xdev, min_size - 1)
+  end
+end
+
 -- ── scan ─────────────────────────────────────────────────────────────────────
 
 local function scan(roots, skip_mounts, min_size)
@@ -83,11 +106,7 @@ local function scan(roots, skip_mounts, min_size)
 
   for _, root in ipairs(roots) do
     local xdev = skip_mounts and "-xdev" or ""
-    -- find prints null-terminated paths; xargs batches them into stat calls.
-    -- stat '%d %i %z %N' → "dev ino size /full/path" (path always last, may have spaces)
-    local cmd = ("find %s %s -type f -size +%dc -print0 2>/dev/null"
-              .. " | xargs -0 stat -f '%%d %%i %%z %%N' 2>/dev/null"):format(
-                   shell_quote(root), xdev, min_size - 1)
+    local cmd  = stat_cmd(root, xdev, min_size)
 
     local h = io.popen(cmd)
     if not h then
@@ -121,57 +140,103 @@ end
 -- ── output ───────────────────────────────────────────────────────────────────
 
 local function print_table(entries, top_n, color)
-  local n   = math.min(top_n, #entries)
-  local w   = term_width()
-  local sep = ("-"):rep(w)
-
-  local RED  = color and "\27[31m"   or ""
-  local HEAD = color and "\27[1;36m" or ""
-  local RST  = color and "\27[0m"    or ""
-
-  print(("\n%sTop %d Largest Files%s"):format(HEAD, n, RST))
-  print(sep)
-  print(("%4s  %10s  %-12s  %-5s  %-22s  Path"):format(
-        "#", "Size", "Category", "Del?", "Reason"))
-  print(sep)
-
-  local total, del_size, del_count = 0, 0, 0
-  for i = 1, n do
-    local e   = entries[i]
-    local del = e.deletable and "  *  " or "     "
-    local row = ("%4d  %10s  %-12s  %-5s  %-22s  %s"):format(
-                  i, human_size(e.size), e.category, del, e.reason, e.path)
-    if color and e.deletable then
-      print(RED .. row .. RST)
-    else
-      print(row)
-    end
-    total = total + e.size
-    if e.deletable then
-      del_size  = del_size  + e.size
-      del_count = del_count + 1
-    end
+  -- only show files suggested for deletion
+  local deletable = {}
+  for _, e in ipairs(entries) do
+    if e.deletable then deletable[#deletable + 1] = e end
+  end
+  local n = math.min(top_n, #deletable)
+  if n == 0 then
+    print("\nNo files suggested for deletion.")
+    return deletable
   end
 
-  print(sep)
-  print(("Total shown: %s  |  Flagged deletable: %d files (%s)"):format(
-        human_size(total), del_count, human_size(del_size)))
+  local w = term_width()
+
+  local RED   = color and "\27[31m"  or ""
+  local CYAN  = color and "\27[36m"  or ""
+  local BOLD  = color and "\27[1m"   or ""
+  local DIM   = color and "\27[2m"   or ""
+  local RST   = color and "\27[0m"   or ""
+
+  local CW = { num=4, size=10, cat=12, reason=22 }
+  -- row: "│ num │ size │ cat │ reason │ path │"
+  local overhead = 2 + CW.num + 3 + CW.size + 3 + CW.cat + 3 + CW.reason + 3 + 2
+  local path_w   = math.max(10, w - overhead)
+
+  local H = "─"
+  local function hline(l, junc, r)
+    local segs = {
+      H:rep(CW.num+2), H:rep(CW.size+2), H:rep(CW.cat+2),
+      H:rep(CW.reason+2), H:rep(path_w+2),
+    }
+    return l .. table.concat(segs, junc) .. r
+  end
+
+  local row_fmt = "│ %4s │ %10s │ %-12s │ %-22s │ %-" .. path_w .. "s │"
+  local function make_row(num, size, cat, reason, path)
+    return row_fmt:format(num, size, cat, reason, path)
+  end
+
+  local function truncate(s, maxw)
+    if #s <= maxw then return s end
+    return "\xe2\x80\xa6" .. s:sub(-(maxw-1))  -- UTF-8 ellipsis …
+  end
+
+  print(("\n%s%sDeletion Candidates — Top %d by Size%s"):format(BOLD, CYAN, n, RST))
+  print(DIM .. hline("╭", "┬", "╮") .. RST)
+  print(BOLD .. make_row("#", "Size", "Category", "Reason", "Path") .. RST)
+  print(DIM .. hline("├", "┼", "┤") .. RST)
+
+  local total = 0
+  for i = 1, n do
+    local e = deletable[i]
+    local r = make_row(i, human_size(e.size), e.category,
+                       e.reason, truncate(e.path, path_w))
+    print((color and RED or "") .. r .. (color and RST or ""))
+    total = total + e.size
+  end
+
+  print(DIM .. hline("╰", "┴", "╯") .. RST)
+  print(("  %sTotal reclaimable:%s %s%s (%d files)%s"):format(
+        BOLD, RST, RED, human_size(total), n, RST))
+
+  return deletable, n
+end
+
+local function print_commands(deletable, n, color)
+  if not deletable or n == 0 then return end
+
+  local BOLD  = color and "\27[1m"   or ""
+  local CYAN  = color and "\27[36m"  or ""
+  local DIM   = color and "\27[2m"   or ""
+  local RST   = color and "\27[0m"   or ""
+
+  print(("\n%s%sSuggested cleanup commands:%s"):format(BOLD, CYAN, RST))
+  for i = 1, n do
+    print("  rm -f " .. shell_quote(deletable[i].path))
+  end
+  print(DIM .. "\n  # or delete all at once:" .. RST)
+  local paths = {}
+  for i = 1, n do paths[i] = shell_quote(deletable[i].path) end
+  print("  rm -f " .. table.concat(paths, " \\\n       "))
 end
 
 -- ── arg parsing ──────────────────────────────────────────────────────────────
 
 local function parse_args()
-  local opts = { roots={}, top=100, min_size=1024*1024, skip_mounts=true, plain=false }
+  local opts = { roots={}, top=10, min_size=1024*1024, skip_mounts=true, plain=false, yolo=false }
   local i = 1
   while i <= #arg do
     local a = arg[i]
     if a == "-h" or a == "--help" then
       io.write(
-        "usage: large_files.lua [opts] [roots...]\n"
-        .. "  -n N, --top N     files to show (default: 100)\n"
+        "usage: turbo-clean [opts] [roots...]\n"
+        .. "  -n N, --top N     files to show (default: 10)\n"
         .. "  --min-size BYTES  minimum size in bytes (default: 1048576)\n"
         .. "  --no-skip-mounts  cross filesystem boundaries\n"
         .. "  --plain           disable ANSI color\n"
+        .. "  --yolo            WARNING: immediately deletes all candidate files with no confirmation\n"
         .. "  roots             paths to scan (default: /)\n")
       os.exit(0)
     elseif a == "-n" or a == "--top" then
@@ -184,6 +249,8 @@ local function parse_args()
       opts.skip_mounts = false
     elseif a == "--plain" then
       opts.plain = true
+    elseif a == "--yolo" then
+      opts.yolo = true
     elseif not a:match("^%-") then
       opts.roots[#opts.roots + 1] = a
     else
@@ -212,4 +279,17 @@ if #entries == 0 then
   os.exit(0)
 end
 
-print_table(entries, opts.top, color)
+local deletable, shown = print_table(entries, opts.top, color)
+
+if opts.yolo and deletable and shown and shown > 0 then
+  local RED  = color and "\27[31m" or ""
+  local BOLD = color and "\27[1m"  or ""
+  local RST  = color and "\27[0m"  or ""
+  io.stderr:write(("\n%s%sWARNING: --yolo active. Deleting %d files now...%s\n"):format(BOLD, RED, shown, RST))
+  local paths = {}
+  for i = 1, shown do paths[i] = shell_quote(deletable[i].path) end
+  os.execute("rm -f " .. table.concat(paths, " "))
+  io.stderr:write("Done.\n")
+else
+  print_commands(deletable, shown, color)
+end

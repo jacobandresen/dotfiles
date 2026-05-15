@@ -39,11 +39,18 @@ chosen=$(
 [ -z "$chosen" ] && exit 0
 
 scheme_name=$(printf '%s' "$chosen" | cut -f1)
+yaml_path=$(printf '%s' "$chosen" | cut -f2)
 
 [ -f "$WEZTERM_CFG" ] || { echo "error: $WEZTERM_CFG not found" >&2; exit 1; }
 
 lua "$THEME_LUA" set "$WEZTERM_CFG" "$scheme_name"
 echo "updated $WEZTERM_CFG → $scheme_name (base16)"
+
+CLAUDE_CFG="$HOME/.claude/settings.json"
+if [ -f "$CLAUDE_CFG" ]; then
+  claude_theme=$(lua "$THEME_LUA" set-claude "$CLAUDE_CFG" "$yaml_path")
+  echo "updated $CLAUDE_CFG → $claude_theme"
+fi
 
 # Sync dotfiles copy if it differs from the live config
 if [ -f "$DOTFILES_CFG" ] && [ "$DOTFILES_CFG" != "$WEZTERM_CFG" ]; then

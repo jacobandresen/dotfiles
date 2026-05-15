@@ -51,6 +51,15 @@ cat PLAN.md
 
 Pick up from the first `[ ]` or `[~]` step. Re-read any relevant notes before continuing.
 
+## Handoff to Code Agent
+
+When the plan involves implementation work, write `PLAN.md` to the **project root** (the directory containing `src/`, `Makefile`, or `CMakeLists.txt`). The `code-agent` skill picks it up by running `cat PLAN.md` from that same directory.
+
+The code-agent only understands **C and C++**. When writing steps that involve code:
+- Specify C or C++ explicitly if relevant
+- Do not plan steps that require other languages (Python, Rust, Go, etc.) — if the task needs them, note it as a hard blocker
+- Frame implementation steps in terms of files (`src/foo.c`, `src/foo.h`) and build tools (`gcc`, `g++`, `cmake`, `make`)
+
 ## Finishing
 
 When all steps are `[x]`:
