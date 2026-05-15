@@ -13,6 +13,8 @@ import plistlib
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -118,6 +120,107 @@ def remove_model(model: str) -> None:
         die(f"failed to remove {model}\n{result.stderr.strip()}")
 
 
+# ── pi agent config helpers ───────────────────────────────────────────────────
+
+
+def _read_default_model() -> str:
+    if SETTINGS_PATH.exists():
+        try:
+            data = json.loads(SETTINGS_PATH.read_text())
+            if isinstance(data.get("defaultModel"), str):
+                return data["defaultModel"]
+        except json.JSONDecodeError:
+            pass
+    return DEFAULT_MODEL
+
+
+def _update_settings_default(model: str) -> None:
+    if not SETTINGS_PATH.exists():
+        print(f"WARNING: {SETTINGS_PATH} not found", file=sys.stderr)
+        return
+    data = json.loads(SETTINGS_PATH.read_text())
+    if data.get("defaultModel") == model:
+        print(f"settings.json: defaultModel='{model}' ✓")
+        return
+    print(f"settings.json: updating defaultModel -> '{model}'...")
+    data["defaultModel"] = model
+    SETTINGS_PATH.write_text(json.dumps(data, indent=2) + "\n")
+    print("settings.json: updated ✓")
+
+
+def _update_models_json(model: str) -> None:
+    """Prune models.json so only entries whose id starts with `model` remain."""
+    if not MODELS_PATH.exists():
+        print(f"WARNING: {MODELS_PATH} not found", file=sys.stderr)
+        return
+    data = json.loads(MODELS_PATH.read_text())
+    ollama = data.get("providers", {}).get("ollama", {})
+    models = ollama.get("models", [])
+    kept = [m for m in models if m.get("id", "").startswith(model)]
+    removed = [m["id"] for m in models if m not in kept]
+    if removed:
+        for mid in removed:
+            print(f"models.json: removing '{mid}'...")
+        ollama["models"] = kept
+        MODELS_PATH.write_text(json.dumps(data, indent=2) + "\n")
+        print("models.json: updated ✓")
+    else:
+        print("models.json: no extra models to remove ✓")
+
+
+# ── ollama HTTP helpers ───────────────────────────────────────────────────────
+
+
+def ollama_host() -> str:
+    return os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+
+def load_ollama(model: str, keep_alive: str = "30m") -> None:
+    """Send a tiny generation request to load `model` into memory."""
+    host = ollama_host()
+    print(f"Loading {model} on {host} (keep_alive={keep_alive})...")
+    payload = json.dumps({
+        "model": model,
+        "prompt": "hi",
+        "stream": False,
+        "keep_alive": keep_alive,
+    }).encode()
+    req = urllib.request.Request(
+        f"{host}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=600) as resp:
+            resp.read()
+    except urllib.error.URLError as e:
+        die(f"failed to reach ollama at {host}: {e}")
+    print(f"Done. {model} is resident for {keep_alive}.")
+
+
+def unload_ollama(model: str) -> None:
+    """Ask ollama to unload `model` from memory without removing it from disk."""
+    host = ollama_host()
+    print(f"Unloading {model} from {host}...")
+    payload = json.dumps({
+        "model": model,
+        "keep_alive": 0,
+    }).encode()
+    req = urllib.request.Request(
+        f"{host}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            resp.read()
+    except urllib.error.URLError as e:
+        die(f"failed to reach ollama at {host}: {e}")
+    print(f"Done. {model} unloaded from memory (still installed).")
+
+
 # ── commands ──────────────────────────────────────────────────────────────────
 
 
@@ -164,36 +267,46 @@ def cmd_enforce(args: argparse.Namespace) -> None:
     else:
         print(f"{model}: already installed ✓")
 
-    # ── agent/settings.json ───────────────────────────────────────────────────
-    if not SETTINGS_PATH.exists():
-        print(f"WARNING: {SETTINGS_PATH} not found", file=sys.stderr)
-    else:
-        data = json.loads(SETTINGS_PATH.read_text())
-        if data.get("defaultModel") == model:
-            print(f"settings.json: defaultModel='{model}' ✓")
-        else:
-            print(f"settings.json: updating defaultModel -> '{model}'...")
-            data["defaultModel"] = model
-            SETTINGS_PATH.write_text(json.dumps(data, indent=2) + "\n")
-            print("settings.json: updated ✓")
+    _update_settings_default(model)
+    _update_models_json(model)
 
-    # ── agent/models.json ─────────────────────────────────────────────────────
-    if not MODELS_PATH.exists():
-        print(f"WARNING: {MODELS_PATH} not found", file=sys.stderr)
+    print("\nDone.")
+
+
+def cmd_load(args: argparse.Namespace) -> None:
+    """Load the default model into ollama memory so it is resident."""
+    model = args.model or _read_default_model()
+    load_ollama(model, keep_alive=args.keep_alive)
+
+
+def cmd_unload(args: argparse.Namespace) -> None:
+    """Unload the default model from ollama memory without uninstalling it."""
+    model = args.model or _read_default_model()
+    unload_ollama(model)
+
+
+def cmd_set_default(args: argparse.Namespace) -> None:
+    """Set the default model for the pi agent and ollama, removing the old one."""
+    new_model = args.model
+    old_model = _read_default_model()
+
+    print(f"Old default: {old_model}")
+    print(f"New default: {new_model}")
+
+    installed = get_installed_models()
+    if not any(m.startswith(new_model) for m in installed):
+        pull_model(new_model)
     else:
-        data = json.loads(MODELS_PATH.read_text())
-        ollama = data.get("providers", {}).get("ollama", {})
-        models = ollama.get("models", [])
-        kept = [m for m in models if m.get("id", "").startswith(model)]
-        removed = [m["id"] for m in models if m not in kept]
-        if removed:
-            for mid in removed:
-                print(f"models.json: removing '{mid}'...")
-            ollama["models"] = kept
-            MODELS_PATH.write_text(json.dumps(data, indent=2) + "\n")
-            print("models.json: updated ✓")
-        else:
-            print("models.json: no extra models to remove ✓")
+        print(f"{new_model}: already installed ✓")
+
+    _update_settings_default(new_model)
+    _update_models_json(new_model)
+
+    # Remove any installed model whose tag doesn't match the new default.
+    # Re-list in case `pull_model` changed the set.
+    for m in get_installed_models():
+        if not m.startswith(new_model):
+            remove_model(m)
 
     print("\nDone.")
 
@@ -356,14 +469,9 @@ def compute_ollama_settings(info: SystemInfo) -> dict[str, str]:
     # Threads: physical cores are best for inference; leave one free for the OS
     settings["OLLAMA_NUM_THREADS"] = str(max(1, info.physical_cores - 1))
 
-    # Parallel requests scale with available RAM
-    if info.ram_mb < 8 * 1024:
-        parallel = 1
-    elif info.ram_mb < 16 * 1024:
-        parallel = 2
-    else:
-        parallel = 4
-    settings["OLLAMA_NUM_PARALLEL"] = str(parallel)
+    # Single parallel slot — every extra slot multiplies KV-cache cost, so we
+    # trade concurrency for the largest possible context per request.
+    settings["OLLAMA_NUM_PARALLEL"] = "1"
 
     # Only load one model at a time unless RAM is generous
     settings["OLLAMA_MAX_LOADED_MODELS"] = "2" if info.ram_mb >= 32 * 1024 else "1"
@@ -371,8 +479,17 @@ def compute_ollama_settings(info: SystemInfo) -> dict[str, str]:
     # Flash attention is universally beneficial
     settings["OLLAMA_FLASH_ATTENTION"] = "1"
 
-    # Keep model warm for 10 minutes
-    settings["OLLAMA_KEEP_ALIVE"] = "10m"
+    # Quantize the KV cache so a 128k-token context fits in modest RAM/VRAM
+    settings["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
+
+    # Use the full context window the model advertises
+    settings["OLLAMA_CONTEXT_LENGTH"] = "131072"
+
+    # Generous load timeout — large contexts take longer to warm up
+    settings["OLLAMA_LOAD_TIMEOUT"] = "30m"
+
+    # Keep the model resident indefinitely
+    settings["OLLAMA_KEEP_ALIVE"] = "-1"
 
     return settings
 
@@ -479,6 +596,15 @@ commands:
   enforce       Remove every installed model except the default, pull it
                 if missing, and align agent/settings.json + models.json.
 
+  load          Send a tiny request to ollama so the default model is loaded
+                into memory and kept resident (default keep_alive: 30m).
+
+  unload        Spin down the default model: ask ollama to evict it from
+                memory while leaving it installed on disk.
+
+  set-default   Set the pi+ollama default model: pull the new model, update
+                agent/settings.json + models.json, then remove the old one.
+
   optimize      Detect CPU/RAM/GPU, compute optimal ollama settings, write
                 a systemd service override, and restart ollama.
 
@@ -488,6 +614,9 @@ examples:
   michelle.py move-storage
   michelle.py enforce
   michelle.py enforce --model gemma4:12b
+  michelle.py load
+  michelle.py unload
+  michelle.py set-default qwen3:8b
   michelle.py optimize
   michelle.py status
 """,
@@ -522,6 +651,65 @@ examples:
         help=f"model to enforce (default: {DEFAULT_MODEL})",
     )
     p_enforce.set_defaults(func=cmd_enforce)
+
+    # load
+    p_load = sub.add_parser(
+        "load",
+        help="load the default model into ollama's memory",
+        description=(
+            "Sends a tiny generation request to ollama so the default model "
+            "(from agent/settings.json) is loaded into memory, and asks ollama "
+            "to keep it resident for the configured keep-alive window."
+        ),
+    )
+    p_load.add_argument(
+        "--model",
+        default=None,
+        metavar="<model>",
+        help="model to load (default: defaultModel from agent/settings.json)",
+    )
+    p_load.add_argument(
+        "--keep-alive",
+        default="30m",
+        metavar="<duration>",
+        help="how long ollama should keep the model resident (default: 30m)",
+    )
+    p_load.set_defaults(func=cmd_load)
+
+    # unload
+    p_unload = sub.add_parser(
+        "unload",
+        help="evict the default model from ollama memory (keeps it installed)",
+        description=(
+            "Asks ollama to unload the default model from memory by sending an "
+            "empty generation request with keep_alive=0. The model stays installed "
+            "on disk; the next request will reload it."
+        ),
+    )
+    p_unload.add_argument(
+        "--model",
+        default=None,
+        metavar="<model>",
+        help="model to unload (default: defaultModel from agent/settings.json)",
+    )
+    p_unload.set_defaults(func=cmd_unload)
+
+    # set-default
+    p_set = sub.add_parser(
+        "set-default",
+        help="set the default model for the pi agent and ollama",
+        description=(
+            "Sets the default model used by turbo-ralph and the pi agent. Pulls the "
+            "new model via ollama, updates agent/settings.json + models.json, then "
+            "removes every other installed ollama model."
+        ),
+    )
+    p_set.add_argument(
+        "model",
+        metavar="<model>",
+        help="new default model (e.g. 'qwen3:8b', 'gemma4:12b')",
+    )
+    p_set.set_defaults(func=cmd_set_default)
 
     # optimize
     p_optimize = sub.add_parser(

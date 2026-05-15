@@ -8,7 +8,7 @@
         {
           "_launch": true,
           "contextWindow": 131072,
-          "id": "gemma4",
+          "id": "qwen3:8b",
           "input": [
             "text",
             "image"

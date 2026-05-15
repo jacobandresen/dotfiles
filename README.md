@@ -147,3 +147,9 @@ bash scripts/turbo-theme.sh
 ```
 
 Pick a [base16](https://github.com/tinted-theming/base16-schemes) scheme from the fzf list. The selection is written to `~/.wezterm.lua`; Neovim reads it on next start and applies the matching colorscheme automatically.
+
+
+## Contact
+
+You can reach at jacob.andresen@gmail.com .
+

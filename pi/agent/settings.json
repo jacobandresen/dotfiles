@@ -1,11 +1,12 @@
 {
   "compaction": {
     "enabled": true,
-    "keepRecentTokens": 20000,
+    "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "gemma4",
+  "defaultModel": "qwen3:8b",
   "defaultProvider": "ollama",
+  "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
   "lastChangelogVersion": "0.74.0",
   "packages": [
@@ -19,8 +20,7 @@
     "provider": {
       "maxRetries": 1,
       "maxRetryDelayMs": 0,
-      "timeoutMs": 1200000
+      "timeoutMs": 86400000
     }
-  },
-  "defaultThinkingLevel": "high"
+  }
 }
