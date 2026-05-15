@@ -18,25 +18,44 @@ from pathlib import Path
 
 # ── constants ────────────────────────────────────────────────────────────────
 
-DEFAULT_MODEL = "qwen3:8b"
+DEFAULT_MODEL = "qwen3:4b"
 IS_MACOS = platform.system() == "Darwin"
 
 # Curated set of models that fit a 6 GB-VRAM / 16 GB-RAM box.
 # Keys are the ollama id; values mirror the models.json schema.
 KNOWN_MODELS: dict[str, dict] = {
-    "qwen3:8b": {
+    "qwen3:4b": {
         "_launch": True,
+        "contextWindow": 131072,
+        "id": "qwen3:4b",
+        "input": ["text"],
+        "reasoning": True,
+        "description": "Fast reasoning model. Fits entirely in GPU on 8 GB M2. Best default for RAM-constrained machines.",
+    },
+    "qwen3:8b": {
         "contextWindow": 131072,
         "id": "qwen3:8b",
         "input": ["text", "image"],
         "reasoning": True,
-        "description": "General-purpose / agentic. Strong tool use and reasoning. Best default.",
+        "description": "General-purpose / agentic. Strong tool use and reasoning. Needs 16 GB RAM to avoid swap.",
     },
     "qwen2.5-coder:7b": {
         "contextWindow": 32768,
         "id": "qwen2.5-coder:7b",
         "input": ["text"],
         "description": "Code specialist. Better than qwen3 at diffs, edits, and completion.",
+    },
+    "phi3.5": {
+        "contextWindow": 131072,
+        "id": "phi3.5",
+        "input": ["text"],
+        "description": "Microsoft 3.8B mini model. 128k context, fits fully in GPU on 8 GB M2.",
+    },
+    "llama3.2:3b": {
+        "contextWindow": 131072,
+        "id": "llama3.2:3b",
+        "input": ["text"],
+        "description": "Meta 3B model. Fast and lightweight, good general-purpose fallback.",
     },
     "gemma3:4b": {
         "contextWindow": 131072,

@@ -29,6 +29,15 @@
             "text",
             "image"
           ]
+        },
+        {
+          "_launch": true,
+          "contextWindow": 131072,
+          "id": "qwen3:4b",
+          "input": [
+            "text"
+          ],
+          "reasoning": true
         }
       ]
     }

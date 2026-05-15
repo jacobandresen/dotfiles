@@ -271,8 +271,6 @@ _run_planner() {
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
     -p "/skill:task-planner
 
-GOAL: $GOAL
-
 HARD REQUIREMENTS — failing any of these means the task failed:
 
 1. You MUST invoke the Write tool with file_path '$PROJECT_DIR/PLAN.md'. Emitting the plan as chat text or inside a fenced code block does NOT create the file and counts as failure.
@@ -296,7 +294,9 @@ HARD REQUIREMENTS — failing any of these means the task failed:
 
    If a task has no testable behavior (e.g. 'create empty directory'), mark it '(no-test)' after the checkbox: '- [ ] (group:1) (no-test) ...'.
 
-6. Plan only — do NOT implement. Do not ask for confirmation. Write PLAN.md and stop." 2>&1 | tee "$plan_log"
+6. Plan only — do NOT implement. Do not ask for confirmation. Write PLAN.md and stop.
+
+GOAL: $GOAL" 2>&1 | tee "$plan_log"
   return "${PIPESTATUS[0]}"
 }
 
@@ -379,7 +379,7 @@ for ((i = 1; i <= MAX_ITER; i++)); do
 
   iter_log="$LOG_DIR/iter-$(printf '%02d' "$i").log"
   if ((i == 1)); then
-    iter_prompt="/skill:code-agent Iteration $i of $MAX_ITER. Read PLAN.md and complete as many [ ] or [~] tasks as you safely can in this iteration. Specifically: find the earliest group (tasks tagged '(group:N)') that still has unfinished tasks, and complete EVERY unfinished task in that group before stopping. Untagged tasks are singleton groups — do them one at a time. Stop the iteration once that group is fully [x], so the next iteration can pick up the following group with fresh context.
+    iter_prompt="/skill:code-agent Read PLAN.md and complete as many [ ] or [~] tasks as you safely can in this iteration. Specifically: find the earliest group (tasks tagged '(group:N)') that still has unfinished tasks, and complete EVERY unfinished task in that group before stopping. Untagged tasks are singleton groups — do them one at a time. Stop the iteration once that group is fully [x], so the next iteration can pick up the following group with fresh context.
 
 HARD REQUIREMENTS — failing any of these means the iteration failed:
 
@@ -393,14 +393,18 @@ HARD REQUIREMENTS — failing any of these means the iteration failed:
 
 (E) The test command MUST run unit tests ONLY — it MUST NOT invoke the main program / produced binary as an end-to-end smoke check. If PLAN.md's '## Test Command' currently runs the application binary (e.g. './my_program', 'node app.js', 'python main.py'), REPLACE it with a real unit-test command ('make check', 'ctest', 'pytest tests/', etc.) and write the missing unit tests. Building the binary is fine; running it is not. All filesystem paths in Makefiles, scripts and tests MUST be project-relative — never write to absolute paths like '/my_program'.
 
-Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) external libraries/modules listed in PLAN.md may be installed and used; do not pull in dependencies that PLAN.md does not mention; (4) update PLAN.md to mark each task [x] as you finish it."
+Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) external libraries/modules listed in PLAN.md may be installed and used; do not pull in dependencies that PLAN.md does not mention; (4) update PLAN.md to mark each task [x] as you finish it.
+
+Iteration $i of $MAX_ITER."
     turbo-pi-run \
       --session-dir "$SESSION_DIR" \
       --append-system-prompt "$AUTONOMOUS_SYSTEM" \
       -p "$iter_prompt" \
       2>&1 | tee "$iter_log"
   else
-    iter_prompt="Iteration $i of $MAX_ITER. Re-read PLAN.md, find the earliest group with unfinished [ ] or [~] tasks, and complete every task in that group under the same hard requirements (write to disk via tools, match PLAN.md exactly, write+run paired tests, mark tasks [x] as you finish). Stop when that group is fully [x]."
+    iter_prompt="Re-read PLAN.md, find the earliest group with unfinished [ ] or [~] tasks, and complete every task in that group under the same hard requirements (write to disk via tools, match PLAN.md exactly, write+run paired tests, mark tasks [x] as you finish). Stop when that group is fully [x].
+
+Iteration $i of $MAX_ITER."
     turbo-pi-run \
       --session-dir "$SESSION_DIR" \
       --continue \
@@ -468,11 +472,11 @@ _final_test_gate() {
       --session-dir "$SESSION_DIR" \
       --continue \
       --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "The test command for this project (\`$cmd\`) is failing at the end of the run. Last test output (tail):
+      -p "Diagnose the test failure, fix the code or the tests so the test command exits zero, and write the fixes to disk. Do NOT mark new PLAN.md tasks [x] — only fix what is needed to make tests pass. Do not ask for confirmation; write directly to disk.
 
-$test_output
+The test command for this project (\`$cmd\`) is failing at the end of the run. Last test output (tail):
 
-Diagnose the failure, fix the code or the tests so the test command exits zero, and write the fixes to disk. Do NOT mark new PLAN.md tasks [x] — only fix what is needed to make tests pass. Do not ask for confirmation; write directly to disk." \
+$test_output" \
       2>&1 | tee "$retry_log"
   done
 }
