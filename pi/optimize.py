@@ -159,22 +159,37 @@ def detect_system() -> SystemInfo:
     )
 
 
+def _memory_tier(ram_mb: int) -> str:
+    """Classify available RAM into a tier that drives conservative settings."""
+    if ram_mb <= 8 * 1024:
+        return "low"       # ≤8 GB — Apple M2 8 GB, entry Raspberry Pi 5, etc.
+    if ram_mb <= 16 * 1024:
+        return "mid"       # 9–16 GB
+    return "high"          # >16 GB
+
+
 def compute_ollama_settings(info: SystemInfo) -> dict[str, str]:
     """Tune ollama for throughput, assuming the model is already cached.
 
     Priorities, in order: aggregate tokens/sec under concurrent load, single
     resident model (no eviction churn), KV cache budget that scales with
     parallel slots. Per-request latency takes a back seat to total throughput.
+
+    On ≤8 GB unified-memory machines (e.g. Apple M2 8 GB) the model weights
+    alone consume ~55% of RAM, leaving the OS under compression pressure.
+    Those hosts get conservative context, a single parallel slot, and
+    keep-alive=0 so VRAM is reclaimed immediately after each request.
     """
     settings: dict[str, str] = {}
+    tier = _memory_tier(info.ram_mb)
 
     # Threads: use all physical cores. Inference is memory-bandwidth bound;
     # leaving cores idle leaves throughput on the table when slots batch.
     settings["OLLAMA_NUM_THREADS"] = str(max(1, info.physical_cores))
 
-    # Multiple parallel slots = continuous batching = higher aggregate
-    # throughput. 2 keeps KV cache + CPU contention manageable on small boxes.
-    settings["OLLAMA_NUM_PARALLEL"] = "2"
+    # On low-RAM hosts a second slot doubles KV-cache pressure without
+    # meaningful throughput gain — the bottleneck is bandwidth, not queuing.
+    settings["OLLAMA_NUM_PARALLEL"] = "1" if tier == "low" else "2"
 
     # Deep queue so bursts don't get rejected under load
     settings["OLLAMA_MAX_QUEUE"] = "512"
@@ -193,14 +208,30 @@ def compute_ollama_settings(info: SystemInfo) -> dict[str, str]:
     # critical when NUM_PARALLEL multiplies the cache footprint
     settings["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
 
-    # 8k per-slot context: effective budget is 8k * NUM_PARALLEL = 32k of KV
-    # cache. Larger per-slot windows blow up VRAM and tank batch throughput.
-    settings["OLLAMA_CONTEXT_LENGTH"] = "8192"
+    # Context per slot — scales down on memory-constrained hosts to keep KV
+    # cache from crowding out OS and application memory.
+    #   low  (≤8 GB):  2048 — minimal footprint, avoids macOS compression
+    #   mid (≤16 GB):  4096 — balanced
+    #   high (>16 GB): 8192 — full throughput budget
+    context = {"low": "2048", "mid": "4096", "high": "8192"}[tier]
+    settings["OLLAMA_CONTEXT_LENGTH"] = context
 
-    # Keep the model resident indefinitely (cache is primed)
-    settings["OLLAMA_KEEP_ALIVE"] = "-1"
+    # On low-RAM hosts free VRAM immediately after each request; elsewhere
+    # keep the model resident indefinitely (cache is primed).
+    settings["OLLAMA_KEEP_ALIVE"] = "0" if tier == "low" else "-1"
 
     return settings
+
+
+def _low_ram_advice(info: SystemInfo) -> None:
+    """Print model/quant recommendations when RAM is ≤8 GB."""
+    print("Memory-pressure advice (≤8 GB host):")
+    print("  • Prefer smaller quants — Q3_K_M or Q2_K save ~1 GB vs Q4_K_M")
+    print("  • qwen3:4b uses ~2.5 GB VRAM, leaving ~5.5 GB for OS/apps")
+    print("    ollama pull qwen3:4b")
+    print("  • OLLAMA_KEEP_ALIVE=0 already set — VRAM freed after each request")
+    print("  • OLLAMA_CONTEXT_LENGTH=2048 already set — raise only if needed")
+    print()
 
 
 def _build_override(settings: dict[str, str]) -> str:
@@ -257,6 +288,9 @@ def main() -> None:
     for k, v in settings.items():
         print(f"  {k}={v}")
     print()
+
+    if _memory_tier(info.ram_mb) == "low":
+        _low_ram_advice(info)
 
     if IS_MACOS:
         _write_launchd_env(settings)

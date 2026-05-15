@@ -288,6 +288,12 @@ HARD REQUIREMENTS — failing any of these means the task failed:
 
 5. TESTS PER STEP: every implementation task MUST be paired with a unit-test task in the SAME group. The test task line MUST mention 'unit test' or 'test' explicitly and reference what it covers. Include a top-level '## Test Command' section in PLAN.md that gives a single shell command which runs the entire UNIT TEST suite (e.g. 'make check', 'ctest --output-on-failure', './run-unit-tests.sh', 'pytest tests/'). The test command MUST exit non-zero on failure.
 
+   SELF-CONTAINED GROUPS — each group MUST leave the test suite in a passing state. After completing all tasks in a group, the test command MUST be executable and MUST pass without completing any task from a later group. Rules:
+   - The build system (Makefile, CMakeLists.txt, etc.) and any test-harness setup MUST be created in the FIRST group. Do not defer them.
+   - Every subsequent group extends those files; it does NOT create a new build system from scratch.
+   - NEVER create a standalone 'compile' group or a standalone 'run tests' group — folding compilation and test execution into the implementation group is required.
+   - A group that compiles but does not run tests, or that creates source files but cannot build, is malformed and will be rejected.
+
    CRITICAL — the '## Test Command' MUST execute unit tests ONLY. It MUST NOT run the main program / produced executable / application binary as part of the test command. Building the binary is fine (tests may link against it), but invoking it for an end-to-end smoke check is FORBIDDEN. Reason: the main program may take input, write to filesystem paths, open ports, or otherwise have side effects that are unsafe to run from a test harness. Unit tests must call individual functions/modules in isolation.
 
    ALL FILESYSTEM PATHS used by Makefiles, scripts, and tests MUST be relative to the project directory. Never write to absolute paths like '/my_program' or '/output' — these will be denied by the sandbox. Use './my_program', 'build/my_program', or similar.
@@ -389,7 +395,10 @@ HARD REQUIREMENTS — failing any of these means the iteration failed:
 
 (C) Match PLAN.md exactly. If the plan says print \"hello\", do not print \"Hello, World!\".
 
-(D) TESTS: for every implementation task you complete in this group, you MUST also complete its paired unit-test task by writing the test to disk. After finishing the group, run the test command from PLAN.md's '## Test Command' section yourself via the Bash tool. If tests fail, fix the code or tests and re-run until they pass before marking the group [x]. Do NOT mark any task [x] whose tests have not been run and observed to pass. Tasks marked '(no-test)' are exempt from the test requirement but still must be implemented.
+(D) TESTS: for every implementation task you complete in this group, you MUST also complete its paired unit-test task by writing the test to disk. After finishing the group, run the test command from PLAN.md's '## Test Command' section yourself via the Bash tool. The test command MUST exit zero — meaning tests compile, link, run, and pass. Two failure modes, both must be fixed before marking [x]:
+   - Test command cannot execute (e.g. 'make: Makefile not found', missing harness, missing build target) — write the missing infrastructure (Makefile, CMakeLists.txt, test runner script) and re-run.
+   - Test command runs but reports failures — fix the code or the tests and re-run.
+   Do NOT mark any task [x] until the test command has been observed to exit zero in this session. Tasks marked '(no-test)' are exempt from the test requirement but still must be implemented.
 
 (E) The test command MUST run unit tests ONLY — it MUST NOT invoke the main program / produced binary as an end-to-end smoke check. If PLAN.md's '## Test Command' currently runs the application binary (e.g. './my_program', 'node app.js', 'python main.py'), REPLACE it with a real unit-test command ('make check', 'ctest', 'pytest tests/', etc.) and write the missing unit tests. Building the binary is fine; running it is not. All filesystem paths in Makefiles, scripts and tests MUST be project-relative — never write to absolute paths like '/my_program'.
 
