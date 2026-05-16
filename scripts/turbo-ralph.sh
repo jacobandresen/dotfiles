@@ -35,6 +35,8 @@
 set -euo pipefail
 
 MAX_ITER=10
+PLANNER_TIMEOUT="${PLANNER_TIMEOUT:-600}"
+RALPH_THINKING="${RALPH_THINKING:-medium}"
 GOAL=""
 TARGET_DIR=""
 FORCE=0
@@ -200,6 +202,77 @@ PROJECT_DIR="$(pwd)"
 SESSION_DIR="$LOG_DIR/code-session"
 mkdir -p "$LOG_DIR"
 
+# ── Session archive ───────────────────────────────────────────────────────────
+# Each run is archived to RALPH_ARCHIVE_DIR for analytical purposes.
+# Prune ~/.ralph/sessions/ periodically to manage disk usage.
+RALPH_ARCHIVE_DIR="${RALPH_ARCHIVE_DIR:-$HOME/.ralph/sessions}"
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-$(printf '%s' "$GOAL" | tr ' /' '_-' | tr -cd 'A-Za-z0-9_-' | cut -c1-40)"
+SESSION_ARCHIVE_PATH="$RALPH_ARCHIVE_DIR/$SESSION_ID"
+SESSION_START_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SESSION_START_EPOCH="$(date +%s)"
+
+# Write a partial tombstone immediately — survives SIGKILL since EXIT trap won't run.
+# _archive_finalize overwrites this with the full record on clean exit.
+mkdir -p "$SESSION_ARCHIVE_PATH"
+printf '{"session_id":"%s","goal":"%s","outcome":"unknown","exit_code":-1}\n' \
+  "$SESSION_ID" "$GOAL" > "$SESSION_ARCHIVE_PATH/meta.json" 2>/dev/null || true
+
+_archive_finalize() {
+  local ec=$?
+  set +e
+  mkdir -p "$SESSION_ARCHIVE_PATH/logs" \
+    || printf '[archive] WARNING: could not create logs dir\n' >&2
+  [[ -d "$LOG_DIR" ]] && cp -r "$LOG_DIR/." "$SESSION_ARCHIVE_PATH/logs/" 2>/dev/null \
+    || printf '[archive] WARNING: could not copy logs\n' >&2
+
+  local tasks_total tasks_done
+  tasks_total=$(grep -cE '^- \[[ x~]\]' PLAN.md 2>/dev/null || echo 0)
+  tasks_done=$(grep -cE '^- \[x\]' PLAN.md 2>/dev/null || echo 0)
+  [[ -f PLAN.md ]] && cp PLAN.md "$SESSION_ARCHIVE_PATH/PLAN-final.md" 2>/dev/null
+
+  local outcome
+  case "$ec" in
+    0) outcome="success" ;;
+    1) outcome="error" ;;
+    2) outcome="max_iterations" ;;
+    3) outcome="stalled" ;;
+    *) outcome="unknown" ;;
+  esac
+
+  local end_ts duration
+  end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  duration=$(( $(date +%s) - SESSION_START_EPOCH ))
+
+  # Write minimal tombstone first — survives a SIGKILL of the python3 call below.
+  printf '{"session_id":"%s","goal":"%s","outcome":"%s","exit_code":%d}\n' \
+    "$SESSION_ID" "$GOAL" "$outcome" "$ec" \
+    > "$SESSION_ARCHIVE_PATH/meta.json" 2>/dev/null
+
+  python3 -c "
+import json, sys
+data = {
+    'session_id': sys.argv[1],
+    'goal': sys.argv[2],
+    'project_dir': sys.argv[3],
+    'start_time': sys.argv[4],
+    'end_time': sys.argv[5],
+    'duration_seconds': int(sys.argv[6]),
+    'max_iterations': int(sys.argv[7]),
+    'outcome': sys.argv[8],
+    'exit_code': int(sys.argv[9]),
+    'tasks_total': int(sys.argv[10]),
+    'tasks_done': int(sys.argv[11]),
+}
+print(json.dumps(data, indent=2))
+" "$SESSION_ID" "$GOAL" "$PROJECT_DIR" "$SESSION_START_TS" "$end_ts" \
+  "$duration" "$MAX_ITER" "$outcome" "$ec" "$tasks_total" "$tasks_done" \
+  > "$SESSION_ARCHIVE_PATH/meta.json" 2>/dev/null
+
+  log "Session archived → $SESSION_ARCHIVE_PATH"
+}
+
+trap _archive_finalize EXIT
+
 tasks_remaining() {
   [[ -f PLAN.md ]] && grep -qE '^- \[ \]|^- \[~\]' PLAN.md
 }
@@ -264,46 +337,93 @@ SANDBOX CONSTRAINTS — these are hard limits, never override them:
 2. EXTERNAL LIBRARIES / PACKAGES: You MAY install and use external libraries, modules, or packages (via npm install, pip install, go get, cargo add, etc.) ONLY IF they are explicitly listed in PLAN.md. Do not pull in dependencies that PLAN.md does not mention. If you need a dependency that is not listed, add it to PLAN.md first, then install it."
 
 # ── Step 1: Planning ──────────────────────────────────────────────────────────
+
+# Draw a single-line progress bar on stdout (overwrites the current line).
+# Usage: _planner_progress ELAPSED TIMEOUT
+_planner_progress() {
+  local elapsed=$1 timeout=$2 width=40
+  local pct filled bar j
+  pct=$(( elapsed * 100 / timeout ))
+  filled=$(( elapsed * width / timeout ))
+  bar=""
+  for ((j = 0; j < filled; j++)); do bar+="="; done
+  if (( filled < width )); then
+    bar+=">"
+    for ((j = filled + 1; j < width; j++)); do bar+=" "; done
+  fi
+  printf "\r  \033[36mPlanning\033[0m [%s] %3d%%  %ds / %ds" \
+    "$bar" "$pct" "$elapsed" "$timeout"
+}
+
 _run_planner() {
-  # $1 = log file. Returns pi's exit code.
+  # $1 = log file.
+  # Runs pi in a background subshell and polls every 2 s for PLAN.md.
+  # Kills the planner the moment PLAN.md is written so we don't wait for
+  # the model to finish its post-Write rambling. Falls back to a hard
+  # kill after PLANNER_TIMEOUT seconds regardless.
   local plan_log="$1"
-  turbo-pi-run \
+  ( turbo-pi-run \
+    --thinking "$RALPH_THINKING" \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-    -p "/skill:task-planner
+    -p "Your only output must be one Write tool call that creates '$PROJECT_DIR/PLAN.md'. No chat text, no fenced code blocks.
 
-HARD REQUIREMENTS — failing any of these means the task failed:
+REQUIREMENTS:
 
-1. You MUST invoke the Write tool with file_path '$PROJECT_DIR/PLAN.md'. Emitting the plan as chat text or inside a fenced code block does NOT create the file and counts as failure.
+1. PLAN.md must contain a '## Files' section: a flat ordered list of files to create, one per line,
+   in dependency order (dependencies before dependents):
+     ## Files
+     - [ ] Makefile
+     - [ ] src/hello.c
+     - [ ] include/hello.h
+     - [ ] tests/test_hello.c
+     - [ ] src/main.c
+   Each line: '- [ ] relative/path/to/file' optionally followed by ' — one-line description'.
+   Order: Makefile first, then source+header module pairs, then test files, then the main entry point last.
 
-2. Every task line in PLAN.md MUST start with literal '- [ ] '. Numbered lists ('1.', '2.', '- 1.', '* '), bullet lists without checkboxes, and bold/heading task lines are REJECTED by downstream tooling. Example of an acceptable line:
-       - [ ] (group:1) create src/main.c with an empty main()
-   Example of REJECTED lines:
-       1. Create src/main.c
-       - Create src/main.c
-       **Create source file**: ...
+2. Every source module (e.g. src/hello.c) must have a paired test file in tests/ (e.g. tests/test_hello.c).
+   Makefile and main entry points (e.g. src/main.c) do not need test files.
+   The module function must return a value rather than printing — makes it unit-testable without stdout capture.
 
-3. Group independent tasks with '(group:N)' right after the checkbox: '- [ ] (group:1) ...'. Tasks in the same group must not depend on each other; later groups may depend on earlier ones. Untagged tasks become their own singleton group.
+3. Include '## Test Command' with a single shell command that runs all unit tests and exits non-zero on
+   failure (e.g. 'make check'). Must execute unit tests only — not the main program binary.
+   All paths in Makefiles and tests must be project-relative, never absolute (e.g. not '/my_program').
 
-4. Dependencies: the plan may use (a) C/C++ libraries the coding agent already knows (libc, POSIX, libcurl, OpenSSL, SQLite, zlib, SDL2, Boost, etc.) and (b) common Linux CLI tools (make, cmake, gcc, clang, pkg-config, grep, sed, awk, jq, git). Do NOT use language-registry packages (npm, pip, cargo, go modules, etc.). List every dependency under a '## Dependencies' section by name.
+4. Include '## Dependencies' listing the compiler (gcc or clang) and build tool (make).
 
-5. TESTS PER STEP: every implementation task MUST be paired with a unit-test task in the SAME group. The test task line MUST mention 'unit test' or 'test' explicitly and reference what it covers. Include a top-level '## Test Command' section in PLAN.md that gives a single shell command which runs the entire UNIT TEST suite (e.g. 'make check', 'ctest --output-on-failure', './run-unit-tests.sh', 'pytest tests/'). The test command MUST exit non-zero on failure.
+5. All logic must live in src/ modules. The main entry point only imports and calls module functions.
 
-   SELF-CONTAINED GROUPS — each group MUST leave the test suite in a passing state. After completing all tasks in a group, the test command MUST be executable and MUST pass without completing any task from a later group. Rules:
-   - The build system (Makefile, CMakeLists.txt, etc.) and any test-harness setup MUST be created in the FIRST group. Do not defer them.
-   - Every subsequent group extends those files; it does NOT create a new build system from scratch.
-   - NEVER create a standalone 'compile' group or a standalone 'run tests' group — folding compilation and test execution into the implementation group is required.
-   - A group that compiles but does not run tests, or that creates source files but cannot build, is malformed and will be rejected.
+6. Plan only — do not implement. Write PLAN.md and stop.
 
-   CRITICAL — the '## Test Command' MUST execute unit tests ONLY. It MUST NOT run the main program / produced executable / application binary as part of the test command. Building the binary is fine (tests may link against it), but invoking it for an end-to-end smoke check is FORBIDDEN. Reason: the main program may take input, write to filesystem paths, open ports, or otherwise have side effects that are unsafe to run from a test harness. Unit tests must call individual functions/modules in isolation.
+GOAL: $GOAL" 2>&1 | tee "$plan_log" ) &
+  local _bg=$!
 
-   ALL FILESYSTEM PATHS used by Makefiles, scripts, and tests MUST be relative to the project directory. Never write to absolute paths like '/my_program' or '/output' — these will be denied by the sandbox. Use './my_program', 'build/my_program', or similar.
-
-   If a task has no testable behavior (e.g. 'create empty directory'), mark it '(no-test)' after the checkbox: '- [ ] (group:1) (no-test) ...'.
-
-6. Plan only — do NOT implement. Do not ask for confirmation. Write PLAN.md and stop.
-
-GOAL: $GOAL" 2>&1 | tee "$plan_log"
-  return "${PIPESTATUS[0]}"
+  local _elapsed=0
+  while kill -0 "$_bg" 2>/dev/null; do
+    _planner_progress "$_elapsed" "$PLANNER_TIMEOUT"
+    if [[ -f PLAN.md ]]; then
+      printf "\r\033[K"
+      log "PLAN.md written — stopping planner early (${_elapsed}s elapsed)."
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      return 0
+    fi
+    if (( _elapsed >= PLANNER_TIMEOUT )); then
+      printf "\r\033[K"
+      log "Planner timed out after ${PLANNER_TIMEOUT}s — killing."
+      local _suggested=$(( PLANNER_TIMEOUT + 300 ))
+      printf "  \033[33mSuggestion:\033[0m xhigh thinking may need more time. Re-run with a larger timeout:\n"
+      printf "              PLANNER_TIMEOUT=%d turbo-ralph.sh \"%s\"\n" "$_suggested" "$GOAL"
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      return 1
+    fi
+    sleep 2
+    (( _elapsed += 2 ))
+  done
+  printf "\r\033[K"
+  wait "$_bg"
 }
 
 # Recover PLAN.md when the planner emitted it as a fenced ```markdown block
@@ -332,6 +452,14 @@ _recover_plan_from_log() {
 
 if [[ -f PLAN.md ]]; then
   log "PLAN.md already exists — skipping task-planner."
+  grep -qE '^### Group ' PLAN.md \
+    && die "PLAN.md uses old '### Group N' format — delete it to re-plan with the new flat '## Files' format."
+  grep -qE '^- \[ \]|^- \[~\]|^- \[x\]' PLAN.md \
+    || die "Existing PLAN.md has no task checklist — delete it to re-plan."
+  grep -qiE '^- \[[ x~]\].*\btest' PLAN.md \
+    || log "WARNING: existing PLAN.md has no unit-test file — consider deleting to re-plan."
+  grep -qiE '^- \[[ x~]\].*(Makefile|CMakeLists|setup\.py|package\.json|build\.sh|Cargo\.toml)' PLAN.md \
+    || log "WARNING: existing PLAN.md has no build-system file — compile may fail."
 else
   MAX_PLAN_ATTEMPTS=2
   for ((attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt++)); do
@@ -343,7 +471,7 @@ else
       plan_log="$LOG_DIR/plan-attempt-$(printf '%02d' "$attempt").log"
     fi
 
-    _run_planner "$plan_log"
+    _run_planner "$plan_log" < /dev/null
     plan_ec=$?
     plan_bytes=$(wc -c <"$plan_log" 2>/dev/null || echo 0)
     log "Planner exited $plan_ec, captured $plan_bytes bytes of output."
@@ -358,109 +486,149 @@ else
     die "task-planner did not create PLAN.md after $MAX_PLAN_ATTEMPTS attempts — see $LOG_DIR/plan*.log (last pi exit=$plan_ec, last log=$plan_bytes bytes)"
   fi
   grep -qE '^- \[ \]|^- \[~\]|^- \[x\]' PLAN.md || die "PLAN.md has no task checklist — see $LOG_DIR/plan.log"
+  grep -qiE '^- \[[ x~]\].*\btest' PLAN.md || die "PLAN.md has no unit-test file — planner failed (see $LOG_DIR/plan.log)"
+  grep -qiE '^- \[[ x~]\].*(Makefile|CMakeLists|setup\.py|package\.json|build\.sh|Cargo\.toml)' PLAN.md \
+    || die "PLAN.md has no build-system task (Makefile/CMakeLists/etc) — delete PLAN.md to re-plan"
 
   log "PLAN.md created."
   ralph_dance "Plan ready!"
   cat PLAN.md
 fi
 
-# ── Step 2: Code-agent loop ───────────────────────────────────────────────────
+# Snapshot the initial PLAN.md for before/after analysis
+mkdir -p "$SESSION_ARCHIVE_PATH"
+cp PLAN.md "$SESSION_ARCHIVE_PATH/PLAN-initial.md" 2>/dev/null || true
+
+# ── Step 2: Helpers ───────────────────────────────────────────────────────────
+
+next_task() {
+  [[ -f PLAN.md ]] && grep -m1 -E '^- \[ \]' PLAN.md || true
+}
+
+# "- [ ] src/hello.c — description" → "src/hello.c"
+task_file_path() {
+  printf '%s\n' "$1" | sed 's/^- \[[ x~]\] //' | awk '{print $1}'
+}
+
+# "- [ ] src/hello.c — description" → "description" (empty if none)
+task_description() {
+  local stripped
+  stripped="$(printf '%s\n' "$1" | sed 's/^- \[[ x~]\] //')"
+  printf '%s\n' "$stripped" \
+    | awk 'NF>1{$1=""; print substr($0,2)}' \
+    | sed 's/^[[:space:]]*[—–-][[:space:]]*//' \
+    | grep -v '^$' || true
+}
+
+is_test_file() {
+  local f
+  f="$(basename "$1")"
+  [[ "$1" == tests/* || "$1" == test/* || "$f" == test_* || "$f" == *_test.* ]]
+}
+
+# Mark the first unchecked task matching task_file done in PLAN.md.
+mark_task_done() {
+  local task_file="$1"
+  local tmp
+  tmp="$(mktemp)"
+  awk -v f="$task_file" '
+    !done && /^- \[ \] / {
+      rest = substr($0, 7)
+      if (substr(rest, 1, length(f)) == f &&
+          (length(rest) == length(f) || substr(rest, length(f)+1, 1) ~ /[ \t]/)) {
+        print "- [x] " rest; done=1; next
+      }
+    }
+    { print }
+  ' PLAN.md > "$tmp" && mv "$tmp" PLAN.md
+}
+
+# ── Step 3: Code-agent loop ───────────────────────────────────────────────────
+# One pi call per file. The orchestrator runs tests and marks tasks done — the
+# model's only job is to write the file it is given.
+
+WRITE_RULES="1. Call Write to create the file at the exact path given. Do not ask for confirmation.
+2. Do not create any other files.
+3. Do not emit code in chat — only via the Write tool."
+
 for ((i = 1; i <= MAX_ITER; i++)); do
-  # Agent may archive PLAN.md on completion
-  if [[ ! -f PLAN.md ]]; then
-    log "PLAN.md archived by agent — goal complete."
-    ralph_dance "Goal complete!"
-    exit 0
-  fi
-
-  if ! tasks_remaining; then
+  task_line="$(next_task)"
+  if [[ -z "$task_line" ]]; then
     log "All tasks complete."
-    ralph_dance "Goal complete!"
-    exit 0
+    break
   fi
 
-  log "Code-agent iteration $i / $MAX_ITER"
-  iter_sentinel="$LOG_DIR/.iter-start"
-  touch "$iter_sentinel"
+  task_file="$(task_file_path "$task_line")"
+  task_desc="$(task_description "$task_line")"
+  log "Iteration $i / $MAX_ITER: $task_file"
 
   iter_log="$LOG_DIR/iter-$(printf '%02d' "$i").log"
-  if ((i == 1)); then
-    iter_prompt="/skill:code-agent Read PLAN.md and complete as many [ ] or [~] tasks as you safely can in this iteration. Specifically: find the earliest group (tasks tagged '(group:N)') that still has unfinished tasks, and complete EVERY unfinished task in that group before stopping. Untagged tasks are singleton groups — do them one at a time. Stop the iteration once that group is fully [x], so the next iteration can pick up the following group with fresh context.
+  iter_err_log="$LOG_DIR/iter-$(printf '%02d' "$i").err"
 
-HARD REQUIREMENTS — failing any of these means the iteration failed:
+  write_prompt="Write the file: $task_file${task_desc:+
+Description: $task_desc}
 
-(A) You MUST create or modify at least one source file on disk by invoking the Write or Edit tool. Emitting code inside a fenced \`\`\` block in chat does NOT create a file and counts as failure. If you write 'mkdir src' or 'cat > src/main.c' as text, that is NOT execution — you must invoke the Bash or Write tool.
+Do not create any other files. Do not run tests. Do not modify PLAN.md."
 
-(B) Do not say 'shall I proceed', 'is that okay', or show the user code for approval. Just write it.
+  # Fresh session per write call — small models do not need cross-call context
+  # since the orchestrator owns state tracking.
+  turbo-pi-run \
+    --thinking "$RALPH_THINKING" \
+    --session-dir "$SESSION_DIR" \
+    --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+    --append-system-prompt "$WRITE_RULES" \
+    -p "$write_prompt" \
+    < /dev/null \
+    2> >(tee "$iter_err_log" >&2) | tee "$iter_log"
 
-(C) Match PLAN.md exactly. If the plan says print \"hello\", do not print \"Hello, World!\".
-
-(D) TESTS: for every implementation task you complete in this group, you MUST also complete its paired unit-test task by writing the test to disk. After finishing the group, run the test command from PLAN.md's '## Test Command' section yourself via the Bash tool. The test command MUST exit zero — meaning tests compile, link, run, and pass. Two failure modes, both must be fixed before marking [x]:
-   - Test command cannot execute (e.g. 'make: Makefile not found', missing harness, missing build target) — write the missing infrastructure (Makefile, CMakeLists.txt, test runner script) and re-run.
-   - Test command runs but reports failures — fix the code or the tests and re-run.
-   Do NOT mark any task [x] until the test command has been observed to exit zero in this session. Tasks marked '(no-test)' are exempt from the test requirement but still must be implemented.
-
-(E) The test command MUST run unit tests ONLY — it MUST NOT invoke the main program / produced binary as an end-to-end smoke check. If PLAN.md's '## Test Command' currently runs the application binary (e.g. './my_program', 'node app.js', 'python main.py'), REPLACE it with a real unit-test command ('make check', 'ctest', 'pytest tests/', etc.) and write the missing unit tests. Building the binary is fine; running it is not. All filesystem paths in Makefiles, scripts and tests MUST be project-relative — never write to absolute paths like '/my_program'.
-
-Rules: (1) write all code directly to disk without asking for confirmation; (2) only modify files inside $PROJECT_DIR; (3) external libraries/modules listed in PLAN.md may be installed and used; do not pull in dependencies that PLAN.md does not mention; (4) update PLAN.md to mark each task [x] as you finish it.
-
-Iteration $i of $MAX_ITER."
-    turbo-pi-run \
-      --session-dir "$SESSION_DIR" \
-      --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "$iter_prompt" \
-      2>&1 | tee "$iter_log"
-  else
-    iter_prompt="Re-read PLAN.md, find the earliest group with unfinished [ ] or [~] tasks, and complete every task in that group under the same hard requirements (write to disk via tools, match PLAN.md exactly, write+run paired tests, mark tasks [x] as you finish). Stop when that group is fully [x].
-
-Iteration $i of $MAX_ITER."
-    turbo-pi-run \
-      --session-dir "$SESSION_DIR" \
-      --continue \
-      --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "$iter_prompt" \
-      2>&1 | tee "$iter_log"
-  fi
-
-  # Detect whether the agent actually wrote any code to disk.
-  # Exclude PLAN.md (bookkeeping) and the .ralph/ log directory itself.
-  code_written=$(find . \
-    -not -path './.ralph/*' \
-    -not -name 'PLAN.md' \
-    -newer "$iter_sentinel" \
-    -type f 2>/dev/null | head -1)
-
-  # Fallback: the agent sometimes emits code as fenced ```<lang> blocks with a
-  # '// path/to/file' header instead of invoking Write. Salvage those blocks
-  # before declaring the iteration stalled.
-  if [[ -z "$code_written" ]]; then
-    extractor="$(dirname "$(readlink -f "$0")")/turbo-ralph-extract.py"
-    if [[ -x "$extractor" ]]; then
-      log "No files written — attempting fenced-block salvage from $iter_log"
-      "$extractor" "$iter_log" --root "$PROJECT_DIR" 2>&1 | tee -a "$iter_log" || true
-      code_written=$(find . \
-        -not -path './.ralph/*' \
-        -not -name 'PLAN.md' \
-        -newer "$iter_sentinel" \
-        -type f 2>/dev/null | head -1)
-      [[ -n "$code_written" ]] && log "Salvage recovered code from fenced blocks."
-    fi
-  fi
-
-  if [[ -z "$code_written" ]]; then
-    ralph_sad "Ralph tried really hard but wrote no code. Giving up."
-    log "Iteration $i produced no code files — stalled."
+  if [[ ! -f "$task_file" ]]; then
+    ralph_sad "Model did not write $task_file — stalled."
+    log "Iteration $i: $task_file not found on disk after write call."
     exit 3
   fi
 
-  ralph_dance "Iteration $i done"
+  # Run tests after every test file. The orchestrator owns this check; the
+  # model is not asked to run tests itself.
+  _test_cmd="$(test_command)"
+  if [[ -n "$_test_cmd" ]] && is_test_file "$task_file"; then
+    _test_log="$LOG_DIR/tests-iter-$(printf '%02d' "$i").log"
+    if ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
+      log "Tests failing after $task_file — invoking repair agent."
+      fix_rules="1. Run: $_test_cmd
+2. If it fails, read the error output, fix the relevant file with Write or Edit, then run again.
+3. Stop when the test command exits 0. Do not modify PLAN.md."
+      fix_log="$LOG_DIR/fix-$(printf '%02d' "$i").log"
+      test_tail="$(tail -80 "$_test_log")"
+      turbo-pi-run \
+        --thinking "$RALPH_THINKING" \
+        --session-dir "$SESSION_DIR" \
+        --continue \
+        --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+        --append-system-prompt "$fix_rules" \
+        -p "Fix the test failure. Test command: \`$_test_cmd\`
+
+Last output:
+$test_tail" \
+        < /dev/null \
+        2>&1 | tee "$fix_log"
+
+      if ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
+        ralph_sad "Tests still failing after repair — stalled."
+        log "Tests failing after repair for $task_file."
+        exit 3
+      fi
+    fi
+  fi
+
+  mark_task_done "$task_file"
+  log "Marked done: $task_file"
+  ralph_dance "Iteration $i done: $task_file"
 done
 
 # ── Final test gate ──────────────────────────────────────────────────────────
-# The code-agent runs tests itself before marking tasks [x], so we only verify
-# once at the end of the run. If the suite fails, re-invoke the agent up to
-# MAX_TEST_RETRIES times to repair, resuming the same session so it sees its
-# prior work.
+# Safety net: the orchestrator runs tests per-file, but this gate verifies the
+# full suite passes once all files are written. Retries up to 3 times with a
+# repair agent if needed.
 _final_test_gate() {
   local cmd
   cmd="$(test_command)"
@@ -478,14 +646,16 @@ _final_test_gate() {
     local test_output
     test_output="$(tail -200 "$LOG_DIR/tests-final.log" 2>/dev/null || true)"
     turbo-pi-run \
+      --thinking "$RALPH_THINKING" \
       --session-dir "$SESSION_DIR" \
       --continue \
       --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "Diagnose the test failure, fix the code or the tests so the test command exits zero, and write the fixes to disk. Do NOT mark new PLAN.md tasks [x] — only fix what is needed to make tests pass. Do not ask for confirmation; write directly to disk.
+      -p "Diagnose the test failure, fix the code or the tests so the test command exits zero, and write the fixes to disk. Do not ask for confirmation; write directly to disk.
 
-The test command for this project (\`$cmd\`) is failing at the end of the run. Last test output (tail):
+The test command for this project (\`$cmd\`) is failing. Last test output (tail):
 
 $test_output" \
+      < /dev/null \
       2>&1 | tee "$retry_log"
   done
 }

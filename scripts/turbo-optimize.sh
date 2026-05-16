@@ -1,17 +1,18 @@
 #!/bin/sh
-# turbo-optimize.sh — tune ollama for throughput.
+# turbo-optimize.sh — tune ollama for turbo-ralph's sequential workload.
 #
 # USAGE
 #   turbo-optimize.sh [-h|--help]
 #
 # DESCRIPTION
-#   Tunes ollama for aggregate throughput under concurrent load, assuming the
-#   working model is already pulled and resident (cache primed). Detects CPU,
-#   RAM and GPU, computes settings biased for tokens/sec (2 parallel slots,
-#   8k per-slot context, q8_0 KV cache, deep queue, single resident model,
-#   keep-alive forever, flash attention), writes a systemd service override
-#   (Linux) or updates the launchd plist (macOS), pins the CPU governor to
-#   performance when available, and restarts ollama.
+#   Tunes ollama for turbo-ralph's sequential one-file-per-call workload,
+#   assuming the working model is already pulled and resident (cache primed).
+#   Detects CPU, RAM and GPU, computes settings for a single resident model
+#   (1–2 parallel slots, 4k per-slot context, q8_0 KV cache, deep queue,
+#   keep-alive 5 min on low-RAM / forever on mid+high, flash attention),
+#   writes a systemd service override (Linux) or updates the launchd plist
+#   (macOS), pins the CPU governor to performance when available, and restarts
+#   ollama.
 #
 #   Thin wrapper around pi/optimize.py.
 #

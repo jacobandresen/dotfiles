@@ -1,44 +1,49 @@
 ---
 name: code-agent
-description: Deliver working C code with tests in small increments. Use when building features, fixing bugs, or exploring a codebase that uses C and a Makefile. Maintains PLAN.md as a living task document and marks tasks done only after a test has been written and compiled.
+description: Work through PLAN.md one task at a time, writing code and tests to disk, running the test command from PLAN.md, then marking tasks done. Marks tasks [x] only after tests pass.
 ---
 
 # Code Agent
 
-Deliver simple, readable C with tests, in small increments.
-
-## Rules
-
-- **C only.** No C++, no classes, no templates.
-- **Makefile only.** Hand-written, under 50 lines. No CMake, no autotools.
-- **libc first.** No dependencies unless the alternative is hundreds of lines.
-- **Readable beats clever.** Meaningful names (`customer_count`, not `n`). One idea per line. Guard clauses over nested `if`. Three indent levels is a smell. Named constants, never bare numbers. Comments explain *why*, not *what*.
-- **Few, flat files.** One `.c` per concept. No deep trees.
-- **No speculative abstractions.** Generalize on the second real use case.
-- When in doubt, delete code.
+Deliver working code with tests, in small increments. Never pause for confirmation. Ambiguous requirement → simplest assumption, log under `## Notes`, continue.
 
 ## Loop
 
-Never pause for confirmation. Ambiguous → simplest assumption, log under `## Notes`, continue. After each `[x]`, start the next `[ ]` immediately.
-
-1. `cat PLAN.md` — if `[ ]`/`[~]` tasks exist, resume the first; else draft a plan.
+1. `cat PLAN.md` — if `[ ]`/`[~]` tasks exist, find the earliest `### Group N` section with unfinished tasks; else draft a plan.
 2. Mark task `[~]`.
-3. Write the smallest code that can pass a test. **Write to disk immediately** — partial-on-disk beats complete-in-context.
+3. **Write to disk immediately.** Write the smallest code that can pass a test. Partial on disk beats complete in context.
 4. Write the test.
-5. `make test` until green.
-6. `clang-tidy src/*.c -- -std=c11 -Wall` — all warnings are errors. No `// NOLINT` without an external-constraint comment.
-7. Mark `[x]`, note surprises, commit.
-8. Loop. Keep cycles in seconds.
+5. Run `## Test Command` from PLAN.md until it exits zero.
+6. Mark `[x]`, note surprises.
+7. Loop.
 
-When all `[x]`: final `make test` + `clang-tidy`, one-line summary under `## Notes`, then `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`.
+When all `[x]`: run `## Test Command` one final time. One-line summary under `## Notes`. Then `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`.
+
+## Writing to disk
+
+Use the Write or Edit tool. Emitting code as a fenced block in chat does **not** create a file — it is a failure. Shell commands written in chat (`cat > file`, `mkdir src`) are not execution.
+
+## Test command
+
+Always run the test command from `## Test Command` in PLAN.md. Do not hardcode `make test` or any other command. Mark `[x]` only after the test command exits zero in the current session.
 
 ## PLAN.md
 
 ```markdown
 # Plan: <name>
 
-## Tasks
-- [ ] T1: <what done looks like>
+## Test Command
+<single shell command, e.g. `make check` or `pytest tests/`>
+
+## Implementation
+
+### Group 1
+- [ ] Create Makefile with `all`, `check`, `clean` targets  *(no test)*
+- [ ] Create `src/module.c` and `include/module.h` with a named function
+- [ ] Unit test for `module` in `tests/test_module.c`
+
+### Group 2
+- [ ] Create `src/main.c` that calls the module  *(no test)*
 
 ## Notes
 - decisions, constraints, surprises
@@ -46,62 +51,28 @@ When all `[x]`: final `make test` + `clang-tidy`, one-line summary under `## Not
 
 `[ ]` not started · `[~]` in progress · `[x]` code + test written and passing. Update after every increment, never batch.
 
-## Layout
+**Group execution:** each iteration works through one `### Group N` section — complete every task in the earliest group with unfinished tasks before stopping.
+
+**First task pattern:** Group 1 always creates the build file (Makefile, CMakeLists.txt, pyproject.toml, etc.) and at least one module. The module is tested independently — no test goes through `main`.
+
+## Module layout
 
 ```
 project/
-  PLAN.md  Makefile  .clang-tidy
-  src/   main.c foo.c foo.h
-  tests/ test_foo.c
+  PLAN.md  <build file>
+  src/      main.c (or main.py, index.js, etc.)  module.c
+  include/  module.h  (C/C++ headers only)
+  tests/    test_module.c (or test_module.py, etc.)
 ```
 
-## Makefile template
+Module functions return values; they do not print. Callers print. This makes functions testable without stdout capture.
 
-```make
-CC      = gcc
-CFLAGS  = -Wall -Wextra -std=c11 -g
-LDFLAGS =
+`main` contains no business logic — only imports and calls to modules.
 
-SRC = $(wildcard src/*.c)
-OBJ = $(SRC:.c=.o)
-BIN = app
-TEST_SRC = $(wildcard tests/test_*.c)
-TESTS    = $(TEST_SRC:.c=)
+## Style
 
-all: $(BIN)
-$(BIN): $(OBJ); $(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-tests/test_%: tests/test_%.c $(filter-out src/main.o,$(OBJ))
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-test: $(TESTS); @for t in $(TESTS); do ./$$t || exit 1; done
-clean:; rm -f $(OBJ) $(BIN) $(TESTS)
-.PHONY: all test clean
-```
-
-## .clang-tidy (if missing)
-
-C-oriented — do not enable `cppcoreguidelines-*` or `modernize-*`.
-
-```yaml
-Checks: > clang-analyzer-*, bugprone-*, readability-*, performance-*
-WarningsAsErrors: "*"
-HeaderFilterRegex: "src/.*"
-```
-
-## Test harness
-
-No frameworks (no CMocka/Unity/Check).
-
-```c
-#include <stdio.h>
-#include "../src/foo.h"
-
-static int passed = 0, failed = 0;
-#define CHECK(e) do { if (e) passed++; \
-  else { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #e); failed++; } } while(0)
-
-int main(void) {
-  CHECK(foo_add(1, 2) == 3);
-  printf("%d passed, %d failed\n", passed, failed);
-  return failed ? 1 : 0;
-}
-```
+- Readable beats clever. Meaningful names (`customer_count`, not `n`). One idea per line. Guard clauses over nested `if`.
+- Few, flat files. One file per concept.
+- Named constants, never bare numbers.
+- No speculative abstractions. Generalize on the second real use case.
+- When in doubt, delete code.

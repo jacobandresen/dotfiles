@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""optimize — tune ollama for high throughput on the host hardware.
+"""optimize — tune ollama for turbo-ralph's sequential one-file-per-call workload.
 
-Assumes the working model is already pulled and resident (cache primed), so
-we optimize for aggregate tokens/sec across concurrent requests rather than
-single-request latency or multi-model flexibility. See
-compute_ollama_settings() for the specific choices.
+Assumes the working model is already pulled and resident (cache primed).
+Ralph runs pi invocations sequentially (one write call per file, one repair
+call on test failure) with 30–60 s gaps between calls. Key tuning decisions:
+
+  - KEEP_ALIVE=300 on low-RAM hosts: prevents a full model reload for each
+    of Ralph's 5–10 sequential write calls (each reload costs 30–60 s on
+    Apple Silicon). Higher-RAM hosts keep the model resident indefinitely.
+  - CONTEXT_LENGTH: write calls need < 1 k tokens; repair calls (--continue)
+    accumulate ~3–4 k tokens including tool schemas. High-tier cap reduced
+    from 8192 to 4096 — saves 300 MB of KV cache with no quality loss.
+  - NUM_PARALLEL: left at 1/2 (low/mid+high). Ralph is strictly sequential
+    so extra slots would only allocate idle KV cache memory.
+
+See compute_ollama_settings() for the specific choices.
 
 Author: Jacob Andresen <jacob.andresen@gmail.com>
 """
@@ -213,12 +223,15 @@ def compute_ollama_settings(info: SystemInfo) -> dict[str, str]:
     #   low  (≤8 GB):  2048 — minimal footprint, avoids macOS compression
     #   mid (≤16 GB):  4096 — balanced
     #   high (>16 GB): 8192 — full throughput budget
-    context = {"low": "2048", "mid": "4096", "high": "8192"}[tier]
+    # Ralph's write calls use fresh sessions (<1k tokens); repair calls
+    # accumulate ~3–4k tokens including tool schemas. 4096 covers both.
+    context = {"low": "2048", "mid": "4096", "high": "4096"}[tier]
     settings["OLLAMA_CONTEXT_LENGTH"] = context
 
-    # On low-RAM hosts free VRAM immediately after each request; elsewhere
-    # keep the model resident indefinitely (cache is primed).
-    settings["OLLAMA_KEEP_ALIVE"] = "0" if tier == "low" else "-1"
+    # On low-RAM hosts keep the model warm for 5 min — long enough to span
+    # Ralph's sequential write calls (30–60 s gaps) without forcing a full
+    # reload (~30–60 s on Apple Silicon) between each one.
+    settings["OLLAMA_KEEP_ALIVE"] = "300" if tier == "low" else "-1"
 
     return settings
 
@@ -229,7 +242,8 @@ def _low_ram_advice(info: SystemInfo) -> None:
     print("  • Prefer smaller quants — Q3_K_M or Q2_K save ~1 GB vs Q4_K_M")
     print("  • qwen3:4b uses ~2.5 GB VRAM, leaving ~5.5 GB for OS/apps")
     print("    ollama pull qwen3:4b")
-    print("  • OLLAMA_KEEP_ALIVE=0 already set — VRAM freed after each request")
+    print("  • OLLAMA_KEEP_ALIVE=300 already set — model stays warm for 5 min")
+    print("    (covers Ralph's 30–60 s gaps between sequential write calls)")
     print("  • OLLAMA_CONTEXT_LENGTH=2048 already set — raise only if needed")
     print()
 
@@ -261,10 +275,11 @@ def main() -> None:
     argparse.ArgumentParser(
         prog="turbo-optimize",
         description=(
-            "Tune ollama for throughput. Detects CPU/RAM/GPU, computes "
-            "high-throughput ollama settings (2 parallel slots, 8k per-slot "
-            "context, q8_0 KV cache, deep queue, single resident model, "
-            "keep-alive forever), writes a systemd service override (Linux) or "
+            "Tune ollama for turbo-ralph's sequential one-file-per-call "
+            "workload. Detects CPU/RAM/GPU, computes settings optimised for "
+            "a single resident model (1–2 parallel slots, 4k per-slot context, "
+            "q8_0 KV cache, deep queue, keep-alive 5 min on low-RAM / forever "
+            "on mid+high), writes a systemd service override (Linux) or "
             "launchd plist env (macOS), pins the CPU governor to performance "
             "when available, and restarts ollama. Assumes the model you intend "
             "to use is already pulled."

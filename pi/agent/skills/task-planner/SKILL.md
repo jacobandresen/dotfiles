@@ -1,77 +1,67 @@
 ---
 name: task-planner
-description: Break down complex, multi-step goals into a tracked plan and work through them reliably across long sessions. Use when a task has 3+ steps, will take a long time, or needs to be resumable if the session is interrupted. Handles checkpoint files so work isn't lost.
+description: Break down a software goal into a tracked PLAN.md with grouped tasks and paired unit tests. Use when a task has 3+ steps, will take a long time, or needs to be resumable if the session is interrupted.
 ---
 
 # Task Planner
 
-Use this skill at the start of any task that is complex, multi-step, or likely to run long.
+Create `PLAN.md` in the current working directory by **invoking the Write tool** with the full absolute path. Do not emit the plan as chat text or a fenced code block — that does not create a file. If your turn ends without a Write tool call targeting `PLAN.md`, you have failed.
 
-## Starting a Task
-
-First check if `PLAN.md` already exists with `[ ]` or `[~]` tasks. If it does, skip planning and immediately resume from the first incomplete step — do not acknowledge, do not ask, just begin.
-
-If no plan exists, create `PLAN.md` in the project root by **invoking the Write tool** with the path `PLAN.md` and the body below. Do not emit the plan as a chat message or fenced code block — that does not create a file. If your turn ends without a Write tool call targeting `PLAN.md`, you have failed the task.
-
-Body format (every task line MUST start with `- [ ] `; numbered lists like `1.` or `2.` are not accepted by downstream tooling):
+## PLAN.md format
 
 ```markdown
 # Plan: <goal in one line>
 
-## Steps
-- [ ] Step 1: describe what done looks like
-- [ ] Step 2: ...
-- [ ] Step 3: ...
+## Dependencies
+- <every tool and library required, e.g. gcc, make, libcurl>
+
+## Test Command
+<single shell command that runs the full unit-test suite, e.g. `make check` or `pytest tests/`>
+
+## Implementation
+
+### Group 1
+- [ ] Create Makefile with `all`, `check`, and `clean` targets  *(no test)*
+- [ ] Create `src/greet.c` and `include/greet.h` with a `greet()` function
+- [ ] Unit test for `greet()` in `tests/test_greet.c`
+
+### Group 2
+- [ ] Create `src/main.c` that includes `greet.h` and calls `greet()`  *(no test)*
 
 ## Notes
-- key constraints or decisions made so far
+- key constraints or decisions
 ```
 
-Each step must be actionable: a concrete action with a clear done condition, not a topic or goal. Bad: "Handle errors." Good: "Wrap `open_file` call in try/except, log the error, return None." If a step can't be executed without further planning, break it down before starting it.
+Rules for task lines:
+- Every task line **must** start with `- [ ] `. Numbered lists (`1.`, `2.`), plain bullets (`-`), and heading-style tasks are rejected by downstream tooling.
+- Each step must be a concrete action with a clear done condition, not a topic or goal.  
+  Bad: "Handle errors."  
+  Good: "Wrap `open_file` in try/except, log the error, return `None`."
+- Group tasks under `### Group N` subsections. Tasks in the same group are independent; later groups may depend on earlier ones. Do not tag individual task lines with group numbers.
+- Tasks with no testable behavior get `*(no test)*` appended at line end.
 
-## Autonomous Execution
+## Handoff to code-agent
 
-Never pause for confirmation or clarification. If a requirement is ambiguous, make the simplest reasonable assumption, document it under `## Notes`, and continue. Do not stop between steps.
+When the plan involves implementation, write PLAN.md to the **current working directory** — this is the project root whether or not source files exist yet. The code-agent picks it up from that same directory.
 
-After each step completes, immediately begin the next `[ ]` step without user input. Continue until all steps are `[x]` or a hard blocker (missing dependency, unresolvable ambiguity) requires input. Only block on true hard stops — everything else is solvable; solve it and keep going.
+When writing implementation steps:
+- Name files explicitly (`src/foo.c`, `tests/test_foo.c`, `Makefile`).
+- Pair every implementation task with a unit-test task. Tests call named functions from modules, never `main`.
+- Put the build-system file (Makefile, CMakeLists.txt, pyproject.toml, etc.) as the first task.
+- `## Test Command` must exit non-zero on failure and must not run the main binary as an end-to-end check.
 
-## Working Through Steps
+## Autonomous execution
 
-Before starting each step:
-1. Read `PLAN.md` to confirm current position
-2. Mark the step `[~]` (in progress) as you begin
-3. Complete the step, mark `[x]`, add a one-line note under `## Notes` if anything was surprising
-4. Loop back to step 1 — continue immediately with the next `[ ]` step
+Never pause for confirmation or clarification. If a requirement is ambiguous, make the simplest reasonable assumption, document it under `## Notes`, and continue.
 
-## Resuming an Interrupted Session
+## When PLAN.md already exists
 
-At the start of a resumed session:
-
-```bash
-cat PLAN.md
-```
-
-Pick up from the first `[ ]` or `[~]` step. Re-read any relevant notes before continuing.
-
-## Handoff to Code Agent
-
-When the plan involves implementation work, write `PLAN.md` to the **current working directory** — this is the project root, whether or not `src/`, `Makefile`, or `CMakeLists.txt` exists yet (greenfield projects start empty). The `code-agent` skill picks it up by running `cat PLAN.md` from that same directory.
-
-The code-agent only understands **C and C++**. When writing steps that involve code:
-- Specify C or C++ explicitly if relevant
-- Do not plan steps that require other languages (Python, Rust, Go, etc.) — if the task needs them, note it as a hard blocker
-- Frame implementation steps in terms of files (`src/foo.c`, `src/foo.h`) and build tools (`gcc`, `g++`, `cmake`, `make`)
+If `PLAN.md` is present with `[ ]` or `[~]` tasks, skip planning and resume from the first incomplete step — do not acknowledge, do not ask, just begin.
 
 ## Finishing
 
-When all steps are `[x]`:
-1. Summarize what was accomplished
-2. Archive: `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`
+When all steps are `[x]`: summarize what was accomplished, then archive with `mv PLAN.md PLAN-done-$(date +%Y%m%d).md`.
 
-## When Plans Change
+## Keeping tasks the right size
 
-Update `PLAN.md` immediately when scope changes — don't work from a stale plan. Add new steps, cross out abandoned ones with strikethrough, and note why.
-
-## Keeping Tasks Small Enough to Track
-
-If a step takes more than ~10 tool calls to complete, break it into sub-steps. Steps should be completable in a single turn or a small cluster of turns.
+One task = one complete file to create or modify, or one discrete feature. Never list individual lines of code as tasks. If a step would take more than ~10 tool calls, break it into sub-steps before starting it.
