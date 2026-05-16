@@ -8,4 +8,5 @@ if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   echo "turbo-pi-run: error: Ollama is not running — start it with 'ollama serve'" >&2
   exit 1
 fi
-exec env PI_OFFLINE=1 pi "$@"
+# Keep model loaded between turbo-ralph iterations to avoid reload latency.
+exec env PI_OFFLINE=1 OLLAMA_KEEP_ALIVE=30m pi "$@"

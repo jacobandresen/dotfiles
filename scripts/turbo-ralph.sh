@@ -35,8 +35,14 @@
 set -euo pipefail
 
 MAX_ITER=10
-PLANNER_TIMEOUT="${PLANNER_TIMEOUT:-600}"
-RALPH_THINKING="${RALPH_THINKING:-medium}"
+# Resolved after GOAL is parsed so complexity detection can influence defaults.
+# "auto" = scale by goal complexity (set below); explicit value skips auto-scaling.
+PLANNER_TIMEOUT="${PLANNER_TIMEOUT:-auto}"
+# RALPH_THINKING overrides both phases if set; phase-specific vars take precedence.
+RALPH_THINKING="${RALPH_THINKING:-}"
+# Deferred: resolved after argument parsing once GOAL is known.
+RALPH_PLANNER_THINKING="${RALPH_PLANNER_THINKING:-}"
+RALPH_WRITE_THINKING="${RALPH_WRITE_THINKING:-}"
 GOAL=""
 TARGET_DIR=""
 FORCE=0
@@ -164,6 +170,51 @@ done
 [[ -n "$GOAL" ]] || {
   echo "turbo-ralph: error: project goal is required" >&2
   usage 1
+}
+
+# ── Auto-tune by goal complexity ──────────────────────────────────────────────
+# Runs after GOAL is known. Detects complexity to set smart defaults for
+# planner timeout and write-phase thinking. Explicit env vars always win.
+{
+  _wc=$(printf '%s' "$GOAL" | wc -w | tr -d ' ')
+  _has_lib=0
+  printf '%s' "$GOAL" | grep -qiE \
+    'SDL2|OpenGL|ncurses|dotnet|C#|csharp|tensorflow|pytorch|django|flask|opencv|wxwidgets' \
+    && _has_lib=1
+
+  # Trivial: ≤4 words, no external library (single-file programs like helloworld)
+  # Simple:  ≤8 words, no external library (fibonacci, basic sqlite3)
+  # Complex: longer or requires an external library (SDL2, C#, etc.)
+  if   (( _has_lib || _wc > 8 )); then _complexity=complex
+  elif (( _wc <= 4 ));             then _complexity=trivial
+  else                                  _complexity=simple
+  fi
+
+  # Planner always needs at least medium thinking on qwen3:8b to reliably call Write.
+  # The complexity heuristic only scales down the writer (shorter, more directive prompt).
+  case "$_complexity" in
+    trivial) _auto_planner=medium _auto_writer=off  _auto_combined=1 ;;
+    simple)  _auto_planner=medium _auto_writer=off  _auto_combined=0 ;;
+    complex) _auto_planner=medium _auto_writer=low  _auto_combined=0 ;;
+  esac
+
+  RALPH_PLANNER_THINKING="${RALPH_PLANNER_THINKING:-${RALPH_THINKING:-$_auto_planner}}"
+  RALPH_WRITE_THINKING="${RALPH_WRITE_THINKING:-${RALPH_THINKING:-$_auto_writer}}"
+
+  # Scale PLANNER_TIMEOUT by complexity when the user hasn't set it explicitly.
+  # Trivial goals fail fast if the model stalls; complex goals get the full window.
+  if [[ "$PLANNER_TIMEOUT" == "auto" ]]; then
+    case "$_complexity" in
+      trivial) PLANNER_TIMEOUT=240  ;;
+      simple)  PLANNER_TIMEOUT=400  ;;
+      complex) PLANNER_TIMEOUT=600  ;;
+    esac
+  fi
+
+  # Combined plan+write: single pi session for trivially simple single-file goals.
+  # Saves one pi startup + Ollama API round-trip. Falls back to normal write loop
+  # if the combined call only writes PLAN.md (model stops after the first Write).
+  RALPH_COMBINED="${RALPH_COMBINED:-$_auto_combined}"
 }
 
 # ── Directory setup ───────────────────────────────────────────────────────────
@@ -371,7 +422,7 @@ _run_planner() {
   # kill after PLANNER_TIMEOUT seconds regardless.
   local plan_log="$1"
   ( turbo-pi-run \
-    --thinking "$RALPH_THINKING" \
+    --thinking "$RALPH_PLANNER_THINKING" \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
     -p "Your only output must be one Write tool call that creates '$PROJECT_DIR/PLAN.md'. No chat text, no fenced code blocks.
 
@@ -483,6 +534,83 @@ GOAL: $GOAL" 2>&1 | tee "$plan_log" ) &
   wait "$_bg"
 }
 
+# Combined planner+writer: single pi session that writes PLAN.md then the source file.
+# Used for trivially simple single-file goals to save one pi startup round-trip.
+# Sets RALPH_COMBINED_SRC_FILE on success so the write loop can skip that file.
+RALPH_COMBINED_SRC_FILE=""
+_run_combined_planner_writer() {
+  local plan_log="$1"
+  local _combined_prompt
+  _combined_prompt="Write TWO files in sequence using the Write tool.
+
+STEP 1 — Write '$PROJECT_DIR/PLAN.md' with:
+
+## Files
+- [ ] <filename> — <one-line description>
+
+## Test Command
+<single command that exits non-zero on failure, no Makefile>
+
+## Dependencies
+<required tools>
+
+Pick the simplest filename (main.c, main.py, etc.). Inline compilation in Test Command.
+
+STEP 2 — Immediately after writing PLAN.md, write the source file listed in it.
+
+Do not pause between steps. Write both files and then STOP. No explanations.
+
+GOAL: $GOAL"
+
+  ( turbo-pi-run \
+    --thinking "$RALPH_PLANNER_THINKING" \
+    --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+    -p "$_combined_prompt" \
+    < /dev/null \
+    2>&1 | tee "$plan_log" ) &
+  local _bg=$!
+
+  local _elapsed=0 _src_file=""
+  while kill -0 "$_bg" 2>/dev/null; do
+    _planner_progress "$_elapsed" "$PLANNER_TIMEOUT"
+
+    # Once PLAN.md appears, grab the source file path to watch for.
+    # Re-check each tick until we get a non-empty task line (guards against partial writes).
+    if [[ -z "$_src_file" && -f PLAN.md ]]; then
+      local _task_line
+      _task_line="$(grep -m1 -E '^- \[ \]' PLAN.md 2>/dev/null || true)"
+      if [[ -n "$_task_line" ]]; then
+        _src_file="$(printf '%s\n' "$_task_line" | sed 's/^- \[[ x~]\] //' | awk '{print $1}')"
+        log "Combined: PLAN.md ready — watching for source file: $_src_file"
+      fi
+    fi
+
+    # Both files written — kill pi and report success.
+    if [[ -n "$_src_file" && -f "$_src_file" ]]; then
+      printf "\r\033[K"
+      log "Combined: PLAN.md + $_src_file written in ${_elapsed}s."
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      RALPH_COMBINED_SRC_FILE="$_src_file"
+      return 0
+    fi
+
+    if (( _elapsed >= PLANNER_TIMEOUT )); then
+      printf "\r\033[K"
+      log "Combined planner+writer timed out after ${PLANNER_TIMEOUT}s."
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      return 1
+    fi
+    sleep 2
+    (( _elapsed += 2 ))
+  done
+  printf "\r\033[K"
+  wait "$_bg"
+}
+
 # Recover PLAN.md when the planner emitted it as a fenced ```markdown block
 # in chat instead of invoking the Write tool.
 _recover_plan_from_log() {
@@ -547,14 +675,19 @@ else
   MAX_PLAN_ATTEMPTS=2
   for ((attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt++)); do
     if ((attempt == 1)); then
-      log "Planning: $GOAL"
+      log "Planning: $GOAL (planner=$RALPH_PLANNER_THINKING writer=$RALPH_WRITE_THINKING timeout=${PLANNER_TIMEOUT}s complexity=${_complexity:-?})"
       plan_log="$LOG_DIR/plan.log"
     else
       log "Planner attempt $attempt / $MAX_PLAN_ATTEMPTS (previous attempt produced no PLAN.md)"
       plan_log="$LOG_DIR/plan-attempt-$(printf '%02d' "$attempt").log"
     fi
 
-    _run_planner "$plan_log" < /dev/null
+    if ((RALPH_COMBINED)) && ((attempt == 1)); then
+      log "Using combined plan+write mode (single pi session)."
+      _run_combined_planner_writer "$plan_log" || true
+    else
+      _run_planner "$plan_log" < /dev/null
+    fi
     plan_ec=$?
     plan_bytes=$(wc -c <"$plan_log" 2>/dev/null || echo 0)
     log "Planner exited $plan_ec, captured $plan_bytes bytes of output."
@@ -706,11 +839,12 @@ mark_task_done() {
 # One pi call per file. The orchestrator runs tests and marks tasks done — the
 # model's only job is to write the file it is given.
 
-WRITE_RULES="1. Call Write to create the file at the exact path given. Do not ask for confirmation.
-2. Do not create any other files.
+WRITE_RULES="1. Call Write ONCE to create the file at the exact path given. Do not ask for confirmation.
+2. Do not create any other files. Write exactly the one file you are asked to write.
 3. Do not emit code in chat — only via the Write tool.
 4. Infer all content from the project goal and PLAN.md. NEVER ask for clarification or request input — write your best implementation immediately, even for headers and interface files.
-5. If writing a header or interface file, write a complete, reasonable declaration based on the goal. Never say 'please provide the content' — just write it."
+5. If writing a header or interface file, write a complete, reasonable declaration based on the goal. Never say 'please provide the content' — just write it.
+6. After the Write call succeeds, STOP immediately. Do not explain, summarize, or add any chat text after writing."
 
 # Return file contents for every already-completed task file, formatted as
 # fenced code blocks. Empty output when no files are done yet.
@@ -729,6 +863,34 @@ $(cat "$f")
   done < <(grep -E '^- \[x\]' PLAN.md 2>/dev/null || true)
   printf '%s' "$out"
 }
+
+# Return the list of source files that still need to be written (pending tasks
+# after the current one). Used to inject exact paths into Makefile prompts.
+_pending_source_files() {
+  local current="$1" found=0 out=""
+  while IFS= read -r line; do
+    local f
+    f="$(task_file_path "$line")"
+    if [[ "$f" == "$current" ]]; then found=1; continue; fi
+    ((found)) && out+="  $f\n"
+  done < <(grep -E '^- \[ \]' PLAN.md 2>/dev/null || true)
+  printf '%b' "$out"
+}
+
+# True if $1 is a build/config file that needs exact source paths.
+_is_build_file() {
+  local base
+  base="$(basename "$1")"
+  [[ "$base" =~ ^(Makefile|CMakeLists\.txt|setup\.py|Cargo\.toml|build\.sh|package\.json|pyproject\.toml|meson\.build)$ ]]
+}
+
+# If combined mode already wrote the source file during planning, mark it done
+# so the write loop below has no work to do.
+if [[ -n "$RALPH_COMBINED_SRC_FILE" && -f "$RALPH_COMBINED_SRC_FILE" ]]; then
+  log "Combined mode: $RALPH_COMBINED_SRC_FILE written during planning — marking done."
+  mark_task_done "$RALPH_COMBINED_SRC_FILE"
+  ralph_dance "Iteration 1 done (combined): $RALPH_COMBINED_SRC_FILE"
+fi
 
 for ((i = 1; i <= MAX_ITER; i++)); do
   task_line="$(next_task)"
@@ -763,14 +925,28 @@ $_existing_ctx=== END ==="
   write_prompt+="
 
 TASK: Write the file: $task_file${task_desc:+
-Description: $task_desc}
+Description: $task_desc}"
+
+  # Inject exact source-file paths when writing a build file so the model
+  # uses PLAN.md paths rather than guessing or simplifying them.
+  if _is_build_file "$task_file"; then
+    _pending="$(_pending_source_files "$task_file")"
+    if [[ -n "$_pending" ]]; then
+      write_prompt+="
+
+CRITICAL — FILE PATHS: The following source files will be created at these EXACT paths (taken from PLAN.md). Your $task_file MUST reference them at these exact paths — do NOT simplify, flatten, or alter any path:
+$_pending"
+    fi
+  fi
+
+  write_prompt+="
 
 Do not create any other files. Do not run tests. Do not modify PLAN.md."
 
   # Fresh session per write call — small models do not need cross-call context
   # since the orchestrator owns state tracking.
   turbo-pi-run \
-    --thinking "$RALPH_THINKING" \
+    --thinking "$RALPH_WRITE_THINKING" \
     --session-dir "$SESSION_DIR" \
     --append-system-prompt "$AUTONOMOUS_SYSTEM" \
     --append-system-prompt "$WRITE_RULES" \
@@ -787,7 +963,7 @@ Do not create any other files. Do not run tests. Do not modify PLAN.md."
       log "Model violated autonomy rules (asked a question). Retrying with corrective prompt."
       _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
       turbo-pi-run \
-        --thinking "$RALPH_THINKING" \
+        --thinking "$RALPH_WRITE_THINKING" \
         --session-dir "$SESSION_DIR" \
         --append-system-prompt "$AUTONOMOUS_SYSTEM" \
         --append-system-prompt "$WRITE_RULES" \
@@ -815,13 +991,13 @@ Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just
       log "Tests failing after $task_file — invoking repair agent."
       fix_rules="REPAIR RULES — follow exactly:
 1. Call the Bash tool to run: $_test_cmd
-2. Read the error output. Call Write or Edit to fix the broken file. Do NOT explain, do NOT show JSON examples, do NOT say 'here is how to fix it'. Just fix it using the tool.
+2. Read the error output. Use Write to rewrite the entire broken file, or use Edit to fix a specific section. When using Edit, provide enough surrounding context (3-5 lines) to make the old_string unique in the file. Do NOT explain, do NOT show JSON examples, do NOT say 'here is how to fix it'. Just fix it using the tool.
 3. Call Bash to run the test command again to confirm it passes.
 4. Stop when the test command exits 0. Do not modify PLAN.md."
       fix_log="$LOG_DIR/fix-$(printf '%02d' "$i").log"
       test_tail="$(tail -80 "$_test_log")"
       turbo-pi-run \
-        --thinking "$RALPH_THINKING" \
+        --thinking "$RALPH_WRITE_THINKING" \
         --session-dir "$SESSION_DIR" \
         --continue \
         --append-system-prompt "$AUTONOMOUS_SYSTEM" \
@@ -845,6 +1021,32 @@ $test_tail" \
         log "Tests failing after repair for $task_file."
         exit 3
       fi
+    fi
+  fi
+
+  # After writing a build file, warn if it's missing planned source file paths.
+  # This catches the common bug where the model uses 'main.c' instead of 'src/main.c'.
+  if _is_build_file "$task_file"; then
+    local _build_content _missing_paths=()
+    _build_content="$(cat "$task_file" 2>/dev/null)"
+    while IFS= read -r _pending_line; do
+      local _pf
+      _pf="$(task_file_path "$_pending_line")"
+      # Skip other build files
+      _is_build_file "$_pf" && continue
+      local _pf_base
+      _pf_base="$(basename "$_pf")"
+      # Check if either the full path or just the basename appears in the build file.
+      # A mismatch means the path is wrong (e.g. 'main.c' instead of 'src/main.c').
+      if printf '%s' "$_build_content" | grep -qF "$_pf"; then
+        : # exact path present — good
+      elif printf '%s' "$_build_content" | grep -qF "$_pf_base"; then
+        log "WARNING: $task_file references '$_pf_base' but PLAN.md lists '$_pf' — path mismatch may cause build failure."
+        _missing_paths+=("$_pf")
+      fi
+    done < <(grep -E '^- \[ \]' PLAN.md 2>/dev/null || true)
+    if [[ ${#_missing_paths[@]} -gt 0 ]]; then
+      log "Build file path check: ${#_missing_paths[@]} path(s) may be wrong: ${_missing_paths[*]}"
     fi
   fi
 
@@ -874,11 +1076,11 @@ _final_test_gate() {
     local test_output
     test_output="$(tail -200 "$LOG_DIR/tests-final.log" 2>/dev/null || true)"
     turbo-pi-run \
-      --thinking "$RALPH_THINKING" \
+      --thinking "$RALPH_WRITE_THINKING" \
       --session-dir "$SESSION_DIR" \
       --continue \
       --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "Tests are still failing. Use Write or Edit to fix the code NOW. Do NOT explain how to fix it, do NOT show JSON examples — call the tool directly.
+      -p "Tests are still failing. Use Write to rewrite the broken file (preferred), or use Edit with enough surrounding context (3-5 lines) to make old_string unique. Do NOT explain — call the tool directly.
 
 Test command: \`$cmd\`
 Last output:

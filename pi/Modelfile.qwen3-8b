@@ -1,0 +1,7 @@
+FROM qwen3:8b
+# Increase context window from Ollama's default (4096) to 16384.
+# qwen3:8b supports up to ~41K natively; 16384 comfortably fits
+# ralph's write prompts (PLAN.md + existing files + instructions).
+PARAMETER num_ctx 16384
+# Keep Ollama from aggressively unloading between turbo-ralph iterations.
+PARAMETER num_keep 1000
