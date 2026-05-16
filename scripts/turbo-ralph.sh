@@ -248,7 +248,11 @@ _archive_finalize() {
     "$SESSION_ID" "$GOAL" "$outcome" "$ec" \
     > "$SESSION_ARCHIVE_PATH/meta.json" 2>/dev/null
 
-  python3 -c "
+  # Upgrade to full JSON. Use a temp file so a python3 failure doesn't truncate
+  # the tombstone we just wrote.
+  local _meta_tmp
+  _meta_tmp="$(mktemp)"
+  if python3 -c "
 import json, sys
 data = {
     'session_id': sys.argv[1],
@@ -266,7 +270,11 @@ data = {
 print(json.dumps(data, indent=2))
 " "$SESSION_ID" "$GOAL" "$PROJECT_DIR" "$SESSION_START_TS" "$end_ts" \
   "$duration" "$MAX_ITER" "$outcome" "$ec" "$tasks_total" "$tasks_done" \
-  > "$SESSION_ARCHIVE_PATH/meta.json" 2>/dev/null
+  > "$_meta_tmp" 2>/dev/null && [[ -s "$_meta_tmp" ]]; then
+    mv "$_meta_tmp" "$SESSION_ARCHIVE_PATH/meta.json"
+  else
+    rm -f "$_meta_tmp"
+  fi
 
   log "Session archived → $SESSION_ARCHIVE_PATH"
 }
@@ -385,37 +393,63 @@ REQUIREMENTS:
      - [ ] main.c — temperature converter
 
      ## Test Command
-     gcc main.c -o convert && ./convert 212 | grep -q "100"
+     gcc main.c -o convert && ./convert 212 | grep -q \"100\"
 
    NON-TRIVIAL programs (multiple genuinely distinct components, reusable libraries, command-line
-   tools with options, programs that use external libraries like SDL2/OpenGL/etc.): use a Makefile
-   and split into modules with paired test files.
+   tools with options, programs that use external libraries like SDL2/OpenGL/etc.): use a Makefile.
 
-   Example (a 2-D physics simulation):
+   Example (a 2-D physics simulation with a pure-logic library):
 
      ## Files
-     - [ ] Makefile — build rules
+     - [ ] Makefile — build rules (must include ALL targets referenced by Test Command)
      - [ ] src/physics.c — physics logic
      - [ ] include/physics.h — physics interface
-     - [ ] tests/test_physics.c — unit tests
+     - [ ] tests/test_physics.c — unit tests for physics
      - [ ] src/main.c — entry point
 
      ## Test Command
      make check
 
+   INTERACTIVE / GRAPHICAL programs (SDL2, OpenGL, ncurses, games, anything that opens
+   a window or reads from stdin in a loop) MUST NOT have unit test files.
+   The only test for these programs is a build smoke test — does it compile cleanly?
+
+   Example (an SDL2 renderer):
+
+     ## Files
+     - [ ] Makefile — build rules
+     - [ ] src/main.c — SDL2 renderer
+
+     ## Test Command
+     make
+
    IMPORTANT: the examples above are structural templates only. Every file path, description,
    compiler flag, and test assertion must be derived from the actual GOAL, not from the example.
 
-2. Module functions should return values rather than printing so they can be unit-tested.
-   Exception: if a module's only behavior is I/O, a smoke test (build then run and check stdout)
-   is acceptable.
+2. LANGUAGE RULE: Use the exact language stated in the GOAL.
+   - 'C' or 'using C' → .c files compiled with gcc/clang. NEVER use C# (.cs / dotnet).
+   - 'C++' or 'using C++' → .cpp files compiled with g++/clang++.
+   - 'Python' → .py files. 'Go' → .go files. 'Rust' → .rs files. Etc.
+   When in doubt, prefer the simpler systems language (C, not C++; Python, not Ruby).
 
-3. Include '## Test Command' with a single shell command that exits non-zero on failure.
+3. MAKEFILE COMPLETENESS: If the Test Command references a make target (e.g., 'make check',
+   'make test'), the Makefile MUST define that target from the start. The Makefile is written
+   first; it cannot be updated later. Define test targets with a recipe even if the test
+   source file does not exist yet — e.g.:
+     check: tests/test_foo
+         ./tests/test_foo
+     tests/test_foo: tests/test_foo.c
+         \$(CC) \$(CFLAGS) tests/test_foo.c -o tests/test_foo
+
+4. Module functions should return values rather than printing so they can be unit-tested.
+   Exception: interactive or graphical programs — use a build-only smoke test.
+
+5. Include '## Test Command' with a single shell command that exits non-zero on failure.
    All paths must be project-relative, not absolute.
 
-4. Include '## Dependencies' listing the compiler and any required tools.
+6. Include '## Dependencies' listing the compiler and any required tools.
 
-5. Plan only — do not implement. Write PLAN.md and stop.
+7. Plan only — do not implement. Write PLAN.md and stop.
 
 GOAL: $GOAL" 2>&1 | tee "$plan_log" ) &
   local _bg=$!
@@ -596,6 +630,24 @@ _check_plan_goal_alignment() {
   if (( ${#missing[@]} > 0 )); then
     log "NOTE: PLAN.md is missing some goal terms: ${missing[*]} (may be acceptable)"
   fi
+
+  # Check for common language-name mismatches that the keyword filter misses
+  # because the language name is ≤3 chars (C, Go) or easily confused (C vs C#).
+  local plan_files
+  plan_files="$(grep -iE '^- \[[ x~]\]' PLAN.md | awk '{print $3}' | tr '\n' ' ')"
+  if printf '%s' "$goal_lower" | grep -qwE '\bc\b' && \
+     ! printf '%s' "$goal_lower" | grep -qwE 'c\+\+|c#|csharp'; then
+    if printf '%s' "$plan_files" | grep -qE '\.cs\b'; then
+      log "WARNING: goal says 'C' but PLAN.md contains .cs (C#) files — plan likely misidentified the language."
+      return 1
+    fi
+  fi
+  if printf '%s' "$goal_lower" | grep -qwE '\bgo\b'; then
+    if printf '%s' "$plan_files" | grep -qvE '\.go\b'; then
+      log "NOTE: goal mentions 'go' but PLAN.md has no .go files — verify language choice."
+    fi
+  fi
+
   return 0
 }
 
@@ -729,10 +781,11 @@ Do not create any other files. Do not run tests. Do not modify PLAN.md."
   # Detect autonomy violations: model asked a question instead of writing.
   # Retry once with an explicit scolding before giving up.
   if [[ ! -f "$task_file" ]]; then
-    local _stall_phrases="could you please|please provide|please tell|what content|shall I|should I write|what would you like|can you provide"
+    _stall_phrases="could you please|please provide|please tell|what content|shall I|should I write|what would you like|can you provide"
+    _stall_log=""
     if grep -qiE "$_stall_phrases" "$iter_log" 2>/dev/null; then
       log "Model violated autonomy rules (asked a question). Retrying with corrective prompt."
-      local _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
+      _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
       turbo-pi-run \
         --thinking "$RALPH_THINKING" \
         --session-dir "$SESSION_DIR" \
@@ -745,7 +798,7 @@ Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just
         2>/dev/null | tee "$_stall_log"
     fi
     _recover_file_from_log "$iter_log" "$task_file" \
-      || _recover_file_from_log "${_stall_log:-/dev/null}" "$task_file" \
+      || { [[ -n "$_stall_log" ]] && _recover_file_from_log "$_stall_log" "$task_file"; } \
       || {
         ralph_sad "Model did not write $task_file — stalled."
         log "Iteration $i: $task_file not found on disk after write call."
@@ -760,9 +813,11 @@ Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just
     _test_log="$LOG_DIR/tests-iter-$(printf '%02d' "$i").log"
     if ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
       log "Tests failing after $task_file — invoking repair agent."
-      fix_rules="1. Run: $_test_cmd
-2. If it fails, read the error output, fix the relevant file with Write or Edit, then run again.
-3. Stop when the test command exits 0. Do not modify PLAN.md."
+      fix_rules="REPAIR RULES — follow exactly:
+1. Call the Bash tool to run: $_test_cmd
+2. Read the error output. Call Write or Edit to fix the broken file. Do NOT explain, do NOT show JSON examples, do NOT say 'here is how to fix it'. Just fix it using the tool.
+3. Call Bash to run the test command again to confirm it passes.
+4. Stop when the test command exits 0. Do not modify PLAN.md."
       fix_log="$LOG_DIR/fix-$(printf '%02d' "$i").log"
       test_tail="$(tail -80 "$_test_log")"
       turbo-pi-run \
@@ -771,12 +826,19 @@ Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just
         --continue \
         --append-system-prompt "$AUTONOMOUS_SYSTEM" \
         --append-system-prompt "$fix_rules" \
-        -p "Fix the test failure. Test command: \`$_test_cmd\`
+        -p "Tests are failing. Use the Write or Edit tool to fix the broken file NOW. Do not explain how to fix it — just fix it.
 
+Test command: \`$_test_cmd\`
 Last output:
 $test_tail" \
         < /dev/null \
         2>&1 | tee "$fix_log"
+
+      # Detect explanation-mode: model described the fix in chat instead of calling tools.
+      if grep -qiE '```json|"oldText"|"newText"|here is how|you can fix|to fix this' "$fix_log" 2>/dev/null \
+          && ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
+        log "Repair agent emitted explanations instead of calling Write/Edit tools."
+      fi
 
       if ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
         ralph_sad "Tests still failing after repair — stalled."
@@ -816,13 +878,18 @@ _final_test_gate() {
       --session-dir "$SESSION_DIR" \
       --continue \
       --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "Diagnose the test failure, fix the code or the tests so the test command exits zero, and write the fixes to disk. Do not ask for confirmation; write directly to disk.
+      -p "Tests are still failing. Use Write or Edit to fix the code NOW. Do NOT explain how to fix it, do NOT show JSON examples — call the tool directly.
 
-The test command for this project (\`$cmd\`) is failing. Last test output (tail):
-
+Test command: \`$cmd\`
+Last output:
 $test_output" \
       < /dev/null \
       2>&1 | tee "$retry_log"
+
+    # Detect explanation-mode failure before next loop iteration.
+    if grep -qiE '```json|"oldText"|"newText"|here is how|you can fix|to fix this' "$retry_log" 2>/dev/null; then
+      log "WARNING: repair agent (retry $attempt) emitted explanations instead of calling Write/Edit."
+    fi
   done
 }
 
