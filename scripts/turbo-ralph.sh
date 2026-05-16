@@ -375,28 +375,36 @@ REQUIREMENTS:
 
    USE THE SIMPLEST STRUCTURE THAT FITS THE GOAL.
 
-   TRIVIAL programs (hello world, single-function utilities, tiny scripts — anything that fits
+   TRIVIAL programs (single-function utilities, tiny scripts — anything that fits
    naturally in one source file): use exactly ONE file, no Makefile, no modules, no headers.
    Compile and run inline in the Test Command.
 
+   Example (a Fahrenheit-to-Celsius converter):
+
      ## Files
-     - [ ] main.c — hello world program
+     - [ ] main.c — temperature converter
 
      ## Test Command
-     gcc main.c -o hello && ./hello | grep -q "Hello, World"
+     gcc main.c -o convert && ./convert 212 | grep -q "100"
 
    NON-TRIVIAL programs (multiple genuinely distinct components, reusable libraries, command-line
-   tools with options): use a Makefile and split into modules with paired test files.
+   tools with options, programs that use external libraries like SDL2/OpenGL/etc.): use a Makefile
+   and split into modules with paired test files.
+
+   Example (a 2-D physics simulation):
 
      ## Files
      - [ ] Makefile — build rules
-     - [ ] src/widget.c — widget logic
-     - [ ] include/widget.h — widget interface
-     - [ ] tests/test_widget.c — unit tests
+     - [ ] src/physics.c — physics logic
+     - [ ] include/physics.h — physics interface
+     - [ ] tests/test_physics.c — unit tests
      - [ ] src/main.c — entry point
 
      ## Test Command
      make check
+
+   IMPORTANT: the examples above are structural templates only. Every file path, description,
+   compiler flag, and test assertion must be derived from the actual GOAL, not from the example.
 
 2. Module functions should return values rather than printing so they can be unit-tested.
    Exception: if a module's only behavior is I/O, a smoke test (build then run and check stdout)
@@ -537,6 +545,63 @@ else
   cat PLAN.md
 fi
 
+# ── PLAN.md integrity checks ──────────────────────────────────────────────────
+
+# Strip Ollama thinking-mode tokens (/think, <think>, </think>, <thinking>,
+# </thinking>) that sometimes leak into model output and corrupt the plan.
+_strip_thinking_artifacts() {
+  local tmp
+  tmp="$(mktemp)"
+  sed -E 's|[[:space:]]?/think[[:space:]]?||g; s|[[:space:]]?</?think(ing)?>[[:space:]]?||g' \
+    PLAN.md > "$tmp"
+  if ! diff -q PLAN.md "$tmp" > /dev/null 2>&1; then
+    log "WARNING: thinking artifact tokens stripped from PLAN.md"
+    mv "$tmp" PLAN.md
+  else
+    rm -f "$tmp"
+  fi
+}
+
+# Check that key words from the goal appear somewhere in PLAN.md.
+# Emits a warning (not a hard failure) so the session can proceed while still
+# surfacing misaligned plans. Words shorter than 4 chars and common stopwords
+# are skipped. Returns 1 if no goal words were found at all.
+_check_plan_goal_alignment() {
+  local plan_text
+  plan_text="$(tr '[:upper:]' '[:lower:]' < PLAN.md)"
+  local goal_lower
+  goal_lower="$(printf '%s' "$GOAL" | tr '[:upper:]' '[:lower:]')"
+
+  local stopwords="and the via with for from that this are not make"
+  local found=0 missing=()
+
+  while IFS= read -r word; do
+    [[ ${#word} -lt 4 ]] && continue
+    local stop=0
+    for s in $stopwords; do [[ "$word" == "$s" ]] && stop=1 && break; done
+    ((stop)) && continue
+    if printf '%s' "$plan_text" | grep -qF "$word"; then
+      found=1
+    else
+      missing+=("$word")
+    fi
+  done < <(printf '%s' "$goal_lower" | tr -cs 'a-z0-9' '\n')
+
+  if (( found == 0 )); then
+    log "WARNING: PLAN.md contains none of the goal keywords — plan may be misaligned."
+    log "  Goal: $GOAL"
+    log "  Missing terms: ${missing[*]:-<none>}"
+    return 1
+  fi
+  if (( ${#missing[@]} > 0 )); then
+    log "NOTE: PLAN.md is missing some goal terms: ${missing[*]} (may be acceptable)"
+  fi
+  return 0
+}
+
+_strip_thinking_artifacts
+_check_plan_goal_alignment || log "Proceeding despite alignment warning — check PLAN.md before continuing."
+
 # Snapshot the initial PLAN.md for before/after analysis
 mkdir -p "$SESSION_ARCHIVE_PATH"
 cp PLAN.md "$SESSION_ARCHIVE_PATH/PLAN-initial.md" 2>/dev/null || true
@@ -661,12 +726,31 @@ Do not create any other files. Do not run tests. Do not modify PLAN.md."
     < /dev/null \
     2> >(tee "$iter_err_log" >&2) | tee "$iter_log"
 
+  # Detect autonomy violations: model asked a question instead of writing.
+  # Retry once with an explicit scolding before giving up.
   if [[ ! -f "$task_file" ]]; then
-    _recover_file_from_log "$iter_log" "$task_file" || {
-      ralph_sad "Model did not write $task_file — stalled."
-      log "Iteration $i: $task_file not found on disk after write call."
-      exit 3
-    }
+    local _stall_phrases="could you please|please provide|please tell|what content|shall I|should I write|what would you like|can you provide"
+    if grep -qiE "$_stall_phrases" "$iter_log" 2>/dev/null; then
+      log "Model violated autonomy rules (asked a question). Retrying with corrective prompt."
+      local _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
+      turbo-pi-run \
+        --thinking "$RALPH_THINKING" \
+        --session-dir "$SESSION_DIR" \
+        --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+        --append-system-prompt "$WRITE_RULES" \
+        -p "You asked a clarifying question instead of writing the file. That is not allowed.
+Write the file NOW: $task_file
+Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just write it." \
+        < /dev/null \
+        2>/dev/null | tee "$_stall_log"
+    fi
+    _recover_file_from_log "$iter_log" "$task_file" \
+      || _recover_file_from_log "${_stall_log:-/dev/null}" "$task_file" \
+      || {
+        ralph_sad "Model did not write $task_file — stalled."
+        log "Iteration $i: $task_file not found on disk after write call."
+        exit 3
+      }
   fi
 
   # Run tests after every test file. The orchestrator owns this check; the
