@@ -190,32 +190,139 @@ done
   else                                  _complexity=simple
   fi
 
-  # Planner always needs at least medium thinking on qwen3:8b to reliably call Write.
-  # The complexity heuristic only scales down the writer (shorter, more directive prompt).
+  # qwen3:8b with thinking=off: fast on M2, reliable tool calls.
+  # Thinking is off for all tiers — the full planner prompt is strong enough.
   case "$_complexity" in
-    trivial) _auto_planner=medium _auto_writer=off  _auto_combined=1 ;;
-    simple)  _auto_planner=medium _auto_writer=off  _auto_combined=0 ;;
-    complex) _auto_planner=medium _auto_writer=low  _auto_combined=0 ;;
+    trivial) _auto_planner=off _auto_writer=off _auto_combined=1 ;;
+    simple)  _auto_planner=off _auto_writer=off _auto_combined=0 ;;
+    complex) _auto_planner=off _auto_writer=off _auto_combined=0 ;;
   esac
 
   RALPH_PLANNER_THINKING="${RALPH_PLANNER_THINKING:-${RALPH_THINKING:-$_auto_planner}}"
   RALPH_WRITE_THINKING="${RALPH_WRITE_THINKING:-${RALPH_THINKING:-$_auto_writer}}"
 
   # Scale PLANNER_TIMEOUT by complexity when the user hasn't set it explicitly.
-  # Trivial goals fail fast if the model stalls; complex goals get the full window.
+  # Timeouts tuned for qwen3:8b on M2 with thinking=off.
   if [[ "$PLANNER_TIMEOUT" == "auto" ]]; then
     case "$_complexity" in
-      trivial) PLANNER_TIMEOUT=240  ;;
-      simple)  PLANNER_TIMEOUT=400  ;;
-      complex) PLANNER_TIMEOUT=600  ;;
+      trivial) PLANNER_TIMEOUT=120  ;;
+      simple)  PLANNER_TIMEOUT=200  ;;
+      complex) PLANNER_TIMEOUT=360  ;;
     esac
   fi
 
   # Combined plan+write: single pi session for trivially simple single-file goals.
-  # Saves one pi startup + Ollama API round-trip. Falls back to normal write loop
+  # Saves one pi startup + model API round-trip. Falls back to normal write loop
   # if the combined call only writes PLAN.md (model stops after the first Write).
   RALPH_COMBINED="${RALPH_COMBINED:-$_auto_combined}"
 }
+
+log() {
+  echo "==> [turbo-ralph] $*"
+}
+
+# Returns '/no_think\n\n' when thinking mode is off so qwen3 skips its internal
+# reasoning chain. pi --thinking off does NOT send think:false to Ollama's API,
+# so we embed the /no_think control token in the system prompt directly.
+_thinking_prefix() {
+  case "${1:-}" in
+    off|minimal) printf '/no_think\n\n' ;;
+    *) printf '' ;;
+  esac
+}
+
+# ── Model setup (temperature = 0) ────────────────────────────────────────────
+# Creates qwen3:ralph with temperature=0 and registers it in pi's models.json.
+# Override by setting RALPH_MODEL or RALPH_BASE_MODEL before invoking ralph.
+RALPH_MODEL="${RALPH_MODEL:-}"
+
+_ensure_ralph_model() {
+  local base="${RALPH_BASE_MODEL:-qwen3:8b}"
+  local target="${base%%:*}:ralph"
+
+  if ! ollama show "$target" &>/dev/null; then
+    log "Creating $target (temperature=0, thinking disabled) from $base ..."
+    local mf
+    mf="$(mktemp)"
+    # Build Modelfile: parameters + modified template that always injects the empty
+    # <think></think> prefill so qwen3 never enters thinking mode via any API path.
+    printf 'FROM %s\nPARAMETER temperature 0\nPARAMETER num_ctx 4096\n' "$base" > "$mf"
+    python3 - "$base" >> "$mf" 2>/dev/null <<'PYEOF_TEMPLATE' || true
+import json, urllib.request, sys
+base = sys.argv[1]
+req = urllib.request.Request(
+    "http://localhost:11434/api/show",
+    data=json.dumps({"model": base}).encode(),
+    headers={"Content-Type": "application/json"},
+)
+try:
+    with urllib.request.urlopen(req, timeout=5) as r:
+        template = json.load(r).get("template", "")
+except Exception:
+    sys.exit(0)
+if not template:
+    sys.exit(0)
+# Replace conditional think-prefill with unconditional empty <think></think>
+old = ('{{ if and $.IsThinkSet (not $.Think) -}}\n'
+       '<think>\n\n</think>\n\n{{ end -}}')
+new = '<think>\n\n</think>\n\n'
+template = template.replace(old, new)
+# Always inject /no_think at end of each user turn (removes IsThinkSet guard)
+old2 = ('{{- if and $.IsThinkSet (eq $i $lastUserIdx) }}\n'
+        '   {{- if $.Think -}}\n'
+        '      {{- " "}}/think\n'
+        '   {{- else -}}\n'
+        '      {{- " "}}/no_think\n'
+        '   {{- end -}}\n'
+        '{{- end }}')
+new2 = ' /no_think'
+template = template.replace(old2, new2)
+print('TEMPLATE """')
+print(template, end='')
+print('"""')
+PYEOF_TEMPLATE
+    if ! ollama create "$target" -f "$mf" &>/dev/null; then
+      log "WARNING: ollama create failed — using $base (temperature uncontrolled)"
+      rm -f "$mf"
+      RALPH_MODEL="$base"
+      return
+    fi
+    rm -f "$mf"
+  fi
+
+  local models_json="$HOME/.pi/agent/models.json"
+  if [[ -f "$models_json" ]]; then
+    python3 - "$models_json" "$target" "$base" <<'PYEOF' 2>/dev/null || true
+import json, sys, copy
+path, target, base = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(path))
+models = d.get("providers", {}).get("ollama", {}).get("models", [])
+if not any(m["id"] == target for m in models):
+    src = next((m for m in models if m["id"] == base), None)
+    entry = copy.deepcopy(src) if src else {"_launch": True, "contextWindow": 32768, "input": ["text"]}
+    entry["id"] = target
+    entry.pop("reasoning", None)  # thinking baked off in template; don't advertise as reasoning model
+    models.append(entry)
+    json.dump(d, open(path, "w"), indent=4)
+PYEOF
+  fi
+
+  RALPH_MODEL="$target"
+}
+
+_unload_other_models() {
+  curl -sf http://localhost:11434/api/ps 2>/dev/null \
+    | python3 -c "import json,sys; [print(m['name']) for m in json.load(sys.stdin).get('models',[])]" 2>/dev/null \
+    | while IFS= read -r _loaded; do
+        [[ "$_loaded" == "$RALPH_MODEL" ]] && continue
+        log "Unloading $_loaded (single-model policy)"
+        curl -sf -X POST http://localhost:11434/api/generate \
+          -d "{\"model\":\"$_loaded\",\"keep_alive\":0}" >/dev/null 2>&1 || true
+      done
+}
+
+[[ -z "$RALPH_MODEL" ]] && _ensure_ralph_model
+_unload_other_models
 
 # ── Directory setup ───────────────────────────────────────────────────────────
 if [[ -n "$TARGET_DIR" ]]; then
@@ -367,10 +474,6 @@ run_tests() {
   return "${PIPESTATUS[0]}"
 }
 
-log() {
-  echo "==> [turbo-ralph] $*"
-}
-
 ralph_dance() {
   local label="${1:-}"
   [[ -n "$label" ]] && printf "\n  \033[1;32m%s\033[0m\n\n" "$label"
@@ -382,18 +485,26 @@ ralph_sad() {
 }
 
 # ── Shared flags ─────────────────────────────────────────────────────────────
-# Appended to every pi invocation: autonomous mode + sandboxing constraints.
-AUTONOMOUS_SYSTEM="You are running in fully autonomous mode inside the project directory: $PROJECT_DIR
+# Appended to every pi invocation: role, protocol, and hard constraints.
+AUTONOMOUS_SYSTEM="You are a code-writing agent running autonomously in: $PROJECT_DIR
 
-WRITING FILES
-- You MUST write files to disk immediately without asking for confirmation or approval.
-- Do NOT pause to ask if it is okay to create, edit, or delete files.
-- Do NOT say 'shall I proceed?', 'is that okay?', or any similar confirmation request.
-- Just write the code and move on to the next task.
+ROLE: You receive one task — write a specific file — and execute it immediately.
 
-SANDBOX CONSTRAINTS — these are hard limits, never override them:
-1. NETWORK: Do not run arbitrary network commands (curl, wget, fetch, http, etc.) for general internet access.
-2. EXTERNAL LIBRARIES / PACKAGES: You MAY install and use external libraries, modules, or packages (via npm install, pip install, go get, cargo add, etc.) ONLY IF they are explicitly listed in PLAN.md. Do not pull in dependencies that PLAN.md does not mention. If you need a dependency that is not listed, add it to PLAN.md first, then install it."
+PROTOCOL:
+1. Call the Write tool exactly once with the requested path and complete file contents.
+2. Derive all implementation details from the GOAL and PLAN.md. Make your own decisions — never ask for clarification.
+3. Stop the moment Write completes. No summary, no explanation, no additional output.
+
+OFF-LIMITS:
+- Never ask questions or request confirmation. Never say \"shall I proceed?\", \"is that okay?\", or anything similar.
+- Never write files other than the one explicitly requested.
+- No arbitrary network calls (curl, wget, fetch, http, etc.).
+- Only install packages that are explicitly listed in PLAN.md."
+
+# Per-phase system prompts: prepend /no_think when thinking is disabled so qwen3
+# skips its internal reasoning chain (pi --thinking off doesn't reach Ollama).
+_PLANNER_SYSTEM="$(_thinking_prefix "$RALPH_PLANNER_THINKING")$AUTONOMOUS_SYSTEM"
+_WRITER_SYSTEM="$(_thinking_prefix "$RALPH_WRITE_THINKING")$AUTONOMOUS_SYSTEM"
 
 # ── Step 1: Planning ──────────────────────────────────────────────────────────
 
@@ -423,7 +534,8 @@ _run_planner() {
   local plan_log="$1"
   ( turbo-pi-run \
     --thinking "$RALPH_PLANNER_THINKING" \
-    --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+    --model "$RALPH_MODEL" \
+    --append-system-prompt "$_PLANNER_SYSTEM" \
     -p "Your only output must be one Write tool call that creates '$PROJECT_DIR/PLAN.md'. No chat text, no fenced code blocks.
 
 REQUIREMENTS:
@@ -476,6 +588,14 @@ REQUIREMENTS:
 
    IMPORTANT: the examples above are structural templates only. Every file path, description,
    compiler flag, and test assertion must be derived from the actual GOAL, not from the example.
+
+   RUNTIME ARTIFACTS: Do NOT list runtime-generated files (SQLite databases, output logs,
+   generated images, temp files) under ## Files — only list source files that must be written.
+   If the Test Command needs to verify a runtime artifact (e.g. a populated database), include
+   the step that produces it: e.g. 'python3 main.py && sqlite3 out.db "select count(*) from t;"'
+
+   SDL2 on macOS/homebrew: sdl2-config --cflags sets the SDL2 directory on the include path,
+   so source files must use '#include <SDL.h>' (not '#include <SDL2/SDL.h>').
 
 2. LANGUAGE RULE: Use the exact language stated in the GOAL.
    - 'C' or 'using C' → .c files compiled with gcc/clang. NEVER use C# (.cs / dotnet).
@@ -564,7 +684,8 @@ GOAL: $GOAL"
 
   ( turbo-pi-run \
     --thinking "$RALPH_PLANNER_THINKING" \
-    --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+    --model "$RALPH_MODEL" \
+    --append-system-prompt "$_PLANNER_SYSTEM" \
     -p "$_combined_prompt" \
     < /dev/null \
     2>&1 | tee "$plan_log" ) &
@@ -839,27 +960,56 @@ mark_task_done() {
 # One pi call per file. The orchestrator runs tests and marks tasks done — the
 # model's only job is to write the file it is given.
 
-WRITE_RULES="1. Call Write ONCE to create the file at the exact path given. Do not ask for confirmation.
-2. Do not create any other files. Write exactly the one file you are asked to write.
-3. Do not emit code in chat — only via the Write tool.
-4. Infer all content from the project goal and PLAN.md. NEVER ask for clarification or request input — write your best implementation immediately, even for headers and interface files.
-5. If writing a header or interface file, write a complete, reasonable declaration based on the goal. Never say 'please provide the content' — just write it.
-6. After the Write call succeeds, STOP immediately. Do not explain, summarize, or add any chat text after writing."
+WRITE_RULES="REMINDER: Call Write ONCE for the file you are given. Complete, runnable content. Stop immediately after. Nothing else."
 
-# Return file contents for every already-completed task file, formatted as
-# fenced code blocks. Empty output when no files are done yet.
-_existing_files_context() {
-  local out=""
+# Extract only the Files, Test Command, and Dependencies sections from PLAN.md.
+# Keeps writer context small — the full plan text is not needed per-file.
+_plan_context() {
+  [[ -f PLAN.md ]] || return
+  awk '
+    /^## (Files|Test Command|Dependencies)[[:space:]]*$/ { in_sec=1; print; next }
+    in_sec && /^## [A-Za-z]/ { in_sec=0 }
+    in_sec { print }
+  ' PLAN.md
+}
+
+# Return completed files relevant to $1 (the file being written), formatted as
+# fenced code blocks. Includes: all headers (.h/.hpp), files in the same directory,
+# and for test files, the module implementation being tested.
+_relevant_files_context() {
+  local target="$1"
+  local target_dir
+  target_dir="$(dirname "$target")"
+  local target_base
+  target_base="$(basename "$target")"
+  local target_stem="${target_base%.*}"
+  local module_stem="${target_stem#test_}"  # strip test_ prefix to find module
+  local out="" count=0 max=6
+
   while IFS= read -r line; do
+    (( count >= max )) && break
     local f
     f="$(task_file_path "$line")"
     [[ -f "$f" ]] || continue
+    local fbase fext fstem fdir
+    fbase="$(basename "$f")"
+    fext="${fbase##*.}"
+    fstem="${fbase%.*}"
+    fdir="$(dirname "$f")"
+
+    local include=0
+    [[ "$fext" == "h" || "$fext" == "hpp" ]] && include=1
+    [[ "$fdir" == "$target_dir" ]] && include=1
+    [[ "$fstem" == "$module_stem" ]] && include=1  # physics.c for test_physics.c
+
+    (( include )) || continue
     out+="### $f
 \`\`\`
 $(cat "$f")
 \`\`\`
 
 "
+    (( count++ ))
   done < <(grep -E '^- \[x\]' PLAN.md 2>/dev/null || true)
   printf '%s' "$out"
 }
@@ -906,26 +1056,26 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   iter_log="$LOG_DIR/iter-$(printf '%02d' "$i").log"
   iter_err_log="$LOG_DIR/iter-$(printf '%02d' "$i").err"
 
-  _plan_content="$(cat PLAN.md)"
-  _existing_ctx="$(_existing_files_context)"
+  _plan_ctx="$(_plan_context)"
+  _existing_ctx="$(_relevant_files_context "$task_file")"
 
-  write_prompt="PROJECT GOAL: $GOAL
+  write_prompt="GOAL: $GOAL
 
-=== PLAN.md (context only — do not rewrite) ===
-$_plan_content
-=== END PLAN.md ==="
+## Plan
+$_plan_ctx"
 
   if [[ -n "$_existing_ctx" ]]; then
     write_prompt+="
 
-=== Already-written files (for reference) ===
-$_existing_ctx=== END ==="
+## Reference files (do not rewrite)
+$_existing_ctx"
   fi
 
   write_prompt+="
 
-TASK: Write the file: $task_file${task_desc:+
-Description: $task_desc}"
+## Task
+Write file: \`$task_file\`${task_desc:+
+Purpose: $task_desc}"
 
   # Inject exact source-file paths when writing a build file so the model
   # uses PLAN.md paths rather than guessing or simplifying them.
@@ -934,21 +1084,30 @@ Description: $task_desc}"
     if [[ -n "$_pending" ]]; then
       write_prompt+="
 
-CRITICAL — FILE PATHS: The following source files will be created at these EXACT paths (taken from PLAN.md). Your $task_file MUST reference them at these exact paths — do NOT simplify, flatten, or alter any path:
+CRITICAL — use these EXACT file paths from PLAN.md in \`$task_file\`. Do not simplify or alter any path:
 $_pending"
     fi
   fi
 
   write_prompt+="
 
-Do not create any other files. Do not run tests. Do not modify PLAN.md."
+## Steps
+1. Determine the complete, correct content for \`$task_file\` from the goal and plan.
+2. Call Write with path \`$task_file\` and the full, runnable content.
+3. Stop immediately after Write — no other output.
+
+## What good looks like
+Complete, functional code written once via Write — no stubs, no questions, no chat text.
+Wrong: \"What format should I use?\" — make your own decision.
+Wrong: Emitting code in a fenced block without calling Write."
 
   # Fresh session per write call — small models do not need cross-call context
   # since the orchestrator owns state tracking.
   turbo-pi-run \
     --thinking "$RALPH_WRITE_THINKING" \
+    --model "$RALPH_MODEL" \
     --session-dir "$SESSION_DIR" \
-    --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+    --append-system-prompt "$_WRITER_SYSTEM" \
     --append-system-prompt "$WRITE_RULES" \
     -p "$write_prompt" \
     < /dev/null \
@@ -964,12 +1123,13 @@ Do not create any other files. Do not run tests. Do not modify PLAN.md."
       _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
       turbo-pi-run \
         --thinking "$RALPH_WRITE_THINKING" \
+        --model "$RALPH_MODEL" \
         --session-dir "$SESSION_DIR" \
-        --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+        --append-system-prompt "$_WRITER_SYSTEM" \
         --append-system-prompt "$WRITE_RULES" \
         -p "You asked a clarifying question instead of writing the file. That is not allowed.
 Write the file NOW: $task_file
-Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just write it." \
+Derive every detail from the GOAL and PLAN.md. Make your own decisions. Do not ask anything. Just write it." \
         < /dev/null \
         2>/dev/null | tee "$_stall_log"
     fi
@@ -989,23 +1149,30 @@ Derive every detail from the PROJECT GOAL and PLAN.md. Do not ask anything. Just
     _test_log="$LOG_DIR/tests-iter-$(printf '%02d' "$i").log"
     if ! bash -c "$_test_cmd" > "$_test_log" 2>&1; then
       log "Tests failing after $task_file — invoking repair agent."
-      fix_rules="REPAIR RULES — follow exactly:
-1. Call the Bash tool to run: $_test_cmd
-2. Read the error output. Use Write to rewrite the entire broken file, or use Edit to fix a specific section. When using Edit, provide enough surrounding context (3-5 lines) to make the old_string unique in the file. Do NOT explain, do NOT show JSON examples, do NOT say 'here is how to fix it'. Just fix it using the tool.
-3. Call Bash to run the test command again to confirm it passes.
-4. Stop when the test command exits 0. Do not modify PLAN.md."
+      fix_rules="REPAIR PROTOCOL — follow these steps exactly:
+1. Run \`$_test_cmd\` via Bash to read the current failure output.
+2. Fix the broken file: use Write to rewrite it entirely, or Edit with 3-5 lines of surrounding context so old_string is unique.
+3. Run \`$_test_cmd\` again via Bash to confirm it passes.
+4. Stop when tests exit 0. Do not explain the fix. Do not modify PLAN.md."
       fix_log="$LOG_DIR/fix-$(printf '%02d' "$i").log"
       test_tail="$(tail -80 "$_test_log")"
       turbo-pi-run \
         --thinking "$RALPH_WRITE_THINKING" \
+        --model "$RALPH_MODEL" \
         --session-dir "$SESSION_DIR" \
         --continue \
-        --append-system-prompt "$AUTONOMOUS_SYSTEM" \
+        --append-system-prompt "$_WRITER_SYSTEM" \
         --append-system-prompt "$fix_rules" \
-        -p "Tests are failing. Use the Write or Edit tool to fix the broken file NOW. Do not explain how to fix it — just fix it.
+        -p "Tests are failing. Fix the broken code now — do not explain, just call Write or Edit.
+
+## Steps
+1. Run \`$_test_cmd\` via Bash to read the full error output.
+2. Fix the failing file with Write (full rewrite) or Edit (targeted, with 3-5 lines of context).
+3. Run \`$_test_cmd\` again to verify it passes.
+4. Stop when tests pass.
 
 Test command: \`$_test_cmd\`
-Last output:
+Last output (tail):
 $test_tail" \
         < /dev/null \
         2>&1 | tee "$fix_log"
@@ -1077,13 +1244,20 @@ _final_test_gate() {
     test_output="$(tail -200 "$LOG_DIR/tests-final.log" 2>/dev/null || true)"
     turbo-pi-run \
       --thinking "$RALPH_WRITE_THINKING" \
+      --model "$RALPH_MODEL" \
       --session-dir "$SESSION_DIR" \
       --continue \
-      --append-system-prompt "$AUTONOMOUS_SYSTEM" \
-      -p "Tests are still failing. Use Write to rewrite the broken file (preferred), or use Edit with enough surrounding context (3-5 lines) to make old_string unique. Do NOT explain — call the tool directly.
+      --append-system-prompt "$_WRITER_SYSTEM" \
+      -p "Tests are still failing. Fix the broken code now — do not explain, just call Write or Edit.
+
+## Steps
+1. Run \`$cmd\` via Bash to read the full error output.
+2. Fix the failing file with Write (full rewrite) or Edit (targeted, with 3-5 lines of context).
+3. Run \`$cmd\` again to verify it passes.
+4. Stop when tests pass.
 
 Test command: \`$cmd\`
-Last output:
+Last output (tail):
 $test_output" \
       < /dev/null \
       2>&1 | tee "$retry_log"

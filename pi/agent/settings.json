@@ -4,7 +4,7 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "qwen3:8b",
+  "defaultModel": "qwen2.5-coder:7b",
   "defaultProvider": "ollama",
   "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
