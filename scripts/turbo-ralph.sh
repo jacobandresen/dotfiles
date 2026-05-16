@@ -370,29 +370,44 @@ _run_planner() {
 REQUIREMENTS:
 
 1. PLAN.md must contain a '## Files' section: a flat ordered list of files to create, one per line,
-   in dependency order (dependencies before dependents):
-     ## Files
-     - [ ] Makefile
-     - [ ] src/hello.c
-     - [ ] include/hello.h
-     - [ ] tests/test_hello.c
-     - [ ] src/main.c
+   in dependency order (dependencies before dependents).
    Each line: '- [ ] relative/path/to/file' optionally followed by ' — one-line description'.
-   Order: Makefile first, then source+header module pairs, then test files, then the main entry point last.
 
-2. Every source module (e.g. src/hello.c) must have a paired test file in tests/ (e.g. tests/test_hello.c).
-   Makefile and main entry points (e.g. src/main.c) do not need test files.
-   The module function must return a value rather than printing — makes it unit-testable without stdout capture.
+   USE THE SIMPLEST STRUCTURE THAT FITS THE GOAL.
 
-3. Include '## Test Command' with a single shell command that runs all unit tests and exits non-zero on
-   failure (e.g. 'make check'). Must execute unit tests only — not the main program binary.
-   All paths in Makefiles and tests must be project-relative, never absolute (e.g. not '/my_program').
+   TRIVIAL programs (hello world, single-function utilities, tiny scripts — anything that fits
+   naturally in one source file): use exactly ONE file, no Makefile, no modules, no headers.
+   Compile and run inline in the Test Command.
 
-4. Include '## Dependencies' listing the compiler (gcc or clang) and build tool (make).
+     ## Files
+     - [ ] main.c — hello world program
 
-5. All logic must live in src/ modules. The main entry point only imports and calls module functions.
+     ## Test Command
+     gcc main.c -o hello && ./hello | grep -q "Hello, World"
 
-6. Plan only — do not implement. Write PLAN.md and stop.
+   NON-TRIVIAL programs (multiple genuinely distinct components, reusable libraries, command-line
+   tools with options): use a Makefile and split into modules with paired test files.
+
+     ## Files
+     - [ ] Makefile — build rules
+     - [ ] src/widget.c — widget logic
+     - [ ] include/widget.h — widget interface
+     - [ ] tests/test_widget.c — unit tests
+     - [ ] src/main.c — entry point
+
+     ## Test Command
+     make check
+
+2. Module functions should return values rather than printing so they can be unit-tested.
+   Exception: if a module's only behavior is I/O, a smoke test (build then run and check stdout)
+   is acceptable.
+
+3. Include '## Test Command' with a single shell command that exits non-zero on failure.
+   All paths must be project-relative, not absolute.
+
+4. Include '## Dependencies' listing the compiler and any required tools.
+
+5. Plan only — do not implement. Write PLAN.md and stop.
 
 GOAL: $GOAL" 2>&1 | tee "$plan_log" ) &
   local _bg=$!
@@ -450,6 +465,32 @@ _recover_plan_from_log() {
   return 1
 }
 
+# When the model writes code as chat text instead of calling Write, extract
+# the first fenced code block from the log and save it to the target path.
+_recover_file_from_log() {
+  local log_file="$1" target="$2"
+  [[ -s "$log_file" ]] || return 1
+  local dir
+  dir="$(dirname "$target")"
+  [[ "$dir" != "." ]] && mkdir -p "$dir"
+  awk '
+    /^[[:space:]]*```[a-zA-Z]*[[:space:]]*$/ {
+      if (!in_block) { in_block = 1; next }
+    }
+    /^[[:space:]]*```[[:space:]]*$/ {
+      if (in_block) { exit }
+    }
+    in_block { print }
+  ' "$log_file" > "$target.recovered"
+  if [[ -s "$target.recovered" ]]; then
+    mv "$target.recovered" "$target"
+    log "Recovered $target from fenced block in $log_file (model did not call Write)."
+    return 0
+  fi
+  rm -f "$target.recovered"
+  return 1
+}
+
 if [[ -f PLAN.md ]]; then
   log "PLAN.md already exists — skipping task-planner."
   grep -qE '^### Group ' PLAN.md \
@@ -459,7 +500,7 @@ if [[ -f PLAN.md ]]; then
   grep -qiE '^- \[[ x~]\].*\btest' PLAN.md \
     || log "WARNING: existing PLAN.md has no unit-test file — consider deleting to re-plan."
   grep -qiE '^- \[[ x~]\].*(Makefile|CMakeLists|setup\.py|package\.json|build\.sh|Cargo\.toml)' PLAN.md \
-    || log "WARNING: existing PLAN.md has no build-system file — compile may fail."
+    || log "NOTE: existing PLAN.md has no build-system file — OK for trivial single-file programs."
 else
   MAX_PLAN_ATTEMPTS=2
   for ((attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt++)); do
@@ -486,9 +527,10 @@ else
     die "task-planner did not create PLAN.md after $MAX_PLAN_ATTEMPTS attempts — see $LOG_DIR/plan*.log (last pi exit=$plan_ec, last log=$plan_bytes bytes)"
   fi
   grep -qE '^- \[ \]|^- \[~\]|^- \[x\]' PLAN.md || die "PLAN.md has no task checklist — see $LOG_DIR/plan.log"
-  grep -qiE '^- \[[ x~]\].*\btest' PLAN.md || die "PLAN.md has no unit-test file — planner failed (see $LOG_DIR/plan.log)"
+  grep -qiE '^- \[[ x~]\].*\btest' PLAN.md \
+    || log "WARNING: PLAN.md has no test file — acceptable for trivial I/O programs (see $LOG_DIR/plan.log)"
   grep -qiE '^- \[[ x~]\].*(Makefile|CMakeLists|setup\.py|package\.json|build\.sh|Cargo\.toml)' PLAN.md \
-    || die "PLAN.md has no build-system task (Makefile/CMakeLists/etc) — delete PLAN.md to re-plan"
+    || log "NOTE: PLAN.md has no build-system file — OK for trivial single-file programs."
 
   log "PLAN.md created."
   ralph_dance "Plan ready!"
@@ -549,7 +591,27 @@ mark_task_done() {
 
 WRITE_RULES="1. Call Write to create the file at the exact path given. Do not ask for confirmation.
 2. Do not create any other files.
-3. Do not emit code in chat — only via the Write tool."
+3. Do not emit code in chat — only via the Write tool.
+4. Infer all content from the project goal and PLAN.md. NEVER ask for clarification or request input — write your best implementation immediately, even for headers and interface files.
+5. If writing a header or interface file, write a complete, reasonable declaration based on the goal. Never say 'please provide the content' — just write it."
+
+# Return file contents for every already-completed task file, formatted as
+# fenced code blocks. Empty output when no files are done yet.
+_existing_files_context() {
+  local out=""
+  while IFS= read -r line; do
+    local f
+    f="$(task_file_path "$line")"
+    [[ -f "$f" ]] || continue
+    out+="### $f
+\`\`\`
+$(cat "$f")
+\`\`\`
+
+"
+  done < <(grep -E '^- \[x\]' PLAN.md 2>/dev/null || true)
+  printf '%s' "$out"
+}
 
 for ((i = 1; i <= MAX_ITER; i++)); do
   task_line="$(next_task)"
@@ -565,7 +627,25 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   iter_log="$LOG_DIR/iter-$(printf '%02d' "$i").log"
   iter_err_log="$LOG_DIR/iter-$(printf '%02d' "$i").err"
 
-  write_prompt="Write the file: $task_file${task_desc:+
+  _plan_content="$(cat PLAN.md)"
+  _existing_ctx="$(_existing_files_context)"
+
+  write_prompt="PROJECT GOAL: $GOAL
+
+=== PLAN.md (context only — do not rewrite) ===
+$_plan_content
+=== END PLAN.md ==="
+
+  if [[ -n "$_existing_ctx" ]]; then
+    write_prompt+="
+
+=== Already-written files (for reference) ===
+$_existing_ctx=== END ==="
+  fi
+
+  write_prompt+="
+
+TASK: Write the file: $task_file${task_desc:+
 Description: $task_desc}
 
 Do not create any other files. Do not run tests. Do not modify PLAN.md."
@@ -582,9 +662,11 @@ Do not create any other files. Do not run tests. Do not modify PLAN.md."
     2> >(tee "$iter_err_log" >&2) | tee "$iter_log"
 
   if [[ ! -f "$task_file" ]]; then
-    ralph_sad "Model did not write $task_file — stalled."
-    log "Iteration $i: $task_file not found on disk after write call."
-    exit 3
+    _recover_file_from_log "$iter_log" "$task_file" || {
+      ralph_sad "Model did not write $task_file — stalled."
+      log "Iteration $i: $task_file not found on disk after write call."
+      exit 3
+    }
   fi
 
   # Run tests after every test file. The orchestrator owns this check; the
