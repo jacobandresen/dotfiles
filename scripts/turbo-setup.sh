@@ -5,7 +5,7 @@ IS_WSL=0
 case "$(uname -r)" in *microsoft* | *Microsoft*) IS_WSL=1 ;; esac
 
 if [ "$(uname)" = "Darwin" ]; then
-  brew install neovim make gcc llvm node python jq git fpc fzf ripgrep fd ollama
+  brew install neovim make gcc llvm node python jq git fpc fzf ripgrep fd ollama SDL2
   # clang-tidy ships inside llvm; symlink it into brew's bin (works on both Intel and Apple Silicon)
   LLVM_BIN="$(brew --prefix llvm)/bin"
   BREW_BIN="$(brew --prefix)/bin"
@@ -23,7 +23,7 @@ elif [ -f /etc/debian_version ]; then
   sudo apt-get update
   sudo apt-get install -y neovim build-essential make gcc clang clang-tidy nodejs npm python3 jq git fpc fzf ripgrep fd-find unzip
   # fd-find ships the binary as 'fdfind'; symlink to 'fd' so tools can find it
-  if command -v fdfind > /dev/null 2>&1 && [ ! -e /usr/local/bin/fd ]; then
+  if command -v fdfind >/dev/null 2>&1 && [ ! -e /usr/local/bin/fd ]; then
     sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
   fi
   # ollama — official install script (covers x86-64 and arm64)
@@ -43,6 +43,3 @@ fi
 
 # AI backend — installed via npm on all platforms
 npm install -g @earendil-works/pi-coding-agent
-
-# Pull the default local model (ollama auto-starts its server if needed)
-ollama pull gemma4
