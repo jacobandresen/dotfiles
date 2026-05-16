@@ -201,8 +201,7 @@ done
   RALPH_PLANNER_THINKING="${RALPH_PLANNER_THINKING:-${RALPH_THINKING:-$_auto_planner}}"
   RALPH_WRITE_THINKING="${RALPH_WRITE_THINKING:-${RALPH_THINKING:-$_auto_writer}}"
 
-  # Scale PLANNER_TIMEOUT by complexity when the user hasn't set it explicitly.
-  # Timeouts tuned for qwen3:8b on M2 with thinking=off.
+  # Scale timeouts by complexity. Tuned for qwen3:8b on M2 with thinking=off.
   if [[ "$PLANNER_TIMEOUT" == "auto" ]]; then
     case "$_complexity" in
       trivial) PLANNER_TIMEOUT=120  ;;
@@ -210,6 +209,11 @@ done
       complex) PLANNER_TIMEOUT=360  ;;
     esac
   fi
+  case "$_complexity" in
+    trivial) WRITE_TIMEOUT=90  ;;
+    simple)  WRITE_TIMEOUT=150 ;;
+    complex) WRITE_TIMEOUT=240 ;;
+  esac
 
   # Combined plan+write: single pi session for trivially simple single-file goals.
   # Saves one pi startup + model API round-trip. Falls back to normal write loop
@@ -592,7 +596,7 @@ REQUIREMENTS:
    RUNTIME ARTIFACTS: Do NOT list runtime-generated files (SQLite databases, output logs,
    generated images, temp files) under ## Files — only list source files that must be written.
    If the Test Command needs to verify a runtime artifact (e.g. a populated database), include
-   the step that produces it: e.g. 'python3 main.py && sqlite3 out.db "select count(*) from t;"'
+   the step that produces it: e.g. 'python3 main.py && sqlite3 out.db \"select count(*) from t;\" '
 
    SDL2 on macOS/homebrew: sdl2-config --cflags sets the SDL2 directory on the include path,
    so source files must use '#include <SDL.h>' (not '#include <SDL2/SDL.h>').
@@ -691,9 +695,11 @@ GOAL: $GOAL"
     2>&1 | tee "$plan_log" ) &
   local _bg=$!
 
-  local _elapsed=0 _src_file=""
+  # Total timeout = planning window + writing window (two files, two budgets).
+  local _combined_timeout=$(( PLANNER_TIMEOUT + WRITE_TIMEOUT ))
+  local _elapsed=0 _src_file="" _plan_found_at=-1
   while kill -0 "$_bg" 2>/dev/null; do
-    _planner_progress "$_elapsed" "$PLANNER_TIMEOUT"
+    _planner_progress "$_elapsed" "$_combined_timeout"
 
     # Once PLAN.md appears, grab the source file path to watch for.
     # Re-check each tick until we get a non-empty task line (guards against partial writes).
@@ -702,7 +708,8 @@ GOAL: $GOAL"
       _task_line="$(grep -m1 -E '^- \[ \]' PLAN.md 2>/dev/null || true)"
       if [[ -n "$_task_line" ]]; then
         _src_file="$(printf '%s\n' "$_task_line" | sed 's/^- \[[ x~]\] //' | awk '{print $1}')"
-        log "Combined: PLAN.md ready — watching for source file: $_src_file"
+        _plan_found_at="$_elapsed"
+        log "Combined: PLAN.md ready at ${_elapsed}s — watching for source file: $_src_file"
       fi
     fi
 
@@ -717,9 +724,9 @@ GOAL: $GOAL"
       return 0
     fi
 
-    if (( _elapsed >= PLANNER_TIMEOUT )); then
+    if (( _elapsed >= _combined_timeout )); then
       printf "\r\033[K"
-      log "Combined planner+writer timed out after ${PLANNER_TIMEOUT}s."
+      log "Combined planner+writer timed out after ${_combined_timeout}s (plan=${_plan_found_at}s src=not written)."
       pkill -TERM -P "$_bg" 2>/dev/null || true
       kill "$_bg" 2>/dev/null || true
       wait "$_bg" 2>/dev/null || true
@@ -729,7 +736,7 @@ GOAL: $GOAL"
     (( _elapsed += 2 ))
   done
   printf "\r\033[K"
-  wait "$_bg"
+  wait "$_bg" 2>/dev/null || true
 }
 
 # Recover PLAN.md when the planner emitted it as a fenced ```markdown block
@@ -962,12 +969,55 @@ mark_task_done() {
 
 WRITE_RULES="REMINDER: Call Write ONCE for the file you are given. Complete, runnable content. Stop immediately after. Nothing else."
 
+# Run pi in background and kill it the instant the target file appears on disk.
+# Prevents the model from running Bash commands (tests, cleanup, rm) after writing.
+# $1 = target file path, $2 = iter log, $3 = iter err log, $4 = write prompt.
+_run_writer() {
+  local target_file="$1" iter_log="$2" iter_err_log="$3" write_prompt="$4"
+  local target_dir
+  target_dir="$(dirname "$target_file")"
+  [[ "$target_dir" != "." ]] && mkdir -p "$target_dir"
+
+  ( turbo-pi-run \
+    --thinking "$RALPH_WRITE_THINKING" \
+    --model "$RALPH_MODEL" \
+    --session-dir "$SESSION_DIR" \
+    --append-system-prompt "$_WRITER_SYSTEM" \
+    --append-system-prompt "$WRITE_RULES" \
+    -p "$write_prompt" \
+    < /dev/null \
+    2> >(tee "$iter_err_log" >&2) | tee "$iter_log" ) &
+  local _bg=$!
+
+  local _elapsed=0
+  while kill -0 "$_bg" 2>/dev/null; do
+    if [[ -f "$target_file" ]]; then
+      log "$target_file written — stopping writer (${_elapsed}s)."
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      return 0
+    fi
+    if (( _elapsed >= WRITE_TIMEOUT )); then
+      log "Writer timed out after ${WRITE_TIMEOUT}s for $target_file."
+      pkill -TERM -P "$_bg" 2>/dev/null || true
+      kill "$_bg" 2>/dev/null || true
+      wait "$_bg" 2>/dev/null || true
+      return 1
+    fi
+    sleep 2
+    (( _elapsed += 2 ))
+  done
+  wait "$_bg" 2>/dev/null || true
+  [[ -f "$target_file" ]] && return 0 || return 1
+}
+
 # Extract only the Files, Test Command, and Dependencies sections from PLAN.md.
 # Keeps writer context small — the full plan text is not needed per-file.
 _plan_context() {
   [[ -f PLAN.md ]] || return
   awk '
-    /^## (Files|Test Command|Dependencies)[[:space:]]*$/ { in_sec=1; print; next }
+    /^## (Files|Test Command|Dependencies|Notes)[[:space:]]*$/ { in_sec=1; print; next }
     in_sec && /^## [A-Za-z]/ { in_sec=0 }
     in_sec { print }
   ' PLAN.md
@@ -1103,43 +1153,25 @@ Wrong: Emitting code in a fenced block without calling Write."
 
   # Fresh session per write call — small models do not need cross-call context
   # since the orchestrator owns state tracking.
-  turbo-pi-run \
-    --thinking "$RALPH_WRITE_THINKING" \
-    --model "$RALPH_MODEL" \
-    --session-dir "$SESSION_DIR" \
-    --append-system-prompt "$_WRITER_SYSTEM" \
-    --append-system-prompt "$WRITE_RULES" \
-    -p "$write_prompt" \
-    < /dev/null \
-    2> >(tee "$iter_err_log" >&2) | tee "$iter_log"
+  # Kill pi the instant the target file appears to prevent post-write tool loops.
+  if ! _run_writer "$task_file" "$iter_log" "$iter_err_log" "$write_prompt"; then
+    if [[ ! -f "$task_file" ]]; then
+      # Retry once with a simpler, more directive prompt.
+      log "Writer did not produce $task_file — retrying."
+      _retry_log="$LOG_DIR/iter-$(printf '%02d' "$i")-retry.log"
+      _retry_err_log="$LOG_DIR/iter-$(printf '%02d' "$i")-retry.err"
+      if ! _run_writer "$task_file" "$_retry_log" "$_retry_err_log" \
+          "Write file NOW: \`$task_file\`
+Derive every detail from GOAL and PLAN.md. Make your own decisions.
+Call Write exactly once with the complete file contents. Stop immediately after.
 
-  # Detect autonomy violations: model asked a question instead of writing.
-  # Retry once with an explicit scolding before giving up.
-  if [[ ! -f "$task_file" ]]; then
-    _stall_phrases="could you please|please provide|please tell|what content|shall I|should I write|what would you like|can you provide"
-    _stall_log=""
-    if grep -qiE "$_stall_phrases" "$iter_log" 2>/dev/null; then
-      log "Model violated autonomy rules (asked a question). Retrying with corrective prompt."
-      _stall_log="$LOG_DIR/iter-$(printf '%02d' "$i")-stall-retry.log"
-      turbo-pi-run \
-        --thinking "$RALPH_WRITE_THINKING" \
-        --model "$RALPH_MODEL" \
-        --session-dir "$SESSION_DIR" \
-        --append-system-prompt "$_WRITER_SYSTEM" \
-        --append-system-prompt "$WRITE_RULES" \
-        -p "You asked a clarifying question instead of writing the file. That is not allowed.
-Write the file NOW: $task_file
-Derive every detail from the GOAL and PLAN.md. Make your own decisions. Do not ask anything. Just write it." \
-        < /dev/null \
-        2>/dev/null | tee "$_stall_log"
-    fi
-    _recover_file_from_log "$iter_log" "$task_file" \
-      || { [[ -n "$_stall_log" ]] && _recover_file_from_log "$_stall_log" "$task_file"; } \
-      || {
+GOAL: $GOAL
+$(  _plan_context)"; then
         ralph_sad "Model did not write $task_file — stalled."
-        log "Iteration $i: $task_file not found on disk after write call."
+        log "Iteration $i: $task_file not written after retry."
         exit 3
-      }
+      fi
+    fi
   fi
 
   # Run tests after every test file. The orchestrator owns this check; the
@@ -1194,17 +1226,12 @@ $test_tail" \
   # After writing a build file, warn if it's missing planned source file paths.
   # This catches the common bug where the model uses 'main.c' instead of 'src/main.c'.
   if _is_build_file "$task_file"; then
-    local _build_content _missing_paths=()
     _build_content="$(cat "$task_file" 2>/dev/null)"
+    _missing_paths=()
     while IFS= read -r _pending_line; do
-      local _pf
       _pf="$(task_file_path "$_pending_line")"
-      # Skip other build files
       _is_build_file "$_pf" && continue
-      local _pf_base
       _pf_base="$(basename "$_pf")"
-      # Check if either the full path or just the basename appears in the build file.
-      # A mismatch means the path is wrong (e.g. 'main.c' instead of 'src/main.c').
       if printf '%s' "$_build_content" | grep -qF "$_pf"; then
         : # exact path present — good
       elif printf '%s' "$_build_content" | grep -qF "$_pf_base"; then
