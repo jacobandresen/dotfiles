@@ -1,59 +1,8 @@
 # Neovim Config
 
-My personal Neovim setup. Includes a custom Turbo Pascal 7-style menu bar (TurboVim), a curated plugin list, and a setup script for Arch, Ubuntu/Debian (including WSL), and macOS.
-
-## TurboVim
-
-A built-in menu bar inspired by Turbo Pascal 7, implemented as a local plugin (`dev/turbovim/`).
-
-![TurboVim menu bar active in Neovim, showing the top menu strip (File | Edit | Search | Code | Run | Window | Help), a neo-tree file explorer on the left, and Rust source code in the main editor pane — all rendered with the bamboo colorscheme.](screenshot/turbovim.png)
-
-
-### Keybindings
-
-| Key | Action |
-|-----|--------|
-| `<F10>` | Activate / deactivate the menu bar |
-| `Alt+f/e/s/c/r/w/h` | Jump directly to File / Edit / Search / Code / Run / Window / Help |
-| `←` / `→` | Navigate between menus (also switches dropdown when one is open) |
-| `↓` / `Enter` | Open the dropdown for the selected menu |
-| `↑` / `↓` | Navigate items within an open dropdown |
-| `Enter` | Execute the selected item |
-| `Esc` | Close dropdown (first press) or deactivate menu bar (second press) |
-
-### Menus
-
-| Menu | Contents |
-|------|----------|
-| **File** | Open file, Recent files, New buffer, Save, Save All, Close buffer, Quit |
-| **Edit** | Undo, Redo, Find, Find & Replace |
-| **Search** | Live grep, Find in buffer, Document symbols, Workspace symbols |
-| **Code** | Code action, Rename, Format, Hover docs, Diagnostics, References, Go to definition |
-| **Run** | Make, Terminal |
-| **Window** | Split horiz/vert, Close, Close others, Move left/right/up/down |
-| **Help** | Keymaps, Commands, Check health, Mason, About TurboVim |
-
-Search and file operations use Telescope. Code operations use the active LSP server.
-
-### Structure
-
-```
-dev/turbovim/lua/turbovim/
-  init.lua        setup entry point
-  state.lua       shared state
-  highlights.lua  TP7-style colors
-  menus.lua       menu definitions
-  bar.lua         tabline renderer
-  dropdown.lua    floating window submenus
-  keymaps.lua     navigation state machine
-  splash.lua      ASCII art logo (Help → About TurboVim)
-```
+My personal Neovim setup. Curated plugin list with a setup script for Arch, Ubuntu/Debian (including WSL), and macOS.
 
 ## Setup
-
-```sh
-scripts/turbo-setup.sh
-```
 
 Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 
@@ -98,7 +47,6 @@ Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 ### UI
 | Plugin | Purpose |
 |--------|---------|
-| [TurboVim](#turbovim) *(local)* | Turbo Pascal 7-style menu bar |
 | [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) | Status line |
 | [bamboo.nvim](https://github.com/ribru17/bamboo.nvim) | Default colorscheme |
 | [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) | Rendered Markdown in buffer |

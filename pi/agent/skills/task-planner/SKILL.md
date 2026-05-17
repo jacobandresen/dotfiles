@@ -34,6 +34,18 @@ a file. If your turn ends without a Write tool call targeting `PLAN.md`, you hav
 - If a build system is needed (external libraries, multi-file projects), list `Makefile` first.
 - For trivial single-file programs: no Makefile, no modules — one source file only.
 
+## Language-specific rules
+
+**C# / dotnet**: Every dotnet project requires a `.csproj` file. Without it, `dotnet run` and
+`dotnet test` fail immediately with MSB1003. List the `.csproj` **first**, before any `.cs` files.
+- Simple program: `- [ ] fibonacci.csproj` then `- [ ] Program.cs`, test command: `dotnet run --project fibonacci.csproj`
+- With tests: `- [ ] src/app.csproj`, `- [ ] src/Program.cs`, `- [ ] tests/tests.csproj`, `- [ ] tests/Tests.cs`, test command: `dotnet test tests/tests.csproj`
+- NEVER put `dotnet test` or `dotnet run` in Test Command unless the referenced `.csproj` appears in `## Files`.
+
+**Python**: Use `python3`, never `python`. The shell subprocess has no aliases.
+
+**C/C++**: Use `make` when a `Makefile` is in the file list; otherwise inline: `gcc main.c -o main && ./main`.
+
 ## Rules for the Test Command
 
 The test command runs in a plain `bash -c` subprocess with **no shell aliases**. Use explicit
@@ -44,6 +56,7 @@ binary names only:
 | `python script.py` | `python3 script.py` |
 | `make` (with no Makefile in the file list) | `gcc main.c -o main && ./main` |
 | `./binary` (graphical/interactive program) | `make` (compile-only smoke test) |
+| `dotnet test` (no .csproj in file list) | `dotnet run --project app.csproj` |
 
 The test command must exit non-zero on failure. For trivial single-file programs, inline
 compilation is required — compile and run in the same command.

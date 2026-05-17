@@ -23,6 +23,15 @@
           ]
         },
         {
+          "_launch": true,
+          "contextWindow": 131072,
+          "id": "qwen3:6b",
+          "input": [
+            "text"
+          ],
+          "reasoning": true
+        },
+        {
           "contextWindow": 131072,
           "id": "gemma3:4b",
           "input": [
