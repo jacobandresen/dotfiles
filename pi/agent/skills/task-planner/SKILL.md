@@ -20,7 +20,8 @@ a file. If your turn ends without a Write tool call targeting `PLAN.md`, you hav
 <single portable shell command that exits non-zero on failure>
 
 ## Dependencies
-- <every tool and library required, e.g. gcc, make, python3, libcurl>
+- <compiler/runtime, required libraries, AND the lint tool for the language>
+- Python → ruff | C/C++ → clang-tidy | Go → go vet (built-in) | Rust → cargo clippy | TypeScript → tsc | C# → dotnet format (built-in)
 ```
 
 ## Rules for the file list
@@ -33,6 +34,7 @@ a file. If your turn ends without a Write tool call targeting `PLAN.md`, you hav
   never `main`.
 - If a build system is needed (external libraries, multi-file projects), list `Makefile` first.
 - For trivial single-file programs: no Makefile, no modules — one source file only.
+- **Never list auto-generated or binary output files** as write targets. This includes database files (`.db`, `.sqlite`), compiled binaries, build artifacts (`.o`, `.class`), and any file created at runtime by the program itself. Only list source files the agent must write.
 
 ## Language-specific rules
 
