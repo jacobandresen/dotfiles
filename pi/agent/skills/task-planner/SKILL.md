@@ -5,7 +5,9 @@ description: Break down a software goal into a tracked PLAN.md with a flat task 
 
 # Task Planner
 
-Create `PLAN.md` in the current working directory by **invoking the Write tool** with the full absolute path. Do not emit the plan as chat text or a fenced code block — that does not create a file. If your turn ends without a Write tool call targeting `PLAN.md`, you have failed.
+Create `PLAN.md` in the current working directory by **invoking the Write tool** with the full
+absolute path. Do not emit the plan as chat text or a fenced code block — that does not create
+a file. If your turn ends without a Write tool call targeting `PLAN.md`, you have failed.
 
 ## PLAN.md format
 
@@ -23,10 +25,12 @@ Create `PLAN.md` in the current working directory by **invoking the Write tool**
 
 ## Rules for the file list
 
-- Every task line **must** start with `- [ ] `. Numbered lists, plain bullets, and heading-style tasks are rejected by downstream tooling.
+- Every task line **must** start with `- [ ] `. Numbered lists, plain bullets, and heading-style
+  tasks are rejected by downstream tooling.
 - List files in dependency order: dependencies before dependents.
 - Name files explicitly (`src/foo.c`, `tests/test_foo.c`, `Makefile`).
-- Pair every implementation file with a unit-test file. Tests call named functions from modules, never `main`.
+- Pair every implementation file with a unit-test file. Tests call named functions from modules,
+  never `main`.
 - If a build system is needed (external libraries, multi-file projects), list `Makefile` first.
 - For trivial single-file programs: no Makefile, no modules — one source file only.
 
@@ -44,10 +48,22 @@ binary names only:
 The test command must exit non-zero on failure. For trivial single-file programs, inline
 compilation is required — compile and run in the same command.
 
+## Internet safety
+
+**Never** push code, publish packages, or send data to external services without explicit user
+approval. This includes:
+- `git push` / `gh pr create`
+- `npm publish` / `pip upload` / `cargo publish`
+- `curl -X POST` or any write request to an external URL
+- Deploying to cloud services (Vercel, AWS, GCP, Fly, etc.)
+
+Always stop and ask before any of these. If in doubt, ask.
+
 ## Autonomous execution
 
-Never pause for confirmation or clarification. If a requirement is ambiguous, make the simplest
-reasonable assumption and continue.
+Never pause for clarification on implementation details. If a requirement is ambiguous, make the
+simplest reasonable assumption and continue. Exception: anything that would publish or push data
+externally — always ask first.
 
 ## When PLAN.md already exists
 
