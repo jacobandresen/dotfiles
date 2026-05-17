@@ -32,6 +32,9 @@ a file. If your turn ends without a Write tool call targeting `PLAN.md`, you hav
 - Name files explicitly (`src/foo.c`, `tests/test_foo.c`, `Makefile`).
 - Pair every implementation file with a unit-test file. Tests call named functions from modules,
   never `main`.
+- **Exception — demonstration scripts**: if the goal is to *show* or *demonstrate* behavior
+  (e.g. "write a program that X", "show that X works", "print X"), the program itself is the
+  test. Do NOT add a separate unit-test file. Use program execution as the test command.
 - If a build system is needed (external libraries, multi-file projects), list `Makefile` first.
 - For trivial single-file programs: no Makefile, no modules — one source file only.
 - **Never list auto-generated or binary output files** as write targets. This includes database files (`.db`, `.sqlite`), compiled binaries, build artifacts (`.o`, `.class`), and any file created at runtime by the program itself. Only list source files the agent must write.
