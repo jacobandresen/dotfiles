@@ -31,11 +31,6 @@ deps-arch:
 deps-ubuntu:
 	sudo apt-get update
 	sudo apt-get install -y git
-	@echo "Installing Neovim from PPA (apt version is often outdated)..."
-	sudo apt-get install -y software-properties-common
-	sudo add-apt-repository -y ppa:neovim-ppa/unstable
-	sudo apt-get update
-	sudo apt-get install -y neovim
 	@echo "Install WezTerm from https://wezfurlong.org/wezterm/install/linux.html"
 	@echo "Install Ollama from https://ollama.com/download/linux"
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
@@ -43,11 +38,6 @@ deps-ubuntu:
 deps-debian:
 	sudo apt-get update
 	sudo apt-get install -y git
-	@echo "Installing Neovim from PPA (apt version is often outdated)..."
-	sudo apt-get install -y software-properties-common
-	sudo add-apt-repository -y ppa:neovim-ppa/unstable
-	sudo apt-get update
-	sudo apt-get install -y neovim
 	@echo "Install WezTerm from https://wezfurlong.org/wezterm/install/linux.html"
 	@echo "Install Ollama from https://ollama.com/download/linux"
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
