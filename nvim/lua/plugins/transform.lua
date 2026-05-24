@@ -70,7 +70,7 @@ local function telescope_transform(mode)
   local action_state = require("telescope.actions.state")
   local items = {}
   for _, t in ipairs(M.transformations) do
-    table.insert(items, { display = string.format("[%s] %s - %s", t.key, t.name, t.desc), name = t.name, cmd = t.cmd })
+    table.insert(items, { display = string.format("%s — %s", t.name, t.desc), name = t.name, cmd = t.cmd })
   end
   pickers.new({}, {
     prompt_title = "Transform",
@@ -92,24 +92,20 @@ local function telescope_transform(mode)
   }):find()
 end
 
+local function transform_picker_visual()
+  local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+  vim.api.nvim_feedkeys(esc, "x", false)
+  vim.schedule(function() telescope_transform("v") end)
+end
+
 return {
   "nvim-lua/plenary.nvim",
+  cmd = "Transform",
+  keys = {
+    { "<leader>mm", function() telescope_transform("n") end, desc = "Transform picker" },
+    { "<leader>mm", transform_picker_visual, mode = "v", desc = "Transform picker (selection)" },
+  },
   config = function()
-    for _, t in ipairs(M.transformations) do
-      local fn = function() M.transform(t.cmd, vim.fn.mode()) end
-      vim.keymap.set("n", "<leader>" .. t.key, fn, { desc = t.name })
-      vim.keymap.set("v", "<leader>" .. t.key, function()
-        local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
-        vim.api.nvim_feedkeys(esc, "x", false)
-        vim.schedule(function() M.transform(t.cmd, "v") end)
-      end, { desc = t.name .. " (selection)" })
-    end
     vim.api.nvim_create_user_command("Transform", function() telescope_transform("n") end, { desc = "Transform picker" })
-    vim.keymap.set("n", "<leader>mm", function() telescope_transform("n") end, { desc = "Transform picker" })
-    vim.keymap.set("v", "<leader>mm", function()
-      local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
-      vim.api.nvim_feedkeys(esc, "x", false)
-      vim.schedule(function() telescope_transform("v") end)
-    end, { desc = "Transform picker (selection)" })
   end,
 }

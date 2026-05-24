@@ -1,6 +1,14 @@
 -- treat .jsonl as json
 vim.filetype.add({ extension = { jsonl = "json" } })
 
+-- silently update plugins on startup (no notification, no UI window)
+vim.api.nvim_create_autocmd("User", {
+  pattern = "VeryLazy",
+  callback = function()
+    require("lazy").update({ show = false, wait = false })
+  end,
+})
+
 -- use jq as formatprg for json files
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "json" },
@@ -34,6 +42,8 @@ vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
 })
 
 -- LSP keymaps (supplement LazyVim defaults)
+-- Type def, references, implementations, code action, and rename use LazyVim's
+-- defaults: gy, gr, gI, <leader>ca, <leader>cr. Only the extras live here.
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)
     local buf = args.buf
@@ -42,12 +52,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
     local map = function(lhs, rhs, desc)
       vim.keymap.set("n", lhs, rhs, { buffer = buf, desc = desc })
     end
-    map("go",          function() telescope.lsp_type_definitions() end,  "LSP type definitions")
-    map("gR",          function() telescope.lsp_references() end,        "LSP references")
-    map("gi",          function() telescope.lsp_implementations() end,   "LSP implementations")
-    map("ge",          function() telescope.diagnostics() end,           "LSP diagnostics")
-    map("<leader>vws", function() vim.lsp.buf.workspace_symbol() end,    "Workspace symbol")
-    map("<leader>xca", function() vim.lsp.buf.code_action() end,         "Code action")
-    map("<leader>xrn", function() vim.lsp.buf.rename() end,              "Rename")
+    map("ge", function() telescope.diagnostics() end, "LSP diagnostics")
   end,
 })

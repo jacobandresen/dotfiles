@@ -22,7 +22,7 @@ require("lazy").setup({
   },
   defaults = { lazy = false, version = false },
   install = { colorscheme = { "bamboo", "tokyonight", "habamax" } },
-  checker = { enabled = true },
+  checker = { enabled = true, notify = false },
   performance = {
     rtp = {
       disabled_plugins = {

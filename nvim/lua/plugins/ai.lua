@@ -23,9 +23,9 @@ return {
       "nvim-treesitter/nvim-treesitter",
     },
     keys = {
-      { "<leader>cc", "<cmd>CodeCompanionChat Toggle<cr>", desc = "Toggle AI chat" },
-      { "<leader>ca", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
-      { "<leader>ci", "<cmd>CodeCompanion<cr>", desc = "Inline AI", mode = { "n", "v" } },
+      { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "AI chat (toggle)" },
+      { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
+      { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "AI inline", mode = { "n", "v" } },
     },
     config = function()
       require("codecompanion").setup({
