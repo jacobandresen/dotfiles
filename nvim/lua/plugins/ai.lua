@@ -11,6 +11,30 @@ return {
       { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "AI inline", mode = { "n", "v" } },
     },
     config = function()
+      -- Extract the first complete JSON object from a string, ignoring any
+      -- trailing text the model appends after the closing brace.
+      local function extract_json(str)
+        local start = str:find("{")
+        if not start then return nil end
+        local depth, in_str, escape = 0, false, false
+        for i = start, #str do
+          local c = str:sub(i, i)
+          if escape then
+            escape = false
+          elseif c == "\\" and in_str then
+            escape = true
+          elseif c == '"' then
+            in_str = not in_str
+          elseif not in_str then
+            if c == "{" then depth = depth + 1
+            elseif c == "}" then
+              depth = depth - 1
+              if depth == 0 then return str:sub(start, i) end
+            end
+          end
+        end
+      end
+
       require("codecompanion").setup({
         adapters = {
           http = {
@@ -25,17 +49,25 @@ return {
                   url = "http://localhost:1234",
                   api_key = "lm-studio",
                 },
+                handlers = {
+                  -- Strip any trailing prose the model appends after the JSON object
+                  -- so that the inline strategy's JSON parser doesn't fail.
+                  parse_inline = function(self, data, _)
+                    if not data or data.status ~= "success" then return data end
+                    local clean = extract_json(data.output or "")
+                    if clean then
+                      return { status = "success", output = clean }
+                    end
+                    return data
+                  end,
+                },
               })
             end,
           },
         },
         strategies = {
           chat = { adapter = "lmstudio" },
-          inline = {
-            adapter = "lmstudio",
-            -- Force placement so the model doesn't need to return JSON classification
-            opts = { placement = "add" },
-          },
+          inline = { adapter = "lmstudio" },
         },
       })
     end,
