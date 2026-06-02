@@ -31,7 +31,11 @@ return {
         },
         strategies = {
           chat = { adapter = "lmstudio" },
-          inline = { adapter = "lmstudio" },
+          inline = {
+            adapter = "lmstudio",
+            -- Force placement so the model doesn't need to return JSON classification
+            opts = { placement = "add" },
+          },
         },
       })
     end,
