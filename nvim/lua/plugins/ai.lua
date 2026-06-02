@@ -50,15 +50,24 @@ return {
                   api_key = "lm-studio",
                 },
                 handlers = {
-                  -- Strip any trailing prose the model appends after the JSON object
-                  -- so that the inline strategy's JSON parser doesn't fail.
-                  parse_inline = function(self, data, _)
-                    if not data or data.status ~= "success" then return data end
-                    local clean = extract_json(data.output or "")
-                    if clean then
-                      return { status = "success", output = clean }
+                  -- parse_inline is an alias for inline_output. It receives the raw
+                  -- plenary HTTP response ({body=..., status=200, ...}) and must return
+                  -- {status="success", output=<model text>}.
+                  -- We decode the response exactly as the openai adapter does, then
+                  -- strip any trailing prose Phi appends after the closing JSON brace.
+                  inline_output = function(self, data, _)
+                    if not data or data == "" then return end
+                    local ok, json = pcall(vim.json.decode, data.body, { luanil = { object = true } })
+                    if not ok then
+                      return { status = "error", output = json }
                     end
-                    return data
+                    local content = json.choices and json.choices[1]
+                      and json.choices[1].message
+                      and json.choices[1].message.content
+                    if not content then return end
+                    -- Strip trailing prose after the closing brace of the JSON object
+                    local clean = extract_json(content) or content
+                    return { status = "success", output = clean }
                   end,
                 },
               })
