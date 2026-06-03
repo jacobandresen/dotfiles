@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-pi install-skills setup-lmstudio deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-pi install-skills deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-pi setup-lmstudio
+install: deps install-nvim install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -86,6 +86,3 @@ install-skills:
 		echo "  ✓ $$name"; \
 	done
 
-setup-lmstudio:
-	@echo "Setting up LM Studio + Phi-3.5 Mini..."
-	@bash scripts/setup-lmstudio.sh

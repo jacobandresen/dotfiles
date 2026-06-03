@@ -4,11 +4,11 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "lmstudio/phi-3.5-mini-instruct",
+  "defaultModel": "ibm/granite-4.1-3b",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
-  "lastChangelogVersion": "0.74.0",
+  "lastChangelogVersion": "0.78.0",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
