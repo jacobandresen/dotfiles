@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-pi install-skills deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-pi
+install: deps install-nvim install-zsh install-mc install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -18,6 +18,7 @@ else ifneq ($(wildcard /etc/debian_version),)
 else
 	$(error Unsupported OS: $(OS))
 endif
+	$(MAKE) install-fonts
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
@@ -68,6 +69,33 @@ install-nvim:
 		echo "  ✓ ~/.config/nvim -> $(CURDIR)/nvim"; \
 	fi
 
+install-zsh:
+	@echo "Installing zsh config..."
+	@if [ -L $(HOME)/.zshrc ]; then \
+		echo "  ✓ ~/.zshrc already symlinked"; \
+	elif [ -e $(HOME)/.zshrc ]; then \
+		mv $(HOME)/.zshrc $(HOME)/.zshrc.bak; \
+		ln -s $(CURDIR)/.zshrc $(HOME)/.zshrc; \
+		echo "  ✓ backed up old ~/.zshrc -> ~/.zshrc.bak, linked repo copy"; \
+	else \
+		ln -s $(CURDIR)/.zshrc $(HOME)/.zshrc; \
+		echo "  ✓ ~/.zshrc -> $(CURDIR)/.zshrc"; \
+	fi
+
+install-mc:
+	@echo "Installing Midnight Commander config..."
+	@mkdir -p $(HOME)/.config/mc
+	@if [ -L $(HOME)/.config/mc/ini ]; then \
+		echo "  ✓ ~/.config/mc/ini already symlinked"; \
+	elif [ -e $(HOME)/.config/mc/ini ]; then \
+		mv $(HOME)/.config/mc/ini $(HOME)/.config/mc/ini.bak; \
+		ln -s $(CURDIR)/mc/ini $(HOME)/.config/mc/ini; \
+		echo "  ✓ backed up old ini -> ini.bak, linked repo copy"; \
+	else \
+		ln -s $(CURDIR)/mc/ini $(HOME)/.config/mc/ini; \
+		echo "  ✓ ~/.config/mc/ini -> $(CURDIR)/mc/ini"; \
+	fi
+
 install-pi: install-skills
 	@echo "Installing pi agent config..."
 	@mkdir -p $(HOME)/.pi/agent
@@ -75,6 +103,32 @@ install-pi: install-skills
 	@cp pi/agent/settings.json $(HOME)/.pi/agent/settings.json
 	@echo "  ✓ models.json"
 	@echo "  ✓ settings.json"
+
+FONT_DIR := $(HOME)/.local/share/fonts
+HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz
+
+install-fonts:
+	@echo "Installing Hack Nerd Font..."
+ifeq ($(OS),Darwin)
+	@if fc-list 2>/dev/null | grep -qi "Hack Nerd Font"; then \
+		echo "  ✓ Hack Nerd Font already installed"; \
+	else \
+		brew install --cask font-hack-nerd-font; \
+	fi
+else
+	@if fc-list | grep -qi "Hack Nerd Font"; then \
+		echo "  ✓ Hack Nerd Font already installed"; \
+	else \
+		tmp=$$(mktemp -d) && \
+		echo "  ↓ downloading Hack.tar.xz..." && \
+		curl -fsSL "$(HACK_NERD_URL)" -o "$$tmp/Hack.tar.xz" && \
+		mkdir -p "$(FONT_DIR)/HackNerdFont" && \
+		tar -xJf "$$tmp/Hack.tar.xz" -C "$(FONT_DIR)/HackNerdFont" && \
+		rm -rf "$$tmp" && \
+		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
+		echo "  ✓ Hack Nerd Font -> $(FONT_DIR)/HackNerdFont"; \
+	fi
+endif
 
 install-skills:
 	@echo "Installing pi skills..."

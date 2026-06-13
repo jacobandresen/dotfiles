@@ -1,19 +1,11 @@
 return {
-  -- dashboard: matrix-rain Neovim logo with green binary rain (replaces LazyVim default header)
+  -- dashboard: TurboVim block logo (replaces LazyVim default header)
   {
     "folke/snacks.nvim",
     opts = function(_, opts)
-      -- Matrix-green highlight for the binary rain; re-applied on colorscheme change
-      local function set_matrix_hl()
-        vim.api.nvim_set_hl(0, "SnacksDashboardMatrix", { fg = "#00ff41", bold = true })
-      end
-      set_matrix_hl()
-      vim.api.nvim_create_autocmd("ColorScheme", { callback = set_matrix_hl })
-
-      local rain = "SnacksDashboardMatrix"
       local head = "SnacksDashboardHeader"
-      local function line(str, hl)
-        return { str .. "\n", hl = hl, align = "center" }
+      local function line(str)
+        return { str .. "\n", hl = head, align = "center" }
       end
 
       opts.dashboard = opts.dashboard or {}
@@ -21,15 +13,11 @@ return {
         {
           padding = 1,
           text = {
-            line(" 1 0 1 1 0    0 1 0 0 1 1 0    1 1 0 0 1 0    1 0 1 1", rain),
-            line("███╗   ██╗███████╗ ██████╗ ██╗   ██╗██╗███╗   ███╗", head),
-            line("████╗  ██║██╔════╝██╔═══██╗██║   ██║██║████╗ ████║", head),
-            line("██╔██╗ ██║█████╗  ██║   ██║██║   ██║██║██╔████╔██║", head),
-            line("██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║╚██╔╝██║", head),
-            line("██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║██║ ╚═╝ ██║", head),
-            line("╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝╚═╝     ╚═╝", head),
-            line(" 0 1 1 0 1    1 0 1 1 0 0 1    0 0 1 1 0 1    0 1 1 0", rain),
-            line("       // wake up, neo... the editor has you", rain),
+            line("████████ ██    ██ ██████  ██████   ██████  ██    ██ ██ ███    ███"),
+            line("   ██    ██    ██ ██   ██ ██   ██ ██    ██ ██    ██ ██ ████  ████"),
+            line("   ██    ██    ██ ██████  ██████  ██    ██ ██    ██ ██ ██ ████ ██"),
+            line("   ██    ██    ██ ██   ██ ██   ██ ██    ██  ██  ██  ██ ██  ██  ██"),
+            line("   ██     ██████  ██   ██ ██████   ██████    ████   ██ ██      ██"),
           },
         },
         { section = "keys", gap = 1, padding = 1 },
