@@ -9,9 +9,8 @@ config.initial_rows = 40
 -- block cursor -- the classic "READY." look. Based on the colodore VIC-II
 -- palette, brightened a touch so text and highlights stay legible (the authentic
 -- C64 blue-on-blue is too low-contrast to read for long).
--- NOTE: no config.color_scheme here on purpose -- colorscheme.lua
--- keys off its absence to load Neovim's Borland theme (still DOS-blue; ask if you
--- want a matching C64 Neovim theme too).
+-- NOTE: no config.color_scheme here on purpose -- colorscheme.lua keys off its
+-- absence to load Neovim's matching C64 theme.
 config.colors = {
   foreground = "#aaa6f5", -- brightened C64 light blue -- legible on the blue screen
   background = "#2e2c9b", -- C64 blue (screen)
