@@ -106,6 +106,10 @@ install-pi: install-skills
 
 FONT_DIR := $(HOME)/.local/share/fonts
 HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz
+# C64 Pro Mono is fetched at install time, not committed: its license forbids
+# redistributing the .ttf but permits download from the official source.
+C64_FONT_URL := https://style64.org/file/C64_TrueType_v1.2.1-STYLE.zip
+C64_FONT_TTF := fonts/C64_Pro_Mono-STYLE.ttf
 
 install-fonts:
 	@echo "Installing Hack Nerd Font..."
@@ -114,6 +118,18 @@ ifeq ($(OS),Darwin)
 		echo "  ✓ Hack Nerd Font already installed"; \
 	else \
 		brew install --cask font-hack-nerd-font; \
+	fi
+	@echo "Installing C64 Pro Mono..."
+	@if fc-list 2>/dev/null | grep -qi "C64 Pro Mono" || [ -f "$(HOME)/Library/Fonts/C64_Pro_Mono-STYLE.ttf" ]; then \
+		echo "  ✓ C64 Pro Mono already installed"; \
+	else \
+		tmp=$$(mktemp -d) && \
+		echo "  ↓ downloading C64 Pro Mono from style64.org..." && \
+		curl -fsSL "$(C64_FONT_URL)" -o "$$tmp/c64.zip" && \
+		( cd "$$tmp" && unzip -qo c64.zip ) && \
+		cp "$$tmp"/*/$(C64_FONT_TTF) "$(HOME)/Library/Fonts/" && \
+		rm -rf "$$tmp" && \
+		echo "  ✓ C64 Pro Mono -> ~/Library/Fonts/C64_Pro_Mono-STYLE.ttf"; \
 	fi
 else
 	@if fc-list | grep -qi "Hack Nerd Font"; then \
@@ -127,6 +143,20 @@ else
 		rm -rf "$$tmp" && \
 		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
 		echo "  ✓ Hack Nerd Font -> $(FONT_DIR)/HackNerdFont"; \
+	fi
+	@echo "Installing C64 Pro Mono..."
+	@if fc-list | grep -qi "C64 Pro Mono"; then \
+		echo "  ✓ C64 Pro Mono already installed"; \
+	else \
+		tmp=$$(mktemp -d) && \
+		echo "  ↓ downloading C64 Pro Mono from style64.org..." && \
+		curl -fsSL "$(C64_FONT_URL)" -o "$$tmp/c64.zip" && \
+		( cd "$$tmp" && unzip -qo c64.zip ) && \
+		mkdir -p "$(FONT_DIR)/C64ProMono" && \
+		cp "$$tmp"/*/$(C64_FONT_TTF) "$(FONT_DIR)/C64ProMono/" && \
+		rm -rf "$$tmp" && \
+		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
+		echo "  ✓ C64 Pro Mono -> $(FONT_DIR)/C64ProMono"; \
 	fi
 endif
 
