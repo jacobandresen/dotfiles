@@ -50,15 +50,14 @@ config.colors = {
   },
 }
 
--- Hack Nerd Font: clean and legible at small sizes, and the patched Nerd Font
--- build carries the icon glyphs Neovim uses (oil/mini.icons, fidget,
--- render-markdown) in one consistent typeface -- the Mono variant keeps them
--- single-cell so the dashboard logo and Turbo Pascal menubar stay aligned.
--- Install it with `make install-fonts`; falls back to plain Hack until then.
--- (Keeping Hack over a real PETSCII font so Neovim's glyphs still render -- the
--- C64 look comes from the colors above, not the font.)
-config.font = wezterm.font_with_fallback({ "Hack Nerd Font Mono", "Hack" })
-config.font_size = 14
+-- C64 Pro Mono: authentic PETSCII glyphs for the real Commodore look. Hack Nerd
+-- Font Mono falls back behind it for any glyph C64 Pro lacks -- chiefly the icon
+-- glyphs Neovim uses (oil/mini.icons, fidget, render-markdown) -- and the Mono
+-- variant keeps those single-cell so the dashboard logo and Turbo Pascal menubar
+-- stay aligned. Install both with `make install-fonts`; falls back to plain Hack
+-- until then.
+config.font = wezterm.font_with_fallback({ "C64 Pro Mono", "Hack Nerd Font Mono", "Hack" })
+config.font_size = 12
 
 config.default_cursor_style = "BlinkingBlock"
 config.cursor_blink_rate = 530

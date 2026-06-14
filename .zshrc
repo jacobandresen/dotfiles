@@ -15,7 +15,19 @@ source "$ZSH/oh-my-zsh.sh"
 # Commodore 64-style prompt: BASIC printed READY. and left you on a fresh line
 # with a blinking block cursor -- no path, no prefix. Type right there.
 PROMPT=$'READY.\n'
-RPROMPT=''
+
+# Right side: a minimal cwd and the current git branch, kept dim so the READY.
+# prompt stays the focus. vcs_info fills in the branch (and rebase/merge state)
+# before each prompt. %(4~|…/%3~|%~) shows the full home-relative path but trims
+# deep ones to their last three components. %F{8} = dim grey, %F{6} = cyan (both
+# from the C64 VIC-II palette set in .wezterm.lua).
+setopt prompt_subst
+autoload -Uz add-zsh-hook vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats       ' %F{6}(%b)%f'
+zstyle ':vcs_info:git:*' actionformats ' %F{6}(%b|%a)%f'
+add-zsh-hook precmd vcs_info
+RPROMPT='%F{8}%(4~|…/%3~|%~)%f${vcs_info_msg_0_}'
 
 
 # Aliases
@@ -33,7 +45,7 @@ export VIEWER='nvim -R'
 
 # Commodore 64-style boot banner, with the real OS name + RAM.
 #   **** ARCH LINUX ****   (or UBUNTU / MACOS)
-#   *** TAARNBY KODEHULE, 2026 ***
+#   *** ZSH V5.9 ***       (the running shell + version, like the C64's BASIC V2)
 #    <total>G RAM SYSTEM  <free> MB FREE
 _c64_boot() {
   local os ram_total ram_free
@@ -56,7 +68,7 @@ _c64_boot() {
   os=${(U)os}
   print -r -- ""
   print -r -- "    **** ${os} ****"
-  print -r -- "   *** TAARNBY KODEHULE, 2026 ***"
+  print -r -- "   *** ZSH V${ZSH_VERSION} ***"
   print -r -- ""
   print -r -- " ${ram_total}G RAM SYSTEM  ${ram_free} MB FREE"
   print -r -- ""

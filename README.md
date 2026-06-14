@@ -23,6 +23,26 @@ Built on [LazyVim](https://www.lazyvim.org/).
 
 See [`nvim/README.md`](nvim/README.md) for the full plugin list, keybindings, and setup notes.
 
+## WezTerm
+
+`.wezterm.lua` themes the terminal as a Commodore 64 boot screen (colodore VIC-II
+palette, light-blue-on-blue, blinking block cursor) using the **C64 Pro Mono**
+font with Hack Nerd Font Mono as a glyph fallback. `make install-fonts` installs
+both.
+
+A matching **"C64" app icon** (committed under `icons/wezterm/`) can be installed
+separately — it's intentionally *not* part of `make install`:
+
+```sh
+make install-icon
+```
+
+- **Linux** (Arch / Ubuntu): drops PNGs into `~/.local/share/icons/hicolor/` and
+  refreshes the icon caches. Log out/in if the launcher doesn't update.
+- **macOS**: rebuilds `WezTerm.app`'s `.icns` with `sips`/`iconutil` (backs up the
+  original to `terminal.icns.orig`). Note this edits the signed app bundle, so it's
+  reset on the next WezTerm update; restore with the backed-up file.
+
 ## pi agent
 
 [pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Phi-3.5 Mini** (2.2 GB) — fits comfortably in 8 GB unified memory and supports tool use for file reading, bash execution, and edits inside Neovim.

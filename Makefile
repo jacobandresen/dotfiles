@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts install-icon deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -158,6 +158,59 @@ else
 		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
 		echo "  ✓ C64 Pro Mono -> $(FONT_DIR)/C64ProMono"; \
 	fi
+endif
+
+# Custom "C64" wezterm icon (light-blue PETSCII on the C64 blue screen). The PNGs
+# are committed (rendered output is fine under the C64 Pro license — only the .ttf
+# itself can't be redistributed). Standalone on purpose: NOT in the `install`
+# chain because the macOS path edits the WezTerm.app bundle (see caveats below).
+ICON_SRC  := $(CURDIR)/icons/wezterm
+ICON_NAME := org.wezfurlong.wezterm
+
+install-icon:
+	@echo "Installing C64 wezterm icon..."
+ifeq ($(OS),Darwin)
+	@app=""; \
+	for cand in /Applications/WezTerm.app $(HOME)/Applications/WezTerm.app; do \
+		[ -d "$$cand" ] && app="$$cand" && break; \
+	done; \
+	if [ -z "$$app" ]; then \
+		echo "  ⚠ WezTerm.app not found in /Applications or ~/Applications — skipping"; \
+	else \
+		set -e; \
+		echo "  • target: $$app"; \
+		tmp=$$(mktemp -d); iconset="$$tmp/wezterm.iconset"; mkdir -p "$$iconset"; \
+		for s in 16 32 128 256 512; do \
+			sips -z $$s $$s "$(ICON_SRC)/master-1024.png" --out "$$iconset/icon_$${s}x$${s}.png" >/dev/null; \
+			d=$$((s * 2)); \
+			sips -z $$d $$d "$(ICON_SRC)/master-1024.png" --out "$$iconset/icon_$${s}x$${s}@2x.png" >/dev/null; \
+		done; \
+		iconutil -c icns "$$iconset" -o "$$tmp/icon.icns"; \
+		res="$$app/Contents/Resources"; \
+		icns=$$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$$app/Contents/Info.plist" 2>/dev/null || echo terminal); \
+		case "$$icns" in *.icns) ;; *) icns="$$icns.icns" ;; esac; \
+		if [ -f "$$res/$$icns" ] && [ ! -f "$$res/$$icns.orig" ]; then \
+			cp "$$res/$$icns" "$$res/$$icns.orig"; \
+			echo "  ✓ backed up original -> Contents/Resources/$$icns.orig"; \
+		fi; \
+		cp "$$tmp/icon.icns" "$$res/$$icns"; \
+		rm -rf "$$tmp"; \
+		touch "$$app"; killall Dock >/dev/null 2>&1 || true; \
+		echo "  ✓ replaced WezTerm.app icon ($$icns)"; \
+		echo "  ⚠ editing the signed bundle invalidates its code signature, is reset on the"; \
+		echo "    next WezTerm update, and can rarely make macOS flag the app as damaged."; \
+		echo "    Restore: cp $$res/$$icns.orig $$res/$$icns"; \
+	fi
+else
+	@hi="$(HOME)/.local/share/icons/hicolor"; \
+	for s in 16 24 32 48 64 128 256 512; do \
+		mkdir -p "$$hi/$${s}x$${s}/apps"; \
+		cp "$(ICON_SRC)/hicolor/$${s}x$${s}/apps/$(ICON_NAME).png" "$$hi/$${s}x$${s}/apps/$(ICON_NAME).png"; \
+	done; \
+	echo "  ✓ icons -> $$hi/<size>/apps/$(ICON_NAME).png"; \
+	gtk-update-icon-cache -f -t "$$hi" >/dev/null 2>&1 || true; \
+	kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true; \
+	echo "  ✓ refreshed icon caches (log out/in if the launcher hasn't updated)"
 endif
 
 install-skills:
