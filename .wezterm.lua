@@ -2,7 +2,7 @@ local wezterm = require("wezterm")
 
 local config = wezterm.config_builder()
 
-config.initial_cols = 120
+config.initial_cols = 80
 config.initial_rows = 40
 
 -- Commodore 64 boot screen: light-blue text on blue with a light-blue blinking
