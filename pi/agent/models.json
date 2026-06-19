@@ -7,7 +7,7 @@
       "models": [
        {
           "_launch": true,
-          "id": "ibm/granite-4.1-3b",
+          "id": "qwen2.5-coder-3b-instruct",
           "input": [
             "text"
           ]

@@ -105,28 +105,6 @@ return {
     end,
   },
 
-  -- soft wrap for markdown/latex
-  {
-    "andrewferrier/wrapping.nvim",
-    event = "BufReadPost",
-    config = function()
-      require("wrapping").setup({
-        soft_wrap_filetypes = { "markdown", "latex", "tex" },
-      })
-    end,
-  },
-
-  -- bracket auto-close
-  {
-    "m4xshen/autoclose.nvim",
-    config = function()
-      require("autoclose").setup()
-    end,
-  },
-
-  -- ANSI color rendering for log/scrollback buffers
-  { "tmccombs/ansify.nvim" },
-
   -- telescope config
   {
     "nvim-telescope/telescope.nvim",

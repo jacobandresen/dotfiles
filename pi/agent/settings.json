@@ -4,11 +4,11 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "ibm/granite-4.1-3b",
+  "defaultModel": "qwen2.5-coder-3b-instruct",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
-  "lastChangelogVersion": "0.78.0",
+  "lastChangelogVersion": "0.79.6",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
@@ -22,5 +22,6 @@
       "maxRetryDelayMs": 0,
       "timeoutMs": 86400000
     }
-  }
+  },
+  "theme": "dark"
 }

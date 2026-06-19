@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# setup-lmstudio.sh — Download and configure Mistral 7B for LM Studio + pi
+# setup-lmstudio.sh — Download and configure Qwen2.5-Coder-3B-Instruct for LM Studio + pi
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-MODEL_DIR="$HOME/.lmstudio/models/bartowski/Phi-3.5-mini-instruct-GGUF"
-MODEL_FILE="$MODEL_DIR/Phi-3.5-mini-instruct-Q4_K_M.gguf"
-HF_URL="https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf"
+MODEL_DIR="$HOME/.lmstudio/models/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
+MODEL_FILE="$MODEL_DIR/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+HF_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
 
 # ── Detect OS and set platform-specific values ────────────────────────────────
 case "$(uname -s)" in
@@ -56,7 +56,7 @@ mkdir -p "$MODEL_DIR"
 if [ -f "$MODEL_FILE" ]; then
     echo "  ✓ Model already present: $MODEL_FILE"
 else
-    echo "Downloading Phi-3.5 Mini Instruct Q4_K_M (~2.2 GB)..."
+    echo "Downloading Qwen2.5-Coder-3B-Instruct Q4_K_M (~2.1 GB)..."
     curl -L --progress-bar "$HF_URL" -o "$MODEL_FILE"
     echo "  ✓ Download complete"
 fi
@@ -67,4 +67,4 @@ python3 "$SCRIPT_DIR/patch-gguf-template.py" "$MODEL_FILE"
 
 echo ""
 echo "LM Studio setup complete."
-echo "Start LM Studio and run 'pi' to use Phi-3.5 Mini."
+echo "Start LM Studio and run 'pi' to use Qwen2.5-Coder-3B."

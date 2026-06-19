@@ -215,11 +215,15 @@ endif
 
 install-skills:
 	@echo "Installing pi skills..."
-	@mkdir -p $(HOME)/.pi/agent/skills
-	@for skill in pi/agent/skills/*/; do \
-		name=$$(basename "$$skill"); \
-		mkdir -p "$(HOME)/.pi/agent/skills/$$name"; \
-		cp "$$skill/SKILL.md" "$(HOME)/.pi/agent/skills/$$name/SKILL.md"; \
-		echo "  ✓ $$name"; \
-	done
+	@if [ -d pi/agent/skills ] && [ -n "$$(ls -A pi/agent/skills 2>/dev/null)" ]; then \
+		mkdir -p $(HOME)/.pi/agent/skills; \
+		for skill in pi/agent/skills/*/; do \
+			name=$$(basename "$$skill"); \
+			mkdir -p "$(HOME)/.pi/agent/skills/$$name"; \
+			cp "$$skill/SKILL.md" "$(HOME)/.pi/agent/skills/$$name/SKILL.md"; \
+			echo "  ✓ $$name"; \
+		done; \
+	else \
+		echo "  – no skills to install (pi/agent/skills/ is empty)"; \
+	fi
 

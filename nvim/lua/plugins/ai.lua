@@ -54,7 +54,9 @@ return {
                   -- plenary HTTP response ({body=..., status=200, ...}) and must return
                   -- {status="success", output=<model text>}.
                   -- We decode the response exactly as the openai adapter does, then
-                  -- strip any trailing prose Phi appends after the closing JSON brace.
+                  -- strip any trailing prose the model appends after the closing JSON
+                  -- brace. (Originally added for Phi-3.5; harmless safety net for the
+                  -- current Qwen2.5-Coder model, which is well-behaved.)
                   inline_output = function(self, data, _)
                     if not data or data == "" then return end
                     local ok, json = pcall(vim.json.decode, data.body, { luanil = { object = true } })

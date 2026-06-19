@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"019ee048-9c69-7fd5-9fe0-02749dd40cad","timestamp":"2026-06-19T14:28:35.561Z","cwd":"/Users/jacob"}
+{"type":"model_change","id":"56357369","parentId":null,"timestamp":"2026-06-19T14:28:35.682Z","provider":"lmstudio","modelId":"qwen2.5-coder-3b-instruct"}
+{"type":"thinking_level_change","id":"7fa13e5a","parentId":"56357369","timestamp":"2026-06-19T14:28:35.682Z","thinkingLevel":"off"}
+{"type":"message","id":"cb88cf66","parentId":"7fa13e5a","timestamp":"2026-06-19T14:28:41.230Z","message":{"role":"user","content":[{"type":"text","text":"hello"}],"timestamp":1781879321226}}
+{"type":"message","id":"2a3b969a","parentId":"cb88cf66","timestamp":"2026-06-19T14:28:47.282Z","message":{"role":"assistant","content":[{"type":"text","text":"Hello! How can I assist you today?"}],"api":"openai-completions","provider":"lmstudio","model":"qwen2.5-coder-3b-instruct","usage":{"input":2034,"output":10,"cacheRead":0,"cacheWrite":0,"totalTokens":2044,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1781879321281,"responseId":"chatcmpl-gl72gvpo7iswt725qk37"}}

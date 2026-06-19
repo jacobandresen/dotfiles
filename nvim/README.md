@@ -15,6 +15,7 @@ Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 | [mason.nvim](https://github.com/mason-org/mason.nvim) | LSP/DAP/tool installer |
 | [mason-tool-installer](https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim) | Auto-install Mason tools |
 | [roslyn.nvim](https://github.com/seblj/roslyn.nvim) | C# (Roslyn) LSP support |
+| [rustaceanvim](https://github.com/mrcjkb/rustaceanvim) | Rust LSP, inlay hints, macro expansion, DAP |
 | [fidget.nvim](https://github.com/j-hui/fidget.nvim) | LSP progress notifications |
 | [symbol-usage.nvim](https://github.com/Wansmer/symbol-usage.nvim) | Inline reference counts |
 
@@ -25,32 +26,40 @@ Supports Arch Linux, Ubuntu/Debian (including WSL), and macOS (Homebrew).
 | [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) | DAP UI |
 | [nvim-dap-vscode-js](https://github.com/mxsdev/nvim-dap-vscode-js) | JavaScript/TypeScript debugging |
 | [nvim-dap-cs](https://github.com/NicholasMata/nvim-dap-cs) | C# debugging |
+| [nvim-jdtls](https://github.com/mfussenegger/nvim-jdtls) | Java LSP + debugging (via LazyVim `lang.java` extra) |
 
 ### Editor
 | Plugin | Purpose |
 |--------|---------|
 | [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) | Fuzzy finder |
 | [telescope-fzf-native](https://github.com/nvim-telescope/telescope-fzf-native.nvim) | Native fzf sorter for Telescope |
-| [oil.nvim](https://github.com/stevearc/oil.nvim) | File manager as a buffer |
-| [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim) | File tree |
+| [oil.nvim](https://github.com/stevearc/oil.nvim) | File manager as a buffer (replaces neo-tree) |
 | [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) | Syntax highlighting & parsing |
-| [autoclose.nvim](https://github.com/m4xshen/autoclose.nvim) | Auto-close brackets/quotes |
-| [wrapping.nvim](https://github.com/andrewferrier/wrapping.nvim) | Soft/hard wrap toggling |
 | [nvim-tmux-navigation](https://github.com/alexghergh/nvim-tmux-navigation) | Seamless nvim/tmux pane navigation |
 | [snacks.nvim](https://github.com/folke/snacks.nvim) | Collection of small QoL utilities |
+
+A local `transform.lua` spec adds a Telescope-driven **text transform picker**
+(`<leader>mm`, normal or visual): JSON prettify/minify/escape/unescape (`jq`),
+URL and HTML encode/decode (`python3`), and Base64 encode/decode.
+
+### Database
+| Plugin | Purpose |
+|--------|---------|
+| [vim-dadbod](https://github.com/tpope/vim-dadbod) | Database client |
+| [vim-dadbod-ui](https://github.com/kristijanhusak/vim-dadbod-ui) | Database UI (`<leader>Du` toggle) |
+| [vim-dadbod-completion](https://github.com/kristijanhusak/vim-dadbod-completion) | SQL completion source (via blink.cmp) |
 
 ### AI
 | Plugin | Purpose |
 |--------|---------|
-| [codecompanion.nvim](https://github.com/olimorris/codecompanion.nvim) | AI chat & inline assist (via `pi` CLI) |
+| [codecompanion.nvim](https://github.com/olimorris/codecompanion.nvim) | AI chat & inline assist (via LM Studio) |
 
 ### UI
 | Plugin | Purpose |
 |--------|---------|
 | [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) | Status line |
-| [bamboo.nvim](https://github.com/ribru17/bamboo.nvim) | Default colorscheme |
+| [nvim-base16](https://github.com/RRethy/nvim-base16) | Commodore 64 colorscheme (synced with WezTerm) |
 | [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) | Rendered Markdown in buffer |
-| [ansify.nvim](https://github.com/tmccombs/ansify.nvim) | Colorize ANSI escape sequences |
 | [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo) | Better folding |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) | Icon provider |
 
@@ -60,6 +69,8 @@ Managed by Mason, auto-installed on startup:
 
 - **clangd** — C/C++
 - **roslyn** — C#
+- **rust-analyzer** — Rust (driven by rustaceanvim)
+- **jdtls** — Java
 - **helm_ls** — Helm charts
 - **yaml-language-server** — YAML
 
@@ -67,9 +78,10 @@ Managed by Mason, auto-installed on startup:
 
 Managed by Mason, auto-installed on startup:
 
-- **codelldb** — C/C++
+- **codelldb** — C/C++ and Rust
 - **netcoredbg** — C#
 - **js-debug-adapter** — JavaScript/TypeScript
+- **java-debug-adapter** + **java-test** — Java (installed by the LazyVim `lang.java` extra)
 
 ## Dependencies
 
@@ -80,5 +92,6 @@ Managed by Mason, auto-installed on startup:
 | `node` / `npm` | Required by js-debug-adapter |
 | `python3` | URL/HTML encode-decode transforms |
 | `jq` | JSON formatting (`formatprg`) and transforms |
-| `pi` | CLI backend for CodeCompanion AI |
+| `pi` | Standalone CLI coding agent (shares the LM Studio backend) |
+| LM Studio | Local model server (`:1234`) for CodeCompanion & `pi` |
 | `wl-clipboard` | System clipboard support on Wayland (`wl-copy`/`wl-paste`) |
