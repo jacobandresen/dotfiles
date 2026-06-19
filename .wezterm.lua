@@ -53,8 +53,8 @@ config.colors = {
 -- C64 Pro Mono: authentic PETSCII glyphs for the real Commodore look. Hack Nerd
 -- Font Mono falls back behind it for any glyph C64 Pro lacks -- chiefly the icon
 -- glyphs Neovim uses (oil/mini.icons, fidget, render-markdown) -- and the Mono
--- variant keeps those single-cell so the dashboard logo and Turbo Pascal menubar
--- stay aligned. Install both with `make install-fonts`; falls back to plain Hack
+-- variant keeps those single-cell so the dashboard logo stays aligned. Install
+-- both with `make install-fonts`; falls back to plain Hack
 -- until then.
 config.font = wezterm.font_with_fallback({ "C64 Pro Mono", "Hack Nerd Font Mono", "Hack" })
 config.font_size = 12

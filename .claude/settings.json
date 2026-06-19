@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ollama__ollama_chat",
+      "mcp__ollama__ollama_generate",
+      "mcp__ollama__ollama_list_models",
+      "Bash(cargo check *)"
+    ]
+  }
+}
