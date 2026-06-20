@@ -33,32 +33,76 @@ if is_lmstudio_running; then
     sleep 3
 fi
 
-# ── 2. Disable model loading guardrails ───────────────────────────────────────
+# ── 2. Tune LM Studio settings (guardrails off, no bundled auto-load) ─────────
 if [ -f "$LMSTUDIO_SETTINGS" ]; then
-    echo "Disabling LM Studio model loading guardrails..."
+    echo "Tuning LM Studio settings for a small/shared GPU..."
     python3 - "$LMSTUDIO_SETTINGS" <<'PYEOF'
 import json, sys
 path = sys.argv[1]
 with open(path) as f:
     s = json.load(f)
+# Let pi JIT-load the coder model even on a tight VRAM budget.
 s.setdefault('modelLoadingGuardrails', {})['mode'] = 'off'
+# Don't auto-load the bundled model on startup. pi JIT-loads the coder model
+# it needs, so the bundled one is just wasted memory — harmless on a big Mac,
+# but on a small discrete GPU (e.g. a 6 GB card) it squats on VRAM and starves
+# pi's load: "unable to allocate CUDA0 buffer".
+s['autoLoadBundledLLM'] = False
 with open(path, 'w') as f:
     json.dump(s, f, indent=2)
-print("  ✓ Guardrails set to off")
+print("  ✓ Guardrails off, bundled-model auto-load disabled")
 PYEOF
 else
     echo "  ⚠ LM Studio settings not found at: $LMSTUDIO_SETTINGS"
     echo "    Start LM Studio once to generate settings, then re-run."
 fi
 
-# ── 3. Download model ─────────────────────────────────────────────────────────
+# ── 3. Download model (size-verified, resumable) ──────────────────────────────
+# A bare `[ -f ]` check can't tell a truncated 1.9 GB partial download from the
+# real 2.1 GB file, so it silently keeps a corrupt model ("tensor data is not
+# within the file bounds, model is corrupted or incomplete") and never repairs
+# it on re-run. Compare against the server's Content-Length and resume instead.
 mkdir -p "$MODEL_DIR"
-if [ -f "$MODEL_FILE" ]; then
-    echo "  ✓ Model already present: $MODEL_FILE"
+
+# GNU (Linux) and BSD (macOS) stat take different flags; try both.
+file_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
+
+# Ask the server for the real size. Only trust it on a clean 2xx (`-f` makes
+# curl exit non-zero otherwise) — gating on the exit status via `if` both keeps
+# a transient/404 HEAD from tripping `set -e` and avoids mistaking an error
+# page's Content-Length for the model's. The character classes match both
+# casings ("Content-Length" on HTTP/1.1, "content-length" on HTTP/2) without
+# awk's IGNORECASE, a GNU-awk-only extension absent on macOS's BSD awk. An empty
+# EXPECTED_SIZE just falls back to the old download-if-missing behaviour below.
+if HEADERS="$(curl -fsIL "$HF_URL" 2>/dev/null)"; then
+    EXPECTED_SIZE="$(printf '%s\n' "$HEADERS" \
+      | awk '/^[Cc]ontent-[Ll]ength:/{cl=$2} END{gsub(/\r/,"",cl); print cl}')"
 else
-    echo "Downloading Qwen2.5-Coder-3B-Instruct Q4_K_M (~2.1 GB)..."
-    curl -L --progress-bar "$HF_URL" -o "$MODEL_FILE"
-    echo "  ✓ Download complete"
+    EXPECTED_SIZE=""
+fi
+LOCAL_SIZE="$(file_size "$MODEL_FILE")"
+
+if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" = "$EXPECTED_SIZE" ]; then
+    echo "  ✓ Model already present and complete ($LOCAL_SIZE bytes)"
+elif [ -z "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "0" ]; then
+    # Couldn't reach the server to verify (offline?), but a file is already
+    # here — trust it rather than running `curl -C -` against a complete file
+    # (which can 416 and, under `set -e`, abort setup).
+    echo "  ✓ Model present ($LOCAL_SIZE bytes); skipped size check (server unreachable)"
+else
+    if [ "$LOCAL_SIZE" != "0" ]; then
+        echo "  ⚠ Model is $LOCAL_SIZE bytes, expected ${EXPECTED_SIZE:-unknown} — resuming download..."
+    else
+        echo "Downloading Qwen2.5-Coder-3B-Instruct Q4_K_M (~2.1 GB)..."
+    fi
+    curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$MODEL_FILE"
+    LOCAL_SIZE="$(file_size "$MODEL_FILE")"
+    if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "$EXPECTED_SIZE" ]; then
+        echo "  ✗ Download incomplete: got $LOCAL_SIZE bytes, expected $EXPECTED_SIZE." >&2
+        echo "    Re-run 'make setup-lmstudio' to resume." >&2
+        exit 1
+    fi
+    echo "  ✓ Download complete ($LOCAL_SIZE bytes)"
 fi
 
 # ── 4. Patch GGUF chat template ───────────────────────────────────────────────
