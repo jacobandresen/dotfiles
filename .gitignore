@@ -1,1 +1,4 @@
 nvim/lazy-lock.json
+
+# pi writes session logs here via the ~/.pi -> dotfiles/pi symlink — runtime data, not config
+pi/agent/sessions/
