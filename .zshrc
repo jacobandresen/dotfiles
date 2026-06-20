@@ -6,6 +6,14 @@ export PATH="/opt/npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.lmstudio/bin"
 
+# mu ↔ LM Studio: pin the small coding model. The 7B won't load on 8 GB
+# ("insufficient system resources"); Qwen2.5-Coder-3B fits and stays responsive
+# (it's also what pi uses — pi/agent/models.json). Without this, mu auto-picks the
+# first /v1/models entry and can grab a too-large model. MU_NUM_CTX=6000 keeps the
+# KV cache off swap (8192+ thrashes / crashes on this host).
+export MU_AGENT_MODEL=qwen2.5-coder-3b-instruct
+export MU_NUM_CTX=6000
+
 # oh-my-zsh: keep plugins, but no theme -- we set a DOS prompt below.
 ZSH_THEME=""
 zstyle ':omz:update' mode disabled # disable automatic updates

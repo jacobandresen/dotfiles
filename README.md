@@ -56,6 +56,12 @@ make install-icon
 `vcs_info`. It aliases `vim`→`nvim`, points `$EDITOR`/`$VISUAL` at Neovim, and
 wraps `pi` with a default tool allowlist (`read,write,edit,bash`).
 
+It also pins the local LLM for the [`mu`](https://github.com/jacobandresen/mu)
+agent so it uses the **same small model as pi** — `MU_AGENT_MODEL=qwen2.5-coder-3b-instruct`
+(the 7B won't load on 8 GB) and `MU_NUM_CTX=6000` (keeps the KV cache off swap).
+Without the pin, mu auto-selects the first `/v1/models` entry, which can be a model
+too large to load.
+
 ## Midnight Commander
 
 `mc/ini` is symlinked to `~/.config/mc/ini` by `make install-mc`. The internal
@@ -65,7 +71,7 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 
 [pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Qwen2.5-Coder-3B-Instruct** (~2.1 GB, Q4_K_M) — a coding-specialised model that fits comfortably in 8 GB unified memory and stays responsive alongside the terminal/editor.
 
-Both `pi` (the standalone CLI agent) and Neovim's CodeCompanion talk to the same LM Studio server on `http://localhost:1234`; there is no proxy in between.
+`pi` (the standalone CLI agent), Neovim's CodeCompanion, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the same Qwen2.5-Coder-3B model; there is no proxy in between.
 
 ### Setup
 
