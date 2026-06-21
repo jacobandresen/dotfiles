@@ -68,6 +68,11 @@ build step can find pynvim. Keys live under `<leader>j` (`<leader>ji` init kerne
 `<leader>jl` run line, `<leader>jv` run selection, `<leader>jr` run operator,
 `<leader>jo`/`<leader>jh` show/hide output, `<leader>jI` import `.ipynb` outputs).
 
+Notebooks drop into **visual mode** automatically once a kernel is live for the
+buffer — on opening a notebook whose kernel is already running, or right after
+`<leader>ji` connects one (`User MoltenKernelReady`). With no kernel responding,
+the buffer opens normally.
+
 ### UI
 | Plugin | Purpose |
 |--------|---------|

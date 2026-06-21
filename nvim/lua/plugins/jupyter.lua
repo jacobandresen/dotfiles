@@ -54,6 +54,49 @@ return {
       output_extension = "auto",
       force_ve = "",
     },
+    config = function(_, opts)
+      require("jupytext").setup(opts)
+
+      -- Drop a notebook into visual mode for quick cell selection — but only
+      -- when a Molten kernel is actually live for that buffer ("jupyter is
+      -- responding"). pcall guards MoltenRunningKernels, a remote-plugin fn that
+      -- isn't registered until molten loads; it returns [] with no kernel.
+      local function enter_visual_if_live(buf)
+        if not (vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_name(buf):match("%.ipynb$")) then
+          return
+        end
+        local ok, kernels = pcall(vim.fn.MoltenRunningKernels, true)
+        if not (ok and type(kernels) == "table" and #kernels > 0) then return end
+        vim.schedule(function()
+          if vim.api.nvim_get_current_buf() == buf and vim.api.nvim_get_mode().mode == "n" then
+            vim.api.nvim_feedkeys("v", "n", false)
+          end
+        end)
+      end
+
+      -- Switching back to a notebook that already has a running kernel. Once per
+      -- buffer so it doesn't re-fire on every window switch. jupytext keeps the
+      -- .ipynb buffer name, so the pattern matches after the py:percent convert.
+      vim.api.nvim_create_autocmd("BufWinEnter", {
+        pattern = "*.ipynb",
+        desc = "Notebook -> visual mode (if its kernel is live)",
+        callback = function(args)
+          if vim.b[args.buf].notebook_visual_entered then return end
+          vim.b[args.buf].notebook_visual_entered = true
+          enter_visual_if_live(args.buf)
+        end,
+      })
+
+      -- The normal flow: open notebook -> :MoltenInit -> kernel connects. Molten
+      -- fires User MoltenKernelReady once it's responding; enter visual mode then.
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "MoltenKernelReady",
+        desc = "Notebook -> visual mode once its kernel responds",
+        callback = function()
+          enter_visual_if_live(vim.api.nvim_get_current_buf())
+        end,
+      })
+    end,
   },
 
   -- Inline image rendering. magick_cli processor uses the ImageMagick CLI so we
