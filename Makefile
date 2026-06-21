@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts install-icon deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts install-icon setup-jupyter deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -212,6 +212,12 @@ else
 	kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true; \
 	echo "  ✓ refreshed icon caches (log out/in if the launcher hasn't updated)"
 endif
+
+# Provision the Python side of the Neovim Jupyter stack (molten-nvim). Standalone
+# like setup-lmstudio: a venv + scientific stack shouldn't run on every install.
+# Run this BEFORE first launching nvim so molten's :UpdateRemotePlugins can find pynvim.
+setup-jupyter:
+	@./scripts/setup-jupyter.sh
 
 install-skills:
 	@echo "Installing pi skills..."

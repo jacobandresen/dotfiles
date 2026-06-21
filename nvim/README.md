@@ -54,6 +54,20 @@ URL and HTML encode/decode (`python3`), and Base64 encode/decode.
 |--------|---------|
 | [codecompanion.nvim](https://github.com/olimorris/codecompanion.nvim) | AI chat & inline assist (via LM Studio) |
 
+### Jupyter
+| Plugin | Purpose |
+|--------|---------|
+| [molten-nvim](https://github.com/benlubas/molten-nvim) | Run code interactively against a Jupyter kernel, inline output |
+| [jupytext.nvim](https://github.com/GCBallesteros/jupytext.nvim) | Open/save `.ipynb` as plain `py:percent` text |
+| [image.nvim](https://github.com/3rd/image.nvim) | Inline plots/images (WezTerm kitty graphics, ImageMagick CLI) |
+
+Run `make setup-jupyter` from the repo root **before first launching nvim** — it
+builds the `~/.virtualenvs/neovim` Python host (pynvim + jupyter), registers a
+`neovim` kernel, and installs the `jupytext` CLI, so molten's `:UpdateRemotePlugins`
+build step can find pynvim. Keys live under `<leader>j` (`<leader>ji` init kernel,
+`<leader>jl` run line, `<leader>jv` run selection, `<leader>jr` run operator,
+`<leader>jo`/`<leader>jh` show/hide output, `<leader>jI` import `.ipynb` outputs).
+
 ### UI
 | Plugin | Purpose |
 |--------|---------|
@@ -91,6 +105,8 @@ Managed by Mason, auto-installed on startup:
 | `make`, `gcc` | Build telescope-fzf-native, compile Treesitter parsers |
 | `node` / `npm` | Required by js-debug-adapter |
 | `python3` | URL/HTML encode-decode transforms |
+| `jupyter`, `jupytext` | Jupyter notebooks via molten-nvim (`make setup-jupyter`) |
+| ImageMagick (`magick`) | Inline image rendering for molten (image.nvim) |
 | `jq` | JSON formatting (`formatprg`) and transforms |
 | `pi` | Standalone CLI coding agent (shares the LM Studio backend) |
 | LM Studio | Local model server (`:1234`) for CodeCompanion & `pi` |
