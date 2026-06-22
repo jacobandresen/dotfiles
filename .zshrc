@@ -6,6 +6,12 @@ export PATH="/opt/npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.lmstudio/bin"
 
+# Per-host hardware tuning. scripts/setup-host.sh probes the GPU and writes
+# ~/.zshrc.local (machine-local, outside the repo) with MU_NUM_CTX. Sourced
+# *before* the default below so a bigger card's value wins; absent on a
+# fresh/default host, where the committed default applies.
+[ -r "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+
 # mu ↔ LM Studio: pin the coding model. Chosen by a 10-problem L0 board on this 8 GB
 # M2 (see mu/docs/MODELS.md): qwen2.5-coder-7b at the **Q3_K_L** quant scores 7/10 and
 # is the strongest model that runs here. Caveats it encodes: the 7B Q4_K_M (~4.7 GB)
@@ -16,7 +22,9 @@ export PATH="$PATH:$HOME/.lmstudio/bin"
 # (lmstudio-community/…); check `curl localhost:1234/v1/models`. MU_NUM_CTX=6000 keeps the
 # KV cache off swap.
 export MU_AGENT_MODEL=qwen2.5-coder-7b-instruct
-export MU_NUM_CTX=6000
+# Default KV-cache context; setup-host.sh raises this in ~/.zshrc.local on cards
+# with VRAM headroom (e.g. 12288 on the 6 GB GTX). 6000 keeps it off swap on the Mac.
+export MU_NUM_CTX="${MU_NUM_CTX:-6000}"
 
 # oh-my-zsh: keep plugins, but no theme -- we set a DOS prompt below.
 ZSH_THEME=""
@@ -44,6 +52,9 @@ RPROMPT='%F{8}%(4~|…/%3~|%~)%f${vcs_info_msg_0_}'
 
 # Aliases
 alias vim="nvim"
+# pi's model is set per-host in ~/.pi/agent/settings.json by scripts/setup-host.sh
+# (7B on a capable card, 3B on the Mac) — global, so non-interactive pi and
+# CodeCompanion get it too, not just this alias.
 alias pi='command pi --tools read,write,edit,bash'
 
 # Default editor (also what Midnight Commander's F4 uses, since its internal
