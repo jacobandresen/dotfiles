@@ -58,10 +58,13 @@ make install-icon
 wraps `pi` with a default tool allowlist (`read,write,edit,bash`).
 
 It also pins the local LLM for the [`mu`](https://github.com/jacobandresen/mu)
-agent so it uses the **same small model as pi** — `MU_AGENT_MODEL=qwen2.5-coder-3b-instruct`
-(the 7B won't load on 8 GB) and `MU_NUM_CTX=6000` (keeps the KV cache off swap).
-Without the pin, mu auto-selects the first `/v1/models` entry, which can be a model
-too large to load.
+agent so it uses the **same model as pi** —
+`MU_AGENT_MODEL=qwen2.5-coder-7b-instruct` (the **Q3_K_L** quant, chosen by a 10-problem
+dojo board as the best model that runs on 8 GB — the 7B Q4_K_M won't load and 8B models hit
+a GPU "Compute error") and `MU_NUM_CTX=6000` (keeps the KV cache off swap). The id must
+match LM Studio's `/v1/models` (the bare name, since it's the only 7B variant; a second one
+would get an `lmstudio-community/…` prefix). Without the pin, mu auto-selects the first
+`/v1/models` entry, which can be a model too large to load.
 
 ## Midnight Commander
 
@@ -70,14 +73,14 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Qwen2.5-Coder-3B-Instruct** (~2.1 GB, Q4_K_M) — a coding-specialised model that fits comfortably in 8 GB unified memory and stays responsive alongside the terminal/editor.
+[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Qwen2.5-Coder-7B-Instruct** at the **Q3_K_L** quant (~3.8 GB) — the strongest coding model that runs on this 8 GB M2. It was chosen by boarding six local models on a ten-problem coding suite (see [mu/docs/quantization-and-the-stack.md](https://github.com/jacobandresen/mu/blob/main/docs/quantization-and-the-stack.md)): the 7B solved the most (7/10), and at Q3_K_L it stays under the host's ~4.1 GB GPU compute-buffer ceiling. (The 3B remains a lighter fallback if you want snappier interactive latency over capability.)
 
-`pi` (the standalone CLI agent), Neovim's CodeCompanion, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the same Qwen2.5-Coder-3B model; there is no proxy in between.
+`pi` (the standalone CLI agent), Neovim's CodeCompanion, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the same Qwen2.5-Coder-7B model; there is no proxy in between.
 
 ### Setup
 
 ```sh
-make setup-lmstudio   # downloads Qwen2.5-Coder-3B, disables guardrails, wires pi config
+make setup-lmstudio   # downloads Qwen2.5-Coder-7B (Q3_K_L), disables guardrails, wires pi config
 ```
 
 On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-lmstudio` after.

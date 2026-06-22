@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# setup-lmstudio.sh — Download and configure Qwen2.5-Coder-3B-Instruct for LM Studio + pi
+# setup-lmstudio.sh — Download and configure Qwen2.5-Coder-7B-Instruct (Q3_K_L) for LM Studio + pi.
+# Q3_K_L is the quant chosen by a 10-problem dojo board on an 8 GB M2: it scores best (7/10)
+# and is the largest model that runs under the host's ~4.1 GB GPU compute-buffer ceiling.
+# The 7B Q4_K_M (~4.9 GB) won't load; 8B models (>4.3 GB) hit a GPU "Compute error".
+# See mu/docs/quantization-and-the-stack.md for the full reasoning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-MODEL_DIR="$HOME/.lmstudio/models/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF"
-MODEL_FILE="$MODEL_DIR/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
-HF_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+MODEL_DIR="$HOME/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF"
+MODEL_FILE="$MODEL_DIR/Qwen2.5-Coder-7B-Instruct-Q3_K_L.gguf"
+HF_URL="https://huggingface.co/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q3_K_L.gguf"
 
 # ── Detect OS and set platform-specific values ────────────────────────────────
 case "$(uname -s)" in
@@ -93,7 +97,7 @@ else
     if [ "$LOCAL_SIZE" != "0" ]; then
         echo "  ⚠ Model is $LOCAL_SIZE bytes, expected ${EXPECTED_SIZE:-unknown} — resuming download..."
     else
-        echo "Downloading Qwen2.5-Coder-3B-Instruct Q4_K_M (~2.1 GB)..."
+        echo "Downloading Qwen2.5-Coder-7B-Instruct Q3_K_L (~3.8 GB)..."
     fi
     curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$MODEL_FILE"
     LOCAL_SIZE="$(file_size "$MODEL_FILE")"
@@ -111,4 +115,4 @@ python3 "$SCRIPT_DIR/patch-gguf-template.py" "$MODEL_FILE"
 
 echo ""
 echo "LM Studio setup complete."
-echo "Start LM Studio and run 'pi' to use Qwen2.5-Coder-3B."
+echo "Start LM Studio and run 'pi' to use Qwen2.5-Coder-7B (Q3_K_L)."

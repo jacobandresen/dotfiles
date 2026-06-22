@@ -6,12 +6,16 @@ export PATH="/opt/npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.lmstudio/bin"
 
-# mu ↔ LM Studio: pin the small coding model. The 7B won't load on 8 GB
-# ("insufficient system resources"); Qwen2.5-Coder-3B fits and stays responsive
-# (it's also what pi uses — pi/agent/models.json). Without this, mu auto-picks the
-# first /v1/models entry and can grab a too-large model. MU_NUM_CTX=6000 keeps the
-# KV cache off swap (8192+ thrashes / crashes on this host).
-export MU_AGENT_MODEL=qwen2.5-coder-3b-instruct
+# mu ↔ LM Studio: pin the coding model. Chosen by a 10-problem L0 board on this 8 GB
+# M2 (see mu/docs/MODELS.md): qwen2.5-coder-7b at the **Q3_K_L** quant scores 7/10 and
+# is the strongest model that runs here. Caveats it encodes: the 7B Q4_K_M (~4.7 GB)
+# won't load, 8B models (>4.3 GB) hit a GPU "Compute error", and the 3B models only
+# manage ~1-3/10. mu sends MU_AGENT_MODEL straight to LM Studio's /v1/models, so it must
+# match the id served there — currently the bare `qwen2.5-coder-7b-instruct` (the only 7b
+# variant). If you load a second 7b, LM Studio disambiguates with an org prefix
+# (lmstudio-community/…); check `curl localhost:1234/v1/models`. MU_NUM_CTX=6000 keeps the
+# KV cache off swap.
+export MU_AGENT_MODEL=qwen2.5-coder-7b-instruct
 export MU_NUM_CTX=6000
 
 # oh-my-zsh: keep plugins, but no theme -- we set a DOS prompt below.

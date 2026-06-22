@@ -7,7 +7,7 @@
       "models": [
        {
           "_launch": true,
-          "id": "qwen2.5-coder-3b-instruct",
+          "id": "qwen2.5-coder-7b-instruct",
           "input": [
             "text"
           ]
