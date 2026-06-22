@@ -1,10 +1,12 @@
 export ZSH="$HOME/.oh-my-zsh"
 
 # PATH (most-specific user bins first)
-export PATH="$HOME/Env/Python/pygame/bin:$PATH"
-export PATH="/opt/npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.lmstudio/bin"
+
+# Per-host development settings
+[ -r "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+
 
 # Per-host hardware tuning. scripts/setup-host.sh probes the GPU and writes
 # ~/.zshrc.local (machine-local, outside the repo) with MU_NUM_CTX. Sourced
