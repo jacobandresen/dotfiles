@@ -66,6 +66,12 @@ match LM Studio's `/v1/models` (the bare name, since it's the only 7B variant; a
 would get an `lmstudio-community/…` prefix). Without the pin, mu auto-selects the first
 `/v1/models` entry, which can be a model too large to load.
 
+`MU_NUM_CTX` is a default here but host-tunable: `make setup-host` probes the GPU
+and writes `~/.zshrc.local` (machine-local, outside the repo, sourced first) —
+e.g. raising mu's context to 12288 on a 6 GB GTX, where the larger card has VRAM
+headroom the 8 GB Mac doesn't. The same command sets pi's `defaultModel`; see
+[pi agent](#pi-agent).
+
 ## Midnight Commander
 
 `mc/ini` is symlinked to `~/.config/mc/ini` by `make install-mc`. The internal
@@ -73,17 +79,26 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Qwen2.5-Coder-7B-Instruct** at the **Q3_K_L** quant (~3.8 GB) — the strongest coding model that runs on this 8 GB M2. It was chosen by boarding six local models on a ten-problem coding suite (see [mu/docs/quantization-and-the-stack.md](https://github.com/jacobandresen/mu/blob/main/docs/quantization-and-the-stack.md)): the 7B solved the most (7/10), and at Q3_K_L it stays under the host's ~4.1 GB GPU compute-buffer ceiling. (The 3B remains a lighter fallback if you want snappier interactive latency over capability.)
+[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with **Qwen2.5-Coder-7B-Instruct**, at a quant chosen for the host's GPU. On the 8 GB M2 that's **Q3_K_L** (~3.8 GB) — chosen by boarding six local models on a ten-problem coding suite (see [mu/docs/quantization-and-the-stack.md](https://github.com/jacobandresen/mu/blob/main/docs/quantization-and-the-stack.md)): the 7B solved the most (7/10), and at Q3_K_L it stays under that host's ~4.1 GB GPU compute-buffer ceiling. On a discrete NVIDIA card with ≥6 GB (e.g. a 6 GB GTX 1660 SUPER) it steps up to **Q4_K_M** (~4.4 GB), the largest quant published for this model, with room to spare for a bigger KV cache. (The 3B remains a lighter fallback if you want snappier interactive latency over capability.)
 
 `pi` (the standalone CLI agent), Neovim's CodeCompanion, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the same Qwen2.5-Coder-7B model; there is no proxy in between.
 
 ### Setup
 
 ```sh
-make setup-lmstudio   # downloads Qwen2.5-Coder-7B (Q3_K_L), disables guardrails, wires pi config
+make setup-host       # tune the whole stack (quant + MU_NUM_CTX + pi model) to this GPU
+make setup-lmstudio   # or just the model: downloads the host's Qwen2.5-Coder-7B quant, wires pi config
 ```
 
-On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-lmstudio` after.
+`make setup-host` probes the GPU once and applies a hardware profile across all three consumers:
+
+- **LM Studio** — downloads the right quant (Q3_K_L / Q4_K_M).
+- **mu** — writes `MU_NUM_CTX` to `~/.zshrc.local` (machine-local, outside the repo; sourced by `.zshrc` before its own default) — e.g. 12288 on a roomy card, 6000 elsewhere. Only `mu` reads it.
+- **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to the 7B on a capable card, the snappier 3B otherwise. This is global (non-interactive `pi` and CodeCompanion included), unlike a shell alias.
+
+The tracked `.zshrc` stays identical across machines; per-host context lives only in the untracked `~/.zshrc.local`. pi's `defaultModel` is *host-managed* — each machine's run sets its own, so don't commit a host-specific value for it. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (same quant logic, no mu/pi tuning).
+
+On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-host` after.
 
 Start LM Studio (load the model), then run `pi`. The config enables skill
 commands and bundles the `@ollama/pi-web-search` package for web search. `make

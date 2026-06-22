@@ -1,16 +1,48 @@
 #!/usr/bin/env bash
-# setup-lmstudio.sh — Download and configure Qwen2.5-Coder-7B-Instruct (Q3_K_L) for LM Studio + pi.
-# Q3_K_L is the quant chosen by a 10-problem dojo board on an 8 GB M2: it scores best (7/10)
-# and is the largest model that runs under the host's ~4.1 GB GPU compute-buffer ceiling.
-# The 7B Q4_K_M (~4.9 GB) won't load; 8B models (>4.3 GB) hit a GPU "Compute error".
+# setup-lmstudio.sh — Download and configure Qwen2.5-Coder-7B-Instruct for LM Studio + pi.
+# The quant is host-aware: pick the largest that loads fully on-GPU on this machine.
+#   • Q3_K_L (~3.8 GB) — default. The quant chosen by a 10-problem dojo board on an
+#     8 GB M2 (best score, 7/10) and the largest that runs under that Mac's ~4.1 GB
+#     GPU compute-buffer ceiling. The 7B Q4_K_M (~4.4 GB) won't load there; 8B
+#     models (>4.3 GB) hit a GPU "Compute error".
+#   • Q4_K_M (~4.4 GB) — used on a discrete NVIDIA card with ≥6 GB VRAM (e.g. the
+#     GTX 1660 SUPER, 6 GB), which has room for the weights + KV cache + compute
+#     buffer that the Mac's unified memory doesn't. Scores better than Q3_K_L and
+#     is the largest quant lmstudio-community publishes for this repo.
+# pi addresses the model by a quant-agnostic id ("qwen2.5-coder-7b-instruct"), so
+# LM Studio serves whichever GGUF this script drops in the folder — no pi changes.
 # See mu/docs/quantization-and-the-stack.md for the full reasoning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Pick the model quant for this host ────────────────────────────────────────
+# Default to the conservative Q3_K_L; bump to Q4_K_M only on a discrete NVIDIA
+# GPU with enough VRAM (≥6 GB) to hold the larger weights plus runtime buffers.
+# A pre-set $QUANT (e.g. from setup-host.sh, which does one shared detection pass)
+# wins, so the nvidia-smi probe isn't duplicated across scripts.
+nvidia_vram_mib() {
+    command -v nvidia-smi > /dev/null 2>&1 || return 1
+    nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null \
+      | head -n1 | tr -dc '0-9'
+}
+
+if [ -n "${QUANT:-}" ]; then
+    echo "Using caller-provided quant: $QUANT."
+else
+    QUANT="Q3_K_L"
+    if [ "$(uname -s)" = "Linux" ]; then
+        VRAM_MIB="$(nvidia_vram_mib || true)"
+        if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
+            QUANT="Q4_K_M"
+            echo "Detected discrete NVIDIA GPU with ${VRAM_MIB} MiB VRAM → using $QUANT."
+        fi
+    fi
+fi
+
 MODEL_DIR="$HOME/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF"
-MODEL_FILE="$MODEL_DIR/Qwen2.5-Coder-7B-Instruct-Q3_K_L.gguf"
-HF_URL="https://huggingface.co/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q3_K_L.gguf"
+MODEL_FILE="$MODEL_DIR/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
+HF_URL="https://huggingface.co/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
 
 # ── Detect OS and set platform-specific values ────────────────────────────────
 case "$(uname -s)" in
@@ -97,7 +129,7 @@ else
     if [ "$LOCAL_SIZE" != "0" ]; then
         echo "  ⚠ Model is $LOCAL_SIZE bytes, expected ${EXPECTED_SIZE:-unknown} — resuming download..."
     else
-        echo "Downloading Qwen2.5-Coder-7B-Instruct Q3_K_L (~3.8 GB)..."
+        echo "Downloading Qwen2.5-Coder-7B-Instruct $QUANT..."
     fi
     curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$MODEL_FILE"
     LOCAL_SIZE="$(file_size "$MODEL_FILE")"
@@ -109,10 +141,24 @@ else
     echo "  ✓ Download complete ($LOCAL_SIZE bytes)"
 fi
 
-# ── 4. Patch GGUF chat template ───────────────────────────────────────────────
+# ── 4. Remove other quants of this model ──────────────────────────────────────
+# pi addresses the model by the bare id "qwen2.5-coder-7b-instruct". LM Studio
+# resolves that to a single GGUF only when one quant of the model sits in the
+# folder; with two present (e.g. after switching hosts or bumping the quant), the
+# bare id becomes ambiguous and pi's load fails ("Failed to load model"). Drop
+# every sibling quant except the one we just verified — and its .bak left by the
+# template patcher — so the id stays unambiguous (and we reclaim the disk).
+for stale in "$MODEL_DIR"/Qwen2.5-Coder-7B-Instruct-*.gguf; do
+    [ -e "$stale" ] || continue            # no glob match → literal pattern, skip
+    [ "$stale" = "$MODEL_FILE" ] && continue
+    echo "  ✓ Removing other quant: $(basename "$stale")"
+    rm -f "$stale" "$stale.bak"
+done
+
+# ── 5. Patch GGUF chat template ───────────────────────────────────────────────
 echo "Checking GGUF chat template..."
 python3 "$SCRIPT_DIR/patch-gguf-template.py" "$MODEL_FILE"
 
 echo ""
 echo "LM Studio setup complete."
-echo "Start LM Studio and run 'pi' to use Qwen2.5-Coder-7B (Q3_K_L)."
+echo "Start LM Studio and run 'pi' to use Qwen2.5-Coder-7B ($QUANT)."

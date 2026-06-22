@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts install-icon setup-jupyter deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts install-icon setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -218,6 +218,18 @@ endif
 # Run this BEFORE first launching nvim so molten's :UpdateRemotePlugins can find pynvim.
 setup-jupyter:
 	@./scripts/setup-jupyter.sh
+
+# Download/configure the right Qwen2.5-Coder-7B quant for this host's GPU and wire
+# up LM Studio for pi. Standalone: a multi-GB model download shouldn't run on every
+# install. See scripts/setup-lmstudio.sh for the per-host quant reasoning.
+setup-lmstudio:
+	@./scripts/setup-lmstudio.sh
+
+# Tune the whole local-LLM stack (LM Studio quant + MU_NUM_CTX + pi model) to this
+# machine's GPU in one pass. Writes per-host overrides to ~/.zshrc.local; leaves the
+# committed, cross-machine dotfiles untouched. Re-run after a hardware change.
+setup-host:
+	@./scripts/setup-host.sh
 
 install-skills:
 	@echo "Installing pi skills..."

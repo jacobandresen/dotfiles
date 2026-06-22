@@ -4,11 +4,11 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "qwen2.5-coder-3b-instruct",
+  "defaultModel": "qwen2.5-coder-7b-instruct",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
-  "lastChangelogVersion": "0.79.8",
+  "lastChangelogVersion": "0.79.9",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
