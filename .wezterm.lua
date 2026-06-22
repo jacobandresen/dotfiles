@@ -61,13 +61,10 @@ config.font_size = 12
 
 config.default_cursor_style = "BlinkingBlock"
 config.cursor_blink_rate = 530
-
--- DOS text mode filled the whole screen: no scrollbar, no tab strip in normal
--- use, no inner padding, and no title bar (just a resize border).
-config.enable_scroll_bar = false
+config.enable_scroll_bar = true
 config.enable_tab_bar = true
-config.hide_tab_bar_if_only_one_tab = true
-config.window_decorations = "RESIZE"
+config.hide_tab_bar_if_only_one_tab = false
+config.window_decorations = "INTEGRATED_BUTTONS | RESIZE"
 config.window_padding = { left = 0, right = 0, top = 0, bottom = 0 }
 
 return config
