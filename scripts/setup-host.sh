@@ -8,7 +8,8 @@
 #                 capable card, the snappier 3B otherwise).
 #
 # ~/.zshrc and ~/.pi/agent/* are symlinks into this repo, shared by every host
-# (an 8 GB M2 and a 6 GB GTX today). The committed configs stay host-agnostic:
+# (an 8 GB M2, a 6 GB GTX, and a 32 GB Intel Meteor Lake iGPU today). The
+# committed configs stay host-agnostic:
 # the per-host context lives in the untracked ~/.zshrc.local (sourced by .zshrc
 # before its defaults), and pi's defaultModel is host-managed — each machine's
 # run sets its own, so that one field shouldn't be committed with a host's value.
@@ -40,8 +41,8 @@ fi
 # ── Pick a hardware profile ───────────────────────────────────────────────────
 # A discrete NVIDIA card with ≥6 GB has room for the larger Q4_K_M weights plus a
 # bigger KV cache (measured: 7B Q4_K_M at 12288 ctx loads fully on a 6 GB card,
-# ~5.3/6.0 GB used). Everything else — the Mac, smaller/older cards — stays on the
-# Q3_K_L/6000 defaults that the committed configs already encode.
+# ~5.3/6.0 GB used). Everything else — the Mac, Intel iGPU machines, smaller/older
+# cards — stays on the Q3_K_L/6000 defaults that the committed configs already encode.
 if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
     PROFILE="roomy"
     QUANT="Q4_K_M"
