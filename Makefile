@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-skills install-fonts setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -22,11 +22,11 @@ endif
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
-	brew install git neovim ollama pi
+	brew install git neovim pi
 	brew install --cask wezterm lm-studio font-terminess-ttf-nerd-font
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim wezterm ollama
+	sudo pacman -Syu --needed git neovim wezterm
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 deps-ubuntu:
@@ -96,13 +96,16 @@ install-mc:
 		echo "  ✓ ~/.config/mc/ini -> $(CURDIR)/mc/ini"; \
 	fi
 
-install-pi: install-skills
+install-pi:
 	@echo "Installing pi agent config..."
-	@mkdir -p $(HOME)/.pi/agent
-	@cp pi/agent/models.json $(HOME)/.pi/agent/models.json
-	@cp pi/agent/settings.json $(HOME)/.pi/agent/settings.json
-	@echo "  ✓ models.json"
-	@echo "  ✓ settings.json"
+	@if [ -L $(HOME)/.pi ]; then \
+		echo "  ✓ ~/.pi already symlinked"; \
+	elif [ -e $(HOME)/.pi ]; then \
+		echo "  ⚠ ~/.pi exists but is not a symlink — skipping"; \
+	else \
+		ln -s $(CURDIR)/pi $(HOME)/.pi; \
+		echo "  ✓ ~/.pi -> $(CURDIR)/pi"; \
+	fi
 
 FONT_DIR := $(HOME)/.local/share/fonts
 HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz
@@ -143,22 +146,8 @@ setup-lmstudio:
 	@./scripts/setup-lmstudio.sh
 
 # Tune the whole local-LLM stack (LM Studio quant + MU_NUM_CTX + pi model) to this
-# machine's GPU in one pass. Writes per-host overrides to ~/.zshrc.local; leaves the
+# machine's GPU in one pass. Writes per-host overrides to ~/.zshrc.mu; leaves the
 # committed, cross-machine dotfiles untouched. Re-run after a hardware change.
 setup-host:
 	@./scripts/setup-host.sh
-
-install-skills:
-	@echo "Installing pi skills..."
-	@if [ -d pi/agent/skills ] && [ -n "$$(ls -A pi/agent/skills 2>/dev/null)" ]; then \
-		mkdir -p $(HOME)/.pi/agent/skills; \
-		for skill in pi/agent/skills/*/; do \
-			name=$$(basename "$$skill"); \
-			mkdir -p "$(HOME)/.pi/agent/skills/$$name"; \
-			cp "$$skill/SKILL.md" "$(HOME)/.pi/agent/skills/$$name/SKILL.md"; \
-			echo "  ✓ $$name"; \
-		done; \
-	else \
-		echo "  – no skills to install (pi/agent/skills/ is empty)"; \
-	fi
 

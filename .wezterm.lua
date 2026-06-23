@@ -7,7 +7,7 @@ config.initial_rows = 40
 
 config.color_scheme = "Apple Classic"
 config.font = wezterm.font_with_fallback({ "Hack Nerd Font Mono", "Hack" })
-config.font_size = 12
+config.font_size = 14
 
 config.default_cursor_style = "BlinkingBlock"
 config.cursor_blink_rate = 530

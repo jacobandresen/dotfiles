@@ -12,22 +12,10 @@ export PATH="$PATH:$HOME/.lmstudio/bin"
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
 
 # Per-host hardware tuning. scripts/setup-host.sh probes the GPU and writes
-# ~/.zshrc.local (machine-local, outside the repo) with MU_NUM_CTX. Sourced
+# ~/.zshrc.mu (machine-local, outside the repo) with MU_NUM_CTX. Sourced
 # *before* the default below so a bigger card's value wins; absent on a
 # fresh/default host, where the committed default applies.
-[ -r "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
-
-# Right side: a minimal cwd and the current git branch, kept dim so the READY.
-# prompt stays the focus. vcs_info fills in the branch (and rebase/merge state)
-# before each prompt. %(4~|…/%3~|%~) shows the full home-relative path but trims
-# deep ones to their last three components. %F{8} = dim grey, %F{6} = cyan.
-setopt prompt_subst
-autoload -Uz add-zsh-hook vcs_info
-zstyle ':vcs_info:*' enable git
-zstyle ':vcs_info:git:*' formats       ' %F{6}(%b)%f'
-zstyle ':vcs_info:git:*' actionformats ' %F{6}(%b|%a)%f'
-add-zsh-hook precmd vcs_info
-RPROMPT='%F{8}%(4~|…/%3~|%~)%f${vcs_info_msg_0_}'
+[ -r "$HOME/.zshrc.mu" ] && source "$HOME/.zshrc.mu"
 
 # Aliases
 alias vim="nvim"
