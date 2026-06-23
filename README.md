@@ -32,23 +32,9 @@ See [`nvim/README.md`](nvim/README.md) for the full plugin list, keybindings, an
 
 ## WezTerm
 
-`.wezterm.lua` themes the terminal as a Commodore 64 boot screen (commodore VIC-II
-palette, light-blue-on-blue, blinking block cursor) using the **C64 Pro Mono**
-font with Hack Nerd Font Mono as a glyph fallback. `make install-fonts` installs
-both.
-
-A matching **"C64" app icon** (committed under `icons/wezterm/`) can be installed
-separately — it's intentionally *not* part of `make install`:
-
-```sh
-make install-icon
-```
-
-- **Linux** (Arch / Ubuntu): drops PNGs into `~/.local/share/icons/hicolor/` and
-  refreshes the icon caches. Log out/in if the launcher doesn't update.
-- **macOS**: rebuilds `WezTerm.app`'s `.icns` with `sips`/`iconutil` (backs up the
-  original to `terminal.icns.orig`). Note this edits the signed app bundle, so it's
-  reset on the next WezTerm update; restore with the backed-up file.
+`.wezterm.lua` uses the **Apple Classic** color scheme with the **Hack Nerd Font
+Mono** font (Hack as fallback), a blinking block cursor, and tab bar + scrollbar
+enabled. `make install-fonts` installs the font.
 
 ## zsh
 
