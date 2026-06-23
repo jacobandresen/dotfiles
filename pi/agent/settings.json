@@ -8,7 +8,7 @@
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "low",
   "enableSkillCommands": true,
-  "lastChangelogVersion": "0.79.9",
+  "lastChangelogVersion": "0.79.10",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
