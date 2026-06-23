@@ -2,3 +2,7 @@ nvim/lazy-lock.json
 
 # pi writes session logs here via the ~/.pi -> dotfiles/pi symlink — runtime data, not config
 pi/agent/sessions/
+
+# Host-managed: setup-host.sh patches defaultModel per machine (via the same symlink),
+# so the live file is untracked. Seeded from settings.json.template by 'make install-pi'.
+pi/agent/settings.json

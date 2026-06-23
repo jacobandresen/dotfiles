@@ -77,7 +77,6 @@ the buffer opens normally.
 | Plugin | Purpose |
 |--------|---------|
 | [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) | Status line |
-| [nvim-base16](https://github.com/RRethy/nvim-base16) | Commodore 64 colorscheme (synced with WezTerm) |
 | [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) | Rendered Markdown in buffer |
 | [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo) | Better folding |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) | Icon provider |

@@ -1,6 +1,6 @@
 # dotfiles
 
-My personal, Commodore 64-themed dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent.
+My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent.
 
 ## Setup
 
@@ -87,7 +87,7 @@ make setup-lmstudio   # or just the model: downloads the host's Qwen2.5-Coder-7B
 - **mu** — writes `MU_AGENT_MODEL` (mirroring pi's model) and, on a roomier card, `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, outside the repo; sourced by `.zshrc`) — e.g. context 12288 on a roomy card, mu's 6000 default elsewhere. Only `mu` reads these.
 - **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to the 7B on a capable card, the snappier 3B otherwise. This is global (non-interactive `pi` and CodeCompanion included), unlike a shell alias.
 
-The tracked `.zshrc` stays identical across machines; per-host context lives only in the untracked `~/.zshrc.mu`. pi's `defaultModel` is *host-managed* — each machine's run sets its own, so don't commit a host-specific value for it. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (same quant logic, no mu/pi tuning).
+The tracked `.zshrc` stays identical across machines; per-host context lives only in the untracked `~/.zshrc.mu`. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own model without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (same quant logic, no mu/pi tuning).
 
 On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-host` after.
 

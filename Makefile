@@ -106,6 +106,12 @@ install-pi:
 		ln -s $(CURDIR)/pi $(HOME)/.pi; \
 		echo "  ✓ ~/.pi -> $(CURDIR)/pi"; \
 	fi
+	@if [ -e $(CURDIR)/pi/agent/settings.json ]; then \
+		echo "  ✓ pi/agent/settings.json present (host-managed)"; \
+	else \
+		cp $(CURDIR)/pi/agent/settings.json.template $(CURDIR)/pi/agent/settings.json; \
+		echo "  ✓ seeded pi/agent/settings.json from template (run 'make setup-host' to set the model)"; \
+	fi
 
 FONT_DIR := $(HOME)/.local/share/fonts
 HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz
