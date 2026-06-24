@@ -36,6 +36,14 @@ See [`nvim/README.md`](nvim/README.md) for the full plugin list, keybindings, an
 Mono** font (Hack as fallback), a blinking block cursor, and tab bar + scrollbar
 enabled. `make install-fonts` installs the font.
 
+`make install-wezterm-icon` swaps WezTerm's app icon for a **classic compact Mac**
+— a beige Macintosh with a black CRT running a green-phosphor `>_` shell prompt.
+The source lives in `assets/happy-mac.svg`
+(regenerate with `scripts/gen-happy-mac.py`); the target installs PNGs into the
+per-user hicolor theme, which overrides the packaged icon without touching the
+WezTerm install. Linux only — restart WezTerm to pick it up. To revert, delete
+`~/.local/share/icons/hicolor/*/apps/org.wezfurlong.wezterm.png`.
+
 ## zsh
 
 `.zshrc` uses oh-my-zsh with the `lambda` theme and the `git` plugin. It puts

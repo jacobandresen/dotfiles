@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts install-wezterm-icon setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -137,6 +137,35 @@ else
 		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
 		echo "  ✓ Hack Nerd Font -> $(FONT_DIR)/HackNerdFont"; \
 	fi
+endif
+
+# Replace WezTerm's app icon with the classic Happy Mac (assets/happy-mac.svg).
+# Renders a crisp master from the SVG, then installs PNGs into the per-user
+# hicolor theme, which XDG searches before /usr/share — so the packaged icon is
+# overridden without touching the WezTerm install. Linux only (macOS ships the
+# icon inside the .app bundle). Needs rsvg-convert + ImageMagick.
+ICON_NAME := org.wezfurlong.wezterm
+ICON_DIR  := $(HOME)/.local/share/icons/hicolor
+ICON_SIZES := 16 24 32 48 64 96 128 256
+
+install-wezterm-icon:
+ifeq ($(OS),Darwin)
+	@echo "  ⚠ macOS keeps the icon in WezTerm.app — skipping (Linux only)"
+else
+	@command -v rsvg-convert >/dev/null 2>&1 || { echo "  ✗ rsvg-convert not found (install librsvg)"; exit 1; }
+	@command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1 || { echo "  ✗ ImageMagick not found"; exit 1; }
+	@echo "Installing Happy Mac icon for WezTerm..."
+	@tmp=$$(mktemp -d) && \
+	rsvg-convert -w 512 -h 512 "$(CURDIR)/assets/happy-mac.svg" -o "$$tmp/master.png" && \
+	for s in $(ICON_SIZES); do \
+		dir="$(ICON_DIR)/$${s}x$${s}/apps" && mkdir -p "$$dir" && \
+		( command -v magick >/dev/null 2>&1 && magick "$$tmp/master.png" -filter Lanczos -resize $${s}x$${s} "$$dir/$(ICON_NAME).png" \
+		  || convert "$$tmp/master.png" -filter Lanczos -resize $${s}x$${s} "$$dir/$(ICON_NAME).png" ) && \
+		echo "  ✓ $${s}x$${s} -> $$dir/$(ICON_NAME).png"; \
+	done && \
+	rm -rf "$$tmp"
+	@gtk-update-icon-cache -f -t "$(ICON_DIR)" >/dev/null 2>&1 || true
+	@echo "  ✓ done — restart WezTerm to see the new icon"
 endif
 
 # Provision the Python side of the Neovim Jupyter stack (molten-nvim). Standalone
