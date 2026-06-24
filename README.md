@@ -52,24 +52,18 @@ present (`~/.zshrc.dev` for dev settings, `~/.zshrc.mu` for LLM tuning), aliases
 `vim`→`nvim`, and points `$EDITOR`/`$VISUAL`/`$VIEWER` at Neovim (the last for
 Midnight Commander's `F3`).
 
-It also keeps the local LLM for the [`mu`](https://github.com/jacobandresen/mu)
-agent pinned to the **same model as pi**. The pin is host-managed: `make setup-host`
-writes `MU_AGENT_MODEL` to `~/.zshrc.mu`, matching pi's `defaultModel` (the 7B on a
-capable card, the snappier 3B otherwise). Without it, mu auto-selects the first
-`/v1/models` entry, which can be a model too large to load.
+`~/.zshrc.mu` carries per-host LLM tuning for the [`mu`](https://github.com/jacobandresen/mu)
+agent (`MU_AGENT_MODEL`, `MU_NUM_CTX`). It's machine-local and written by mu's own
+`make setup-host` (see the [mu repo](https://github.com/jacobandresen/mu)); `.zshrc`
+just sources it if present. mu and pi share one LM Studio model, so mu pins the
+**same model pi's `setup-host` selects** — both apply the same GPU thresholds (the 7B
+on a capable card, the snappier 3B otherwise).
 
-The id must match LM Studio's `/v1/models`. LM Studio serves the 7B under the bare
+That id must match LM Studio's `/v1/models`. LM Studio serves the 7B under the bare
 name `qwen2.5-coder-7b-instruct` only while it's the sole 7B variant on the box;
 adding a second 7B (e.g. a `qwen/…` A/B candidate) makes it namespace both as
-`<publisher>/…` and the bare id the pin expects disappears. Keep just one 7B
-installed — delete extra variants from LM Studio (or `~/.lmstudio/models`) — so pi
-and mu keep resolving.
-
-`MU_NUM_CTX` is a default here but host-tunable: `make setup-host` probes the GPU
-and writes `~/.zshrc.mu` (machine-local, outside the repo, sourced first) —
-e.g. raising mu's context to 12288 on a 6 GB GTX, where the larger card has VRAM
-headroom the 8 GB Mac doesn't. The same command sets pi's `defaultModel`; see
-[pi agent](#pi-agent).
+`<publisher>/…` and the bare id disappears. Keep just one 7B installed — delete
+extra variants from LM Studio (or `~/.lmstudio/models`) — so pi and mu keep resolving.
 
 ## Midnight Commander
 
@@ -85,17 +79,18 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 ### Setup
 
 ```sh
-make setup-host       # tune the whole stack (quant + MU_NUM_CTX + pi model) to this GPU
+make setup-host       # tune the host (LM Studio quant + pi model) to this GPU
 make setup-lmstudio   # or just the model: downloads the host's Qwen2.5-Coder-7B quant, wires pi config
 ```
 
-`make setup-host` probes the GPU once and applies a hardware profile across all three consumers:
+`make setup-host` probes the GPU once and applies a hardware profile to both consumers it owns:
 
 - **LM Studio** — downloads the right quant (Q3_K_L / Q4_K_M).
-- **mu** — writes `MU_AGENT_MODEL` (mirroring pi's model) and, on a roomier card, `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, outside the repo; sourced by `.zshrc`) — e.g. context 12288 on a roomy card, mu's 6000 default elsewhere. Only `mu` reads these.
 - **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to the 7B on a capable card, the snappier 3B otherwise. This is global (non-interactive `pi` and CodeCompanion included), unlike a shell alias.
 
-The tracked `.zshrc` stays identical across machines; per-host context lives only in the untracked `~/.zshrc.mu`. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own model without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (same quant logic, no mu/pi tuning).
+mu shares the same LM Studio server but tunes itself: its own `make setup-host` writes `MU_AGENT_MODEL` / `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, sourced by `.zshrc`), applying the same GPU thresholds so it lands on the same model. See the [mu repo](https://github.com/jacobandresen/mu).
+
+The tracked `.zshrc` stays identical across machines. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own model without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (same quant logic, no pi tuning).
 
 On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-host` after.
 

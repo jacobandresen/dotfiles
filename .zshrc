@@ -11,10 +11,10 @@ export PATH="$PATH:$HOME/.lmstudio/bin"
 # Per-host development settings
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
 
-# Per-host hardware tuning. scripts/setup-host.sh probes the GPU and writes
-# ~/.zshrc.mu (machine-local, outside the repo) with MU_NUM_CTX. Sourced
-# *before* the default below so a bigger card's value wins; absent on a
-# fresh/default host, where the committed default applies.
+# Per-host LLM tuning for the mu agent. The mu repo's `make setup-host` probes
+# the GPU and writes ~/.zshrc.mu (machine-local, outside this repo) with
+# MU_AGENT_MODEL / MU_NUM_CTX. Sourced if present; absent on a fresh host, where
+# mu's own defaults apply.
 [ -r "$HOME/.zshrc.mu" ] && source "$HOME/.zshrc.mu"
 
 # Aliases

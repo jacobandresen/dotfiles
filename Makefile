@@ -180,9 +180,10 @@ setup-jupyter:
 setup-lmstudio:
 	@./scripts/setup-lmstudio.sh
 
-# Tune the whole local-LLM stack (LM Studio quant + MU_NUM_CTX + pi model) to this
-# machine's GPU in one pass. Writes per-host overrides to ~/.zshrc.mu; leaves the
-# committed, cross-machine dotfiles untouched. Re-run after a hardware change.
+# Tune the local-LLM stack (LM Studio quant + pi model) to this machine's GPU in
+# one pass, host-managed so the committed, cross-machine dotfiles stay untouched.
+# Re-run after a hardware change. (mu tunes itself — see `make setup-host` in the
+# mu repo.)
 setup-host:
 	@./scripts/setup-host.sh
 
