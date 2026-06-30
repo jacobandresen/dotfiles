@@ -7,14 +7,14 @@
       "models": [
         {
           "_launch": true,
-          "id": "codestral-22b-v0.1",
+          "id": "mistral-7b-instruct-v0.2",
           "input": ["text"],
-          "name": "Codestral 22B"
+          "name": "Mistral 7B Instruct v0.2"
         },
         {
-          "id": "mistralai/mistral-7b-instruct-v0.2",
+          "id": "codestral-22b-v0.1",
           "input": ["text"],
-          "name": "Mistral 7B Instruct"
+          "name": "Codestral 22B (requires 11+ GB VRAM)"
         },
         {
           "id": "mistralai/mistral-7b-instruct-v0.1",

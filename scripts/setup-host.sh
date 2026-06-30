@@ -92,33 +92,38 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 # ── Pick a hardware profile for Mistral AI models ─────────────────────────
-# Codestral-22B needs ~14 GB VRAM for Q4_K_M, ~11 GB for Q3_K_L.
-# Mistral-7B needs ~4.4 GB for Q4_K_M, ~3.8 GB for Q3_K_L.
+# Mistral-7B is the safe default (4.4 GB VRAM for Q4_K_M).
+# Codestral-22B is opt-in only for high-VRAM cards (11+ GB).
 # Adjust based on available GPU memory.
 #
 # NOTE: VRAM thresholds are intentionally duplicated in the mu repo's
 # scripts/setup-host.sh, which picks mu's model the same way, so mu and pi resolve
 # to the same local Mistral AI model without either repo depending on the other.
 if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
+    # Only use Codestral on very capable GPUs (16+ GB)
     PROFILE="codestral-q4"
     QUANT="Q4_K_M"
-    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # capable card → Codestral with Q4_K_M
+    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # high-end → Codestral with Q4_K_M
 elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 11000 ] 2>/dev/null; then
+    # Codestral with Q3_K_L for 11-16 GB
     PROFILE="codestral-q3"
     QUANT="Q3_K_L"
-    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # mid-range → Codestral with Q3_K_L
-elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
-    PROFILE="mistral-7b"
-    QUANT="Q4_K_M"
-    PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 6-11 GB → Mistral 7B
-elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
-    PROFILE="mistral-7b-q3"
-    QUANT="Q3_K_L"
-    PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 4-6 GB → Mistral 7B Q3
+    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # mid-high → Codestral with Q3_K_L
 else
-    PROFILE="qwen-3b"
-    QUANT="Q3_K_L"
-    PI_DEFAULT_MODEL="qwen2.5-coder-3b-instruct"   # <4 GB → lightweight fallback
+    # Default to Mistral-7B for all other cases (including 6 GB cards)
+    if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
+        PROFILE="mistral-7b"
+        QUANT="Q4_K_M"
+        PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 6-11 GB → Mistral 7B Q4
+    elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
+        PROFILE="mistral-7b-q3"
+        QUANT="Q3_K_L"
+        PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 4-6 GB → Mistral 7B Q3
+    else
+        PROFILE="qwen-3b"
+        QUANT="Q3_K_L"
+        PI_DEFAULT_MODEL="qwen2.5-coder-3b-instruct"   # <4 GB → lightweight fallback
+    fi
 fi
 
 echo "Host hardware profile (Mistral AI optimized)"

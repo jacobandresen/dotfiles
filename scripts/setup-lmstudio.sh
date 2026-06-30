@@ -32,13 +32,13 @@ Options:
   --provider PROVIDER    Specify provider (lmstudio, mistral, openrouter)
 
 Supported Mistral AI Models:
-  - codestral-22b-v0.1    (default, ~14 GB Q4_K_M)
-  - codestral-latest      (latest Codestral)
-  - mistral-7b-instruct-v0.2
-  - mistral-7b-instruct-v0.1
-  - mixtral-8x7b-instruct-v0.1
-  - qwen2.5-coder-7b-instruct (fallback)
-  - qwen2.5-coder-3b-instruct (fallback, lightweight)
+  - mistral-7b-instruct-v0.2    (default, ~4.4 GB Q4_K_M)
+  - mistral-7b-instruct-v0.1    (~4.4 GB Q4_K_M)
+  - mixtral-8x7b-instruct-v0.1  (~24 GB Q4_K_M)
+  - codestral-22b-v0.1          (~14 GB Q4_K_M, requires 11+ GB VRAM)
+  - codestral-latest            (latest, ~14 GB Q4_K_M, requires 11+ GB VRAM)
+  - qwen2.5-coder-7b-instruct   (fallback, ~4.4 GB)
+  - qwen2.5-coder-3b-instruct   (fallback, ~3.8 GB, lightweight)
 
 Examples:
   $(basename "$0")                              # Auto-detect and download Codestral
@@ -123,11 +123,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Model configuration -------------------------------------------------------
 
-# Set default model to Codestral (Mistral AI's flagship coding model)
+# Set default model to Mistral-7B (safe for most GPUs)
+# Codestral-22B requires 11+ GB VRAM - use --model flag to opt-in
 if [ -n "$EXPLICIT_MODEL" ]; then
     MODEL_ID="$EXPLICIT_MODEL"
 else
-    MODEL_ID="codestral-22b-v0.1"
+    MODEL_ID="mistral-7b-instruct-v0.2"
 fi
 
 # Set default provider

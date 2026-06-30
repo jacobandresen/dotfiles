@@ -4,7 +4,7 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "codestral-22b-v0.1",
+  "defaultModel": "mistral-7b-instruct-v0.2",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
