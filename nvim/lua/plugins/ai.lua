@@ -1,40 +1,61 @@
+-- AI assistant via gp.nvim — simple, direct, works with local Mistral models in LM Studio
 return {
   {
     "Robitx/gp.nvim",
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-      "nvim-treesitter/nvim-treesitter",
-    },
+    dependencies = { "nvim-lua/plenary.nvim" },
     keys = {
-      { "<leader>ac", "<cmd>GpChatToggle<cr>", desc = "AI chat (toggle)" },
-      { "<leader>aa", "<cmd>GpChatNew<cr>", desc = "AI new chat", mode = { "n", "v" } },
-      { "<leader>ai", "<cmd>'<,'>GpChatPaste<cr>", desc = "AI inline", mode = { "n", "v" } },
+      -- Chat: toggle with <leader>ac
+      { "<leader>ac", "<cmd>GpChatToggle<cr>", desc = "Toggle AI chat" },
+      -- New chat in various contexts
+      { "<leader>an", "<cmd>GpChatNew<cr>", desc = "New AI chat" },
+      { "<leader>ap", "<cmd>GpChatPaste<cr>", desc = "Paste into AI chat", mode = { "n", "v" } },
+      -- Inline: replace selection or line with AI
+      { "<leader>ai", "<cmd>'<,'>GpChatPaste<cr>", desc = "Replace with AI", mode = { "n", "v" } },
+      -- Quick actions
+      { "<leader>ae", "<cmd>GpExplain<cr>", desc = "Explain code", mode = { "n", "v" } },
+      { "<leader>ar", "<cmd>GpRewrite<cr>", desc = "Rewrite code", mode = { "n", "v" } },
     },
     config = function()
-      local gp = require("gp")
-      
-      gp.setup({
-        -- LM Studio OpenAI-compatible API
-        openai_api_key = "lm-studio",
+      require("gp").setup({
+        -- ========================================================================
+        -- LM Studio (local Mistral models) — Zero config required!
+        -- ========================================================================
+        openai_api_key = "lm-studio",           -- LM Studio uses this as a placeholder
         openai_base_url = "http://localhost:1234/v1",
+        openai_model_id = "auto",              -- Auto-detects your loaded model
         
-        -- Default to auto-detect model from /v1/models
-        openai_model_id = "auto",
+        -- ========================================================================
+        -- Simple defaults — just works with Mistral
+        -- ========================================================================
+        disable_stream = false,                -- See responses as they're generated
+        temperature = 0.7,                     -- Balanced creativity
+        max_tokens = 2048,                     -- Good for most coding tasks
         
-        -- Disable default keymaps (we use our own)
+        -- ========================================================================
+        -- Prompt for Mistral AI — tells it to be a coding assistant
+        -- ========================================================================
+        system_prompt = "You are Mistral, a helpful AI coding assistant. " ..
+                       "Write clean, correct, well-commented code. " ..
+                       "Explain your reasoning. Use the same language and style as the current file.",
+        
+        -- ========================================================================
+        -- Disable default keymaps (we define our own above)
+        -- ========================================================================
         chat_shortcut = false,
         
-        -- Custom system prompt for Mistral AI
-        system_prompt = "You are a helpful AI coding assistant. " ..
-                       "You write concise, correct code. " ..
-                       "You help with debugging, explaining, and optimizing code. " ..
-                       "When asked to write code, provide the complete implementation. " ..
-                       "Use the programming language and style from the current file.",
-        
-        -- Streaming enabled
-        disable_stream = false,
-        temperature = 0.7,
-        max_tokens = 4096,
+        -- ========================================================================
+        -- Optional: Custom commands for common tasks
+        -- ========================================================================
+        hooks = {
+          -- Before sending to AI: ensure LM Studio is running
+          BeforeSend = function(gp)
+            -- Check if we can reach LM Studio
+            local ok, _ = pcall(vim.fn.readfile, "http://localhost:1234/v1/models")
+            if not ok then
+              vim.notify("LM Studio may not be running. Start it first!", vim.log.levels.WARN)
+            end
+          end,
+        },
       })
     end,
   },

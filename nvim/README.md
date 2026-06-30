@@ -52,7 +52,7 @@ URL and HTML encode/decode (`python3`), and Base64 encode/decode.
 ### AI
 | Plugin | Purpose |
 |--------|---------|
-| [gp.nvim](https://github.com/Robitx/gp.nvim) | AI chat & inline assist (via LM Studio) |
+| [gp.nvim](https://github.com/Robitx/gp.nvim) | AI chat & inline assist (via LM Studio, auto-detects local Mistral models) |
 
 ### Jupyter
 | Plugin | Purpose |

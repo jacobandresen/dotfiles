@@ -125,7 +125,15 @@ so tool calls parse cleanly.
 
 ### Neovim integration
 
-The `gp.nvim` plugin connects directly to LM Studio via the OpenAI-compatible API at `http://localhost:1234/v1`. Keys: `<leader>ac` (chat toggle), `<leader>aa` (new chat), `<leader>ai` (inline assist).
+The `gp.nvim` plugin connects directly to LM Studio via the OpenAI-compatible API at `http://localhost:1234/v1`. **Zero configuration needed** — it auto-detects your loaded Mistral model.
+
+**Keys:**
+- `<leader>ac` — Toggle chat
+- `<leader>an` — New chat  
+- `<leader>ap` — Paste selection to chat
+- `<leader>ai` — Replace selection with AI
+- `<leader>ae` — Explain selected code
+- `<leader>ar` — Rewrite selected code
 
 ## Jupyter
 
