@@ -51,7 +51,7 @@ return {
     "MeanderingProgrammer/render-markdown.nvim",
     dependencies = { "nvim-treesitter/nvim-treesitter", "nvim-tree/nvim-web-devicons" },
     opts = {},
-    ft = { "markdown", "continue" },
+    ft = { "markdown" },
   },
 
   -- LSP status spinner

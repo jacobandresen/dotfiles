@@ -24,7 +24,7 @@ Built on [LazyVim](https://www.lazyvim.org/).
 - **Fuzzy finding** with [Telescope](https://github.com/nvim-telescope/telescope.nvim) + fzf native sorter
 - **File management** with [oil.nvim](https://github.com/stevearc/oil.nvim) (neo-tree disabled)
 - **Database UI** via [vim-dadbod](https://github.com/tpope/vim-dadbod) + dadbod-ui
-- **AI assist** via [continue.nvim](https://github.com/niba/continue.nvim) backed by LM Studio
+- **AI assist** via [gp.nvim](https://github.com/Robitx/gp.nvim) backed by LM Studio
 - **Jupyter notebooks** via [molten-nvim](https://github.com/benlubas/molten-nvim) + [jupytext.nvim](https://github.com/GCBallesteros/jupytext.nvim) + [image.nvim](https://github.com/3rd/image.nvim) (`make setup-jupyter`)
 - **Text transforms** (JSON/URL/HTML/Base64) via a Telescope picker (`<leader>mm`)
 - **Syntax** via [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
@@ -84,7 +84,7 @@ All model selection is **automatic and hardware-optimized** via `make setup-host
 - **4-6 GB VRAM** → Mistral-7B-Instruct with Q3_K_L (~3.8 GB)
 - **<4 GB VRAM** → Qwen2.5-Coder-3B with Q3_K_L (~3.8 GB, fallback)
 
-`pi` (the standalone CLI agent), Neovim's continue.nvim, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the configured Mistral AI model; there is no proxy in between.
+`pi` (the standalone CLI agent), Neovim's gp.nvim, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the configured Mistral AI model; there is no proxy in between.
 
 ### Supported Models
 
@@ -125,7 +125,7 @@ so tool calls parse cleanly.
 
 ### Neovim integration
 
-The `continue.nvim` plugin connects directly to LM Studio and auto-detects the loaded model via `/v1/models`. Keys: `<leader>ac` (chat toggle), `<leader>aa` (actions), `<leader>ai` (inline assist).
+The `gp.nvim` plugin connects directly to LM Studio via the OpenAI-compatible API at `http://localhost:1234/v1`. Keys: `<leader>ac` (chat toggle), `<leader>aa` (new chat), `<leader>ai` (inline assist).
 
 ## Jupyter
 
