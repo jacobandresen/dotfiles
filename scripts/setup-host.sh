@@ -16,6 +16,62 @@
 # Idempotent: re-run after a GPU change and it rewrites the profile.
 set -euo pipefail
 
+# --- Error handling helpers --------------------------------------------------
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Tune LM Studio and pi agent to the current machine's GPU.
+
+Options:
+  -h, --help     Show this help message and exit
+  -n, --dry-run  Show what would be done without making changes
+  -v, --verbose  Enable verbose output
+
+Examples:
+  $(basename "$0")              # Run with actual changes
+  $(basename "$0") --dry-run    # Preview changes only
+EOF
+}
+
+DRY_RUN=false
+VERBOSE=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Ensure we can detect GPU info
+detect_gpu_info() {
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        echo "  ⚠ nvidia-smi not found (Linux only; macOS uses unified memory)" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Cleanup on error - remove any partial state
+trap 'echo "\n✗ Setup failed. Check errors above." >&2' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Detect GPU VRAM (NVIDIA only; Macs use unified memory, handled as default) ─
@@ -60,10 +116,23 @@ echo "  LM Studio:  Qwen2.5-Coder-7B $QUANT"
 echo "  pi model:   $PI_DEFAULT_MODEL"
 echo ""
 
+# --- Run helper: execute command or show dry-run message ---------------------
+run_cmd() {
+    if $DRY_RUN; then
+        echo "  [DRY-RUN] $*"
+    else
+        eval "$@"
+    fi
+}
+
 # ── 1. LM Studio: download/keep the right quant ───────────────────────────────
 # Hand the chosen quant down so setup-lmstudio.sh skips its own GPU probe.
 echo "── LM Studio ───────────────────────────────────────────────"
-QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh"
+if $DRY_RUN; then
+    echo "  [DRY-RUN] Would run: QUANT=$QUANT bash $SCRIPT_DIR/setup-lmstudio.sh"
+else
+    QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh"
+fi
 echo ""
 
 # ── 2. pi: set the default model in the agent settings ────────────────────────
@@ -73,25 +142,62 @@ echo ""
 # 'make setup-host' sets its own value, so don't commit a host-specific default.
 echo "── pi agent (~/.pi/agent/settings.json) ────────────────────"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
-if [ -f "$PI_SETTINGS" ]; then
+
+if [ ! -f "$PI_SETTINGS" ]; then
+    echo "  ⚠ $PI_SETTINGS not found — run 'make install-pi' first, then re-run."
+    if $DRY_RUN; then
+        echo "  [DRY-RUN] Would check if file exists"
+    fi
+    echo ""
+    if ! $DRY_RUN; then
+        exit 1
+    fi
+    exit 0
+fi
+
+if $DRY_RUN; then
+    # Check current value in dry-run mode
+    if command -v python3 >/dev/null 2>&1; then
+        CURRENT_MODEL=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', '<unset>'))" 2>/dev/null || echo "<error>")
+        echo "  [DRY-RUN] Current defaultModel: $CURRENT_MODEL"
+        echo "  [DRY-RUN] Would set defaultModel to: $PI_DEFAULT_MODEL"
+    else
+        echo "  [DRY-RUN] Would update defaultModel (python3 required to check current value)"
+    fi
+else
     python3 - "$PI_SETTINGS" "$PI_DEFAULT_MODEL" <<'PYEOF'
 import json, sys
 path, model = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    s = json.load(f)
+try:
+    with open(path) as f:
+        s = json.load(f)
+except json.JSONDecodeError as e:
+    print(f"  ✗ Failed to parse {path}: {e}" >&2)
+    sys.exit(1)
+except FileNotFoundError:
+    print(f"  ✗ File not found: {path}" >&2)
+    sys.exit(1)
+
 if s.get("defaultModel") == model:
     print(f"  ✓ defaultModel already '{model}'")
 else:
     old = s.get("defaultModel", "<unset>")
     s["defaultModel"] = model
-    with open(path, "w") as f:
-        json.dump(s, f, indent=2)
-        f.write("\n")
-    print(f"  ✓ defaultModel: {old} → {model}")
+    try:
+        with open(path, "w") as f:
+            json.dump(s, f, indent=2)
+            f.write("\n")
+        print(f"  ✓ defaultModel: {old} → {model}")
+    except IOError as e:
+        print(f"  ✗ Failed to write {path}: {e}" >&2)
+        sys.exit(1)
 PYEOF
-else
-    echo "  ⚠ $PI_SETTINGS not found — run 'make install-pi' first, then re-run."
 fi
-echo ""
 
-echo "Host setup complete."
+if ! $DRY_RUN; then
+    echo ""
+    echo "Host setup complete."
+else
+    echo ""
+    echo "[DRY-RUN] Host setup would be complete. No changes were made."
+fi

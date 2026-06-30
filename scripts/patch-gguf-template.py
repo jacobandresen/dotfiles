@@ -8,8 +8,14 @@ Usage: python3 patch-gguf-template.py <path-to-model.gguf>
 
 Idempotent: re-running on an already-patched file is a no-op.
 A .bak backup is created before the first patch.
+
+Exit codes:
+  0: Success or already patched
+  1: Error (file not found, patch failed, etc.)
 """
-import sys, os, shutil, struct
+import sys
+import os
+import shutil
 
 PATCH_MARKER = b"{% set ns = namespace(sys='')"
 
@@ -51,46 +57,75 @@ NEW_TEMPLATE_BASE = (
 
 
 def patch(model_path: str) -> None:
+    """Patch the GGUF chat template to handle system-role messages.
+    
+    Args:
+        model_path: Path to the GGUF model file
+        
+    Raises:
+        SystemExit: On errors (file not found, patch failure, etc.)
+    """
+    # Validate file exists and is readable
     if not os.path.isfile(model_path):
-        sys.exit(f"File not found: {model_path}")
+        print(f"  ✗ File not found: {model_path}" >&2)
+        sys.exit(1)
+    
+    if not os.access(model_path, os.R_OK | os.W_OK):
+        print(f"  ✗ No read/write permission for: {model_path}" >&2)
+        sys.exit(1)
 
-    # Read enough of the file to cover the metadata section
-    read_size = 4 * 1024 * 1024  # 4 MB — metadata is always near the start
-    with open(model_path, "rb") as f:
-        header = f.read(read_size)
+    try:
+        # Read enough of the file to cover the metadata section
+        read_size = 4 * 1024 * 1024  # 4 MB — metadata is always near the start
+        with open(model_path, "rb") as f:
+            header = f.read(read_size)
+    except IOError as e:
+        print(f"  ✗ Failed to read {model_path}: {e}" >&2)
+        sys.exit(1)
 
     # Already patched?
     if PATCH_MARKER in header:
         print("  ✓ Chat template already patched — nothing to do")
-        return
+        sys.exit(0)
 
     idx = header.find(OLD_TEMPLATE)
     if idx == -1:
         print("  ✓ No Mistral template found — patch not needed for this model")
-        return
+        sys.exit(0)
 
     # Pad new template to the exact same byte length
     pad = len(OLD_TEMPLATE) - len(NEW_TEMPLATE_BASE)
     if pad < 0:
-        sys.exit("ERROR: new template is longer than old — cannot patch in-place")
+        print("  ✗ ERROR: new template is longer than old — cannot patch in-place" >&2)
+        sys.exit(1)
     new_template = NEW_TEMPLATE_BASE + b" " * pad
-    assert len(new_template) == len(OLD_TEMPLATE)
+    assert len(new_template) == len(OLD_TEMPLATE), "Template length mismatch"
 
     # Backup before first patch
     backup = model_path + ".bak"
-    if not os.path.exists(backup):
-        print(f"  Creating backup: {backup}")
-        shutil.copy2(model_path, backup)
+    try:
+        if not os.path.exists(backup):
+            print(f"  Creating backup: {backup}")
+            shutil.copy2(model_path, backup)
+    except IOError as e:
+        print(f"  ✗ Failed to create backup: {e}" >&2)
+        sys.exit(1)
 
     # Write patch
-    with open(model_path, "r+b") as f:
-        f.seek(idx)
-        f.write(new_template)
+    try:
+        with open(model_path, "r+b") as f:
+            f.seek(idx)
+            f.write(new_template)
+    except IOError as e:
+        print(f"  ✗ Failed to write patch: {e}" >&2)
+        sys.exit(1)
 
     print(f"  ✓ Chat template patched at offset 0x{idx:x}")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit(f"Usage: {sys.argv[0]} <model.gguf>")
+        print(f"Usage: {sys.argv[0]} <model.gguf>" >&2)
+        sys.exit(1)
     patch(sys.argv[1])

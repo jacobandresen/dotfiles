@@ -6,8 +6,13 @@ prompt (">_") -- the classic Mac silhouette, dressed as a terminal to match
 WezTerm. Drawn one rect per pixel with crisp edges so it scales cleanly, and on a
 transparent background so it reads on any panel. Edit the drawing primitives /
 palette below and re-run.
+
+Exit codes:
+  0: Success
+  1: Error (permission denied, cannot write file, etc.)
 """
 import os
+import sys
 
 W = H = 32
 # grid states -> colours (None = transparent)
@@ -78,6 +83,26 @@ svg = (
 )
 
 out = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'happy-mac.svg'))
-with open(out, 'w') as f:
-    f.write(svg)
-print(f"wrote {out} ({W*S}x{H*S})")
+
+# Ensure output directory exists
+out_dir = os.path.dirname(out)
+if not os.path.exists(out_dir):
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        print(f"  Created directory: {out_dir}")
+    except OSError as e:
+        print(f"  ✗ Failed to create directory {out_dir}: {e}" >&2)
+        sys.exit(1)
+
+# Check write permission
+if not os.access(out_dir, os.W_OK):
+    print(f"  ✗ No write permission for directory: {out_dir}" >&2)
+    sys.exit(1)
+
+try:
+    with open(out, 'w') as f:
+        f.write(svg)
+    print(f"  ✓ Wrote {out} ({W*S}x{H*S})")
+except IOError as e:
+    print(f"  ✗ Failed to write {out}: {e}" >&2)
+    sys.exit(1)
