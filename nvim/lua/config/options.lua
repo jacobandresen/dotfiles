@@ -38,14 +38,6 @@ vim.g.maplocalleader = "\\"
 
 vim.diagnostic.config({ virtual_text = false })
 
--- Python host for remote plugins (molten-nvim). Use the dedicated venv built by
--- `make setup-jupyter` if present; otherwise let nvim auto-detect so a missing
--- venv doesn't error on every startup.
-local nvim_python = vim.fn.expand("~/.virtualenvs/neovim/bin/python3")
-if vim.fn.executable(nvim_python) == 1 then
-  vim.g.python3_host_prog = nvim_python
-end
-
 if vim.fn.has("gui_running") == 1 or vim.g.neovide then
   vim.o.guifont = "Terminess Nerd Font:h14"
 end

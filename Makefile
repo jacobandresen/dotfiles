@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts install-wezterm-icon setup-jupyter setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts install-wezterm-icon setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -167,12 +167,6 @@ else
 	@gtk-update-icon-cache -f -t "$(ICON_DIR)" >/dev/null 2>&1 || true
 	@echo "  ✓ done — restart WezTerm to see the new icon"
 endif
-
-# Provision the Python side of the Neovim Jupyter stack (molten-nvim). Standalone
-# like setup-lmstudio: a venv + scientific stack shouldn't run on every install.
-# Run this BEFORE first launching nvim so molten's :UpdateRemotePlugins can find pynvim.
-setup-jupyter:
-	@./scripts/setup-jupyter.sh
 
 # Download/configure the right Qwen2.5-Coder-7B quant for this host's GPU and wire
 # up LM Studio for pi. Standalone: a multi-GB model download shouldn't run on every

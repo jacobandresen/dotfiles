@@ -25,7 +25,6 @@ Built on [LazyVim](https://www.lazyvim.org/).
 - **File management** with [oil.nvim](https://github.com/stevearc/oil.nvim) (neo-tree disabled)
 - **Database UI** via [vim-dadbod](https://github.com/tpope/vim-dadbod) + dadbod-ui
 - **AI assist** via [gp.nvim](https://github.com/Robitx/gp.nvim) backed by LM Studio
-- **Jupyter notebooks** via [molten-nvim](https://github.com/benlubas/molten-nvim) + [jupytext.nvim](https://github.com/GCBallesteros/jupytext.nvim) + [image.nvim](https://github.com/3rd/image.nvim) (`make setup-jupyter`)
 - **Text transforms** (JSON/URL/HTML/Base64) via a Telescope picker (`<leader>mm`)
 - **Syntax** via [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
 - **Folding** via [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo)
@@ -134,30 +133,6 @@ The `gp.nvim` plugin connects directly to LM Studio via the OpenAI-compatible AP
 - `<leader>ai` — Replace selection with AI
 - `<leader>ae` — Explain selected code
 - `<leader>ar` — Rewrite selected code
-
-## Jupyter
-
-Notebooks run inside Neovim via [molten-nvim](https://github.com/benlubas/molten-nvim)
-(interactive kernel execution with inline output), [jupytext.nvim](https://github.com/GCBallesteros/jupytext.nvim)
-(edit `.ipynb` as plain `py:percent` text), and [image.nvim](https://github.com/3rd/image.nvim)
-(inline plots through WezTerm's kitty graphics protocol + the ImageMagick CLI).
-
-```sh
-make setup-jupyter   # build the nvim Python host venv, register a kernel, install jupytext
-```
-
-This is standalone (not part of `make install`). It creates a dedicated venv at
-`~/.virtualenvs/neovim` with `--system-site-packages` (inheriting the distro's
-Jupyter/SciPy stack), registers a `neovim` kernel, installs the `jupytext` CLI via
-`pipx`, and symlinks `jupyter/jupytext.toml` → `~/.jupyter/jupytext.toml`. Neovim's
-`options.lua` auto-detects the venv as its `python3_host_prog`. **Run it before the
-first `nvim` launch** so molten's `:UpdateRemotePlugins` build can find `pynvim`.
-If any `:Molten*` command errors on first use, run `:UpdateRemotePlugins` once and
-restart Neovim (regenerates the remote-plugin manifest).
-
-Open a notebook (`.ipynb`, transparently shown as `py:percent` cells) or any `.py`
-with `# %%` markers, then `<leader>ji` to start a kernel and `<leader>jl` to run a
-line. JupyterLab is untouched — run `jupyter lab` as before.
 
 ## Contact
 
