@@ -4,11 +4,11 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "qwen2.5-coder-3b-instruct",
+  "defaultModel": "codestral-22b-v0.1",
   "defaultProvider": "lmstudio",
-  "defaultThinkingLevel": "low",
+  "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
-  "lastChangelogVersion": "0.79.10",
+  "lastChangelogVersion": "0.80.0",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],
@@ -23,5 +23,13 @@
       "timeoutMs": 86400000
     }
   },
-  "theme": "dark"
+  "theme": "dark",
+  "mcpServers": {
+    "filesystem": {
+      "enabled": true
+    },
+    "git": {
+      "enabled": true
+    }
+  }
 }

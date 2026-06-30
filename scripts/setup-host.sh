@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # setup-host.sh — Tune the local LLM stack (LM Studio + pi) to this machine's
-# hardware. One GPU-detection pass picks a profile, then it:
-#   • LM Studio — downloads/keeps the right Qwen2.5-Coder-7B quant for the VRAM.
-#   • pi        — sets defaultModel in ~/.pi/agent/settings.json (the 7B on a
-#                 capable card, the snappier 3B otherwise).
+# hardware for Mistral AI models. One GPU-detection pass picks a profile, then it:
+#   • LM Studio — downloads/keeps the right Mistral AI model (Codestral-22B,
+#                 Mistral-7B, Mixtral-8x7B) with appropriate quant for the VRAM.
+#   • pi        — sets defaultModel in ~/.pi/agent/settings.json to Codestral
+#                 on capable hardware, or a lighter Mistral variant otherwise.
 #
 # (mu, the other consumer of this LM Studio server, tunes itself — see
 # `make setup-host` in the mu repo, which writes ~/.zshrc.mu independently.)
 #
-# ~/.pi/agent/* are symlinks into this repo, shared by every host (an 8 GB M2, a
-# 6 GB GTX, and a 32 GB Intel Meteor Lake iGPU today). The committed configs stay
-# host-agnostic: pi's defaultModel is host-managed — each machine's run sets its
-# own, so that one field shouldn't be committed with a host's value.
+# ~/.pi/agent/* are symlinks into this repo, shared by every host. The committed
+# configs stay host-agnostic: pi's defaultModel is host-managed — each machine's
+# run sets its own Mistral AI model, so that field shouldn't be committed.
 #
 # Idempotent: re-run after a GPU change and it rewrites the profile.
 set -euo pipefail
@@ -91,28 +91,40 @@ if [ "$(uname -s)" = "Linux" ]; then
     [ -n "${VRAM_MIB:-}" ] && GPU_DESC="$(nvidia_name) — ${VRAM_MIB} MiB VRAM"
 fi
 
-# ── Pick a hardware profile ───────────────────────────────────────────────────
-# A discrete NVIDIA card with ≥6 GB has room for the larger Q4_K_M weights. Everything
-# else — the Mac, Intel iGPU machines, smaller/older cards — stays on the Q3_K_L
-# default that the committed configs already encode.
+# ── Pick a hardware profile for Mistral AI models ─────────────────────────
+# Codestral-22B needs ~14 GB VRAM for Q4_K_M, ~11 GB for Q3_K_L.
+# Mistral-7B needs ~4.4 GB for Q4_K_M, ~3.8 GB for Q3_K_L.
+# Adjust based on available GPU memory.
 #
-# NOTE: the ≥6000 MiB → 7B threshold is intentionally duplicated in the mu repo's
+# NOTE: VRAM thresholds are intentionally duplicated in the mu repo's
 # scripts/setup-host.sh, which picks mu's model the same way, so mu and pi resolve
-# to the same local model without either repo depending on the other. Keep in sync.
-if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
-    PROFILE="roomy"
+# to the same local Mistral AI model without either repo depending on the other.
+if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
+    PROFILE="codestral-q4"
     QUANT="Q4_K_M"
-    PI_DEFAULT_MODEL="qwen2.5-coder-7b-instruct"   # capable card → pi defaults to the 7B
-else
-    PROFILE="default"
+    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # capable card → Codestral with Q4_K_M
+elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 11000 ] 2>/dev/null; then
+    PROFILE="codestral-q3"
     QUANT="Q3_K_L"
-    PI_DEFAULT_MODEL="qwen2.5-coder-3b-instruct"   # conservative → snappier 3B default
+    PI_DEFAULT_MODEL="codestral-22b-v0.1"   # mid-range → Codestral with Q3_K_L
+elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
+    PROFILE="mistral-7b"
+    QUANT="Q4_K_M"
+    PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 6-11 GB → Mistral 7B
+elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
+    PROFILE="mistral-7b-q3"
+    QUANT="Q3_K_L"
+    PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 4-6 GB → Mistral 7B Q3
+else
+    PROFILE="qwen-3b"
+    QUANT="Q3_K_L"
+    PI_DEFAULT_MODEL="qwen2.5-coder-3b-instruct"   # <4 GB → lightweight fallback
 fi
 
-echo "Host hardware profile"
+echo "Host hardware profile (Mistral AI optimized)"
 echo "  GPU:        $GPU_DESC"
 echo "  Profile:    $PROFILE"
-echo "  LM Studio:  Qwen2.5-Coder-7B $QUANT"
+echo "  LM Studio:  $PI_DEFAULT_MODEL $QUANT"
 echo "  pi model:   $PI_DEFAULT_MODEL"
 echo ""
 

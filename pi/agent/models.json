@@ -5,12 +5,69 @@
       "apiKey": "lm-studio",
       "baseUrl": "http://127.0.0.1:1234/v1",
       "models": [
-       {
+        {
           "_launch": true,
+          "id": "codestral-22b-v0.1",
+          "input": ["text"],
+          "name": "Codestral 22B"
+        },
+        {
+          "id": "mistralai/mistral-7b-instruct-v0.2",
+          "input": ["text"],
+          "name": "Mistral 7B Instruct"
+        },
+        {
+          "id": "mistralai/mistral-7b-instruct-v0.1",
+          "input": ["text"],
+          "name": "Mistral 7B Instruct v0.1"
+        },
+        {
+          "id": "mistralai/mixtral-8x7b-instruct-v0.1",
+          "input": ["text"],
+          "name": "Mixtral 8x7B Instruct"
+        },
+        {
+          "id": "mistralai/codestral-latest",
+          "input": ["text"],
+          "name": "Codestral Latest"
+        },
+        {
           "id": "qwen2.5-coder-7b-instruct",
-          "input": [
-            "text"
-          ]
+          "input": ["text"],
+          "name": "Qwen 2.5 Coder 7B"
+        },
+        {
+          "id": "qwen2.5-coder-3b-instruct",
+          "input": ["text"],
+          "name": "Qwen 2.5 Coder 3B"
+        }
+      ]
+    },
+    "mistral": {
+      "api": "openai-completions",
+      "apiKey": "$MISTRAL_API_KEY",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "models": [
+        {
+          "_launch": true,
+          "id": "codestral-latest",
+          "input": ["text"],
+          "name": "Codestral (Mistral Cloud)"
+        },
+        {
+          "id": "mistral-large-latest",
+          "input": ["text"],
+          "name": "Mistral Large"
+        },
+        {
+          "id": "mistral-small-latest",
+          "input": ["text"],
+          "name": "Mistral Small"
+        },
+        {
+          "id": "mixtral-8x22b-latest",
+          "input": ["text"],
+          "name": "Mixtral 8x22B"
         }
       ]
     },
@@ -20,16 +77,25 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "models": [
         {
-          "id": "qwen/qwen3-coder:free",
-          "input": [
-            "text"
-          ]
+          "_launch": true,
+          "id": "mistralai/codestral-latest",
+          "input": ["text"],
+          "name": "Codestral (OpenRouter)"
         },
         {
-          "id": "poolside/laguna-m.1:free",
-          "input": [
-           "text"
-          ]
+          "id": "mistralai/mistral-7b-instruct:free",
+          "input": ["text"],
+          "name": "Mistral 7B (Free)"
+        },
+        {
+          "id": "mistralai/mixtral-8x7b-instruct:free",
+          "input": ["text"],
+          "name": "Mixtral 8x7B (Free)"
+        },
+        {
+          "id": "qwen/qwen3-coder:free",
+          "input": ["text"],
+          "name": "Qwen 3 Coder (Free)"
         }
       ]
     }
