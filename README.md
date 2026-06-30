@@ -29,8 +29,6 @@ Built on [LazyVim](https://www.lazyvim.org/).
 - **Syntax** via [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
 - **Folding** via [nvim-ufo](https://github.com/kevinhwang91/nvim-ufo)
 
-See [`nvim/README.md`](nvim/README.md) for the full plugin list, keybindings, and setup notes.
-
 ## WezTerm
 
 `.wezterm.lua` uses the **Apple Classic** color scheme with the **Hack Nerd Font
