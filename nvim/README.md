@@ -52,7 +52,7 @@ URL and HTML encode/decode (`python3`), and Base64 encode/decode.
 ### AI
 | Plugin | Purpose |
 |--------|---------|
-| [codecompanion.nvim](https://github.com/olimorris/codecompanion.nvim) | AI chat & inline assist (via LM Studio) |
+| [continue.nvim](https://github.com/niba/continue.nvim) | AI chat & inline assist (via LM Studio) |
 
 ### Jupyter
 | Plugin | Purpose |
@@ -113,5 +113,5 @@ Managed by Mason, auto-installed on startup:
 | ImageMagick (`magick`) | Inline image rendering for molten (image.nvim) |
 | `jq` | JSON formatting (`formatprg`) and transforms |
 | `pi` | Standalone CLI coding agent (shares the LM Studio backend) |
-| LM Studio | Local model server (`:1234`) for CodeCompanion & `pi` |
+| LM Studio | Local model server (`:1234`) for continue.nvim & `pi` |
 | `wl-clipboard` | System clipboard support on Wayland (`wl-copy`/`wl-paste`) |

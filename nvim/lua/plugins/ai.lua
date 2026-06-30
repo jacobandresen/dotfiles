@@ -1,85 +1,52 @@
 return {
   {
-    "olimorris/codecompanion.nvim",
+    "niba/continue.nvim",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
     },
     keys = {
-      { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "AI chat (toggle)" },
-      { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
-      { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "AI inline", mode = { "n", "v" } },
+      { "<leader>ac", "<cmd>Continue<cr>", desc = "AI chat (toggle)" },
+      { "<leader>aa", "<cmd>ContinueActions<cr>", desc = "AI actions", mode = { "n", "v" } },
+      { "<leader>ai", "<cmd>ContinueInline<cr>", desc = "AI inline", mode = { "n", "v" } },
     },
     config = function()
-      -- Extract the first complete JSON object from a string, ignoring any
-      -- trailing text the model appends after the closing brace.
-      local function extract_json(str)
-        local start = str:find("{")
-        if not start then return nil end
-        local depth, in_str, escape = 0, false, false
-        for i = start, #str do
-          local c = str:sub(i, i)
-          if escape then
-            escape = false
-          elseif c == "\\" and in_str then
-            escape = true
-          elseif c == '"' then
-            in_str = not in_str
-          elseif not in_str then
-            if c == "{" then depth = depth + 1
-            elseif c == "}" then
-              depth = depth - 1
-              if depth == 0 then return str:sub(start, i) end
-            end
-          end
-        end
-      end
-
-      require("codecompanion").setup({
-        adapters = {
-          http = {
-            lmstudio = function()
-              return require("codecompanion.adapters").extend("openai_compatible", {
-                name = "lmstudio",
-                formatted_name = "LM Studio",
-                env = {
-                  -- LM Studio's local server (Developer tab → Start Server).
-                  -- Default port is 1234; the loaded model is auto-detected
-                  -- via /v1/models, so no model ID needs to be hardcoded.
-                  url = "http://localhost:1234",
-                  api_key = "lm-studio",
-                },
-                handlers = {
-                  -- parse_inline is an alias for inline_output. It receives the raw
-                  -- plenary HTTP response ({body=..., status=200, ...}) and must return
-                  -- {status="success", output=<model text>}.
-                  -- We decode the response exactly as the openai adapter does, then
-                  -- strip any trailing prose the model appends after the closing JSON
-                  -- brace. (Originally added for Phi-3.5; harmless safety net for the
-                  -- current Qwen2.5-Coder model, which is well-behaved.)
-                  inline_output = function(self, data, _)
-                    if not data or data == "" then return end
-                    local ok, json = pcall(vim.json.decode, data.body, { luanil = { object = true } })
-                    if not ok then
-                      return { status = "error", output = json }
-                    end
-                    local content = json.choices and json.choices[1]
-                      and json.choices[1].message
-                      and json.choices[1].message.content
-                    if not content then return end
-                    -- Strip trailing prose after the closing brace of the JSON object
-                    local clean = extract_json(content) or content
-                    return { status = "success", output = clean }
-                  end,
-                },
-              })
-            end,
+      require("continue").setup({
+        providers = {
+          lmstudio = {
+            name = "LM Studio",
+            apiKey = "lm-studio",
+            baseUrl = "http://localhost:1234/v1",
+            model = nil,  -- Auto-detect from /v1/models
           },
         },
-        strategies = {
-          chat = { adapter = "lmstudio" },
-          inline = { adapter = "lmstudio" },
-        },
+        -- Default to LM Studio provider
+        defaultProvider = "lmstudio",
+        -- Enable chat and inline completion
+        enableChat = true,
+        enableInline = true,
+        -- Auto-complete on <Tab> in chat
+        enableTabCompletion = true,
+        -- Show thought process
+        showThinking = true,
+        -- Maximum tokens to generate
+        maxTokens = 4096,
+        -- Temperature
+        temperature = 0.7,
+        -- Send code context automatically
+        sendCode = true,
+        -- Send file context automatically
+        sendFiles = true,
+        -- Number of messages to keep in history
+        historyLength = 50,
+        -- Custom system prompt for Mistral AI models
+        systemPrompt = function()
+          return "You are a helpful AI coding assistant. " ..
+                 "You write concise, correct code. " ..
+                 "You help with debugging, explaining, and optimizing code. " ..
+                 "When asked to write code, provide the complete implementation. " ..
+                 "Use the programming language and style from the current file."
+        end,
       })
     end,
   },
