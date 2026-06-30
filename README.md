@@ -2,7 +2,7 @@
 
 [![Mistral AI](https://img.shields.io/badge/Powered%20by-Mistral%20AI-%237749ff?style=flat-square)](https://mistral.ai/)
 
-My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent with **Mistral AI focus** — featuring [Codestral](https://mistral.ai/news/codestral/), Mistral-7B, and Mixtral models for state-of-the-art code generation.
+My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent with **Mistral AI focus** — defaulting to [Mistral-7B](https://mistral.ai/news/mistral-7b/) for broad compatibility, with [Codestral](https://mistral.ai/news/codestral/) available for high-VRAM setups.
 
 ## Setup
 
@@ -74,38 +74,47 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with a **Mistral AI focus**, primarily **Codestral-22B** — Mistral AI's flagship coding model purpose-built for code generation and understanding. Codestral excels at Python, JavaScript, Java, C++, and other programming languages, with a 22B parameter count delivering state-of-the-art performance on coding tasks.
+[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with a **Mistral AI focus**. The default model is **Mistral-7B-Instruct v0.2** — a versatile, efficient coding model that runs well on most GPUs including the 6 GB GTX 1660 SUPER. For more capable hardware (11+ GB VRAM), **Codestral-22B** is available as an opt-in choice.
 
-The default configuration downloads Codestral-22B with **Q4_K_M** quant (~14 GB) for GPUs with ≥16 GB VRAM, or falls back to **Q3_K_L** (~11 GB) on machines with less memory. For constrained hardware, **Mistral-7B-Instruct** or **Qwen2.5-Coder-3B** (lightweight fallback) are available. All model choices are automatically optimized for your GPU via `make setup-host`.
+All model selection is **automatic and hardware-optimized** via `make setup-host`:
+
+- **≥16 GB VRAM** → Codestral-22B with Q4_K_M (~14 GB)
+- **11-16 GB VRAM** → Codestral-22B with Q3_K_L (~11 GB)
+- **6-11 GB VRAM** → Mistral-7B-Instruct with Q4_K_M (**default for most cards**, ~4.4 GB)
+- **4-6 GB VRAM** → Mistral-7B-Instruct with Q3_K_L (~3.8 GB)
+- **<4 GB VRAM** → Qwen2.5-Coder-3B with Q3_K_L (~3.8 GB, fallback)
 
 `pi` (the standalone CLI agent), Neovim's CodeCompanion, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the configured Mistral AI model; there is no proxy in between.
 
 ### Supported Models
 
-| Model | Size | VRAM (Q4_K_M) | Use Case |
-|-------|------|--------------|----------|
-| Codestral-22B | 22B | ~14 GB | **Default**. Flagship coding model |
-| Codestral-Latest | 22B | ~14 GB | Latest Codestral version |
-| Mistral-7B-Instruct | 7B | ~4.4 GB | Lightweight Mistral variant |
-| Mixtral-8x7B | 47B | ~24 GB | High-capability mix of experts |
-| Qwen2.5-Coder-7B | 7B | ~4.4 GB | Fallback compatibility |
-| Qwen2.5-Coder-3B | 3B | ~3.8 GB | Minimal VRAM |
+| Model | Size | VRAM (Q4_K_M) | Default For | Notes |
+|-------|------|--------------|-------------|-------|
+| Codestral-22B | 22B | ~14 GB | 16+ GB VRAM | Opt-in flagship coding model |
+| Codestral-Latest | 22B | ~14 GB | 16+ GB VRAM | Latest Codestral version |
+| **Mistral-7B-Instruct v0.2** | **7B** | **~4.4 GB** | **6-11 GB VRAM** | **Default for most GPUs** |
+| Mistral-7B-Instruct v0.1 | 7B | ~4.4 GB | 6-11 GB VRAM | Previous version |
+| Mixtral-8x7B | 47B | ~24 GB | 24+ GB VRAM | High-capability MoE |
+| Qwen2.5-Coder-7B | 7B | ~4.4 GB | Fallback | Compatibility |
+| Qwen2.5-Coder-3B | 3B | ~3.8 GB | <4 GB VRAM | Minimal VRAM |
 
 ### Setup
 
 ```sh
-make setup-host       # tune the host (LM Studio model + pi config) to this GPU
-make setup-lmstudio   # or just the model: downloads Codestral/Mistral, wires pi config
+make setup-host       # auto-detect GPU, install Mistral-7B or Codestral
+make setup-lmstudio   # or just the model: downloads Mistral/Codestral, wires pi config
 ```
 
-`make setup-host` probes the GPU once and applies a hardware profile to both consumers:
+`make setup-host` probes the GPU once and applies a hardware profile:
 
-- **LM Studio** — downloads the right Mistral AI model with appropriate quant.
-- **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to Codestral-22B on capable hardware, or a lighter variant otherwise. This is global (non-interactive `pi` and CodeCompanion included).
+- **LM Studio** — downloads the appropriate Mistral AI model with the right quant.
+- **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to Mistral-7B on typical hardware, or Codestral-22B on high-VRAM cards (≥11 GB). This is global for all pi consumers.
 
-mu shares the same LM Studio server but tunes itself: its own `make setup-host` writes `MU_AGENT_MODEL` / `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, sourced by `.zshrc`), applying the same GPU thresholds so it lands on the same Mistral AI model. See the [mu repo](https://github.com/jacobandresen/mu).
+mu shares the same LM Studio server but tunes itself: its own `make setup-host` writes `MU_AGENT_MODEL` / `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, sourced by `.zshrc`), applying the same GPU thresholds so mu and pi resolve to the same Mistral AI model. See the [mu repo](https://github.com/jacobandresen/mu).
 
-The tracked `.zshrc` stays identical across machines. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own Mistral AI model without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (downloads Codestral/Mistral, applies quant logic, no pi tuning).
+The tracked `.zshrc` stays identical across machines. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own model (Mistral-7B for most, Codestral-22B for 11+ GB VRAM) without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (downloads Mistral-7B by default, applies quant logic, no pi tuning).
+
+**On this machine (GTX 1660 SUPER, 6 GB VRAM):** Runs Mistral-7B-Instruct v0.2 with Q4_K_M quant.
 
 On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-host` after.
 
