@@ -99,6 +99,9 @@ fi
 # NOTE: VRAM thresholds are intentionally duplicated in the mu repo's
 # scripts/setup-host.sh, which picks mu's model the same way, so mu and pi resolve
 # to the same local Mistral AI model without either repo depending on the other.
+#
+# For Mistral models on 6GB VRAM, use partial GPU offloading (--gpu 0.5) as the
+# 4.1GB Q4_K_M models are at the VRAM limit. Full GPU offloading fails.
 if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
     # Only use Codestral on very capable GPUs (16+ GB)
     PROFILE="codestral-q4"
@@ -114,11 +117,11 @@ else
     if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
         PROFILE="mistral-7b"
         QUANT="Q4_K_M"
-        PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 6-11 GB → Mistral 7B Q4
+        PI_DEFAULT_MODEL="synatra-v0.3-rp-ashhlimarp-mistral-7b"   # 6-11 GB → Synatra Mistral-7B fine-tune
     elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
         PROFILE="mistral-7b-q3"
         QUANT="Q3_K_L"
-        PI_DEFAULT_MODEL="mistral-7b-instruct-v0.2"   # 4-6 GB → Mistral 7B Q3
+        PI_DEFAULT_MODEL="synatra-v0.3-rp-ashhlimarp-mistral-7b"   # 4-6 GB → Synatra Mistral-7B fine-tune
     else
         PROFILE="qwen-3b"
         QUANT="Q3_K_L"
