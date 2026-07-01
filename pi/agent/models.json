@@ -7,9 +7,9 @@
       "models": [
         {
           "_launch": true,
-          "id": "synatra-v0.3-rp-ashhlimarp-mistral-7b",
+          "id": "mistralai/mistral-7b-instruct-v0.3",
           "input": ["text"],
-          "name": "Synatra Mistral 7B v0.3"
+          "name": "Mistral 7B Instruct v0.3 (official)"
         }
       ]
     }

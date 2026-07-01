@@ -53,6 +53,7 @@ DRY_RUN=false
 VERBOSE=false
 EXPLICIT_QUANT=""
 EXPLICIT_MODEL=""
+EXPLICIT_PROVIDER=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -128,7 +129,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -n "$EXPLICIT_MODEL" ]; then
     MODEL_ID="$EXPLICIT_MODEL"
 else
-    MODEL_ID="mistral-7b-instruct-v0.2"
+    MODEL_ID="mistral-7b-instruct-v0.3"
 fi
 
 # Set default provider
@@ -144,6 +145,11 @@ get_model_info() {
     case "$model_id" in
         codestral-22b-v0.1|codestral-latest)
             echo "mistralai/Codestral-22B-v0.1-GGUF Q4_K_M"
+            ;;
+        mistral-7b-instruct-v0.3|mistralai/mistral-7b-instruct-v0.3)
+            # Mistral AI's official v0.3; LM Studio serves it under the
+            # mistralai/ alias, on-disk under lmstudio-community/.
+            echo "mistralai/mistral-7b-instruct-v0.3 Q4_K_M"
             ;;
         mistral-7b-instruct-v0.2)
             echo "mistralai/Mistral-7B-Instruct-v0.2-GGUF Q4_K_M"
@@ -313,13 +319,13 @@ try:
     with open(path) as f:
         s = json.load(f)
 except json.JSONDecodeError as e:
-    print(f"  ✗ Failed to parse {path}: {e}" >&2)
+    print(f"  ✗ Failed to parse {path}: {e}", file=sys.stderr)
     sys.exit(1)
 except FileNotFoundError:
-    print(f"  ✗ File not found: {path}" >&2)
+    print(f"  ✗ File not found: {path}", file=sys.stderr)
     sys.exit(1)
 except Exception as e:
-    print(f"  ✗ Error reading {path}: {e}" >&2)
+    print(f"  ✗ Error reading {path}: {e}", file=sys.stderr)
     sys.exit(1)
 
 # Let pi JIT-load the coder model even on a tight VRAM budget.
@@ -335,7 +341,7 @@ try:
         f.write('\n')
     print("  ✓ Guardrails off, bundled-model auto-load disabled")
 except IOError as e:
-    print(f"  ✗ Failed to write {path}: {e}" >&2)
+    print(f"  ✗ Failed to write {path}: {e}", file=sys.stderr)
     sys.exit(1)
 PYEOF
     fi
@@ -344,37 +350,29 @@ else
     echo "    Start LM Studio once to generate settings, then re-run."
 fi
 
-# ── 3. Download model (size-verified, resumable) ──────────────────────────────
-# A bare `[ -f ]` check can't tell a truncated 1.9 GB partial download from the
-# real 2.1 GB file, so it silently keeps a corrupt model ("tensor data is not
-# within the file bounds, model is corrupted or incomplete") and never repairs
-# it on re-run. Compare against the server's Content-Length and resume instead.
-
-MODEL_DIR="$HOME/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF"
-MODEL_FILE="$MODEL_DIR/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
-HF_URL="https://huggingface.co/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
-
-# Track partial file for cleanup
-PARTIAL_FILE="$MODEL_FILE"
-
-if ! $DRY_RUN; then
-    mkdir -p "$MODEL_DIR" || { echo "  ✗ Failed to create directory: $MODEL_DIR" >&2; exit 1; }
-fi
+# ── 3. Download model ─────────────────────────────────────────────────────────
+# Prefer the LM Studio CLI (`lms get`): it resolves the hub alias to the correct
+# GGUF, is resumable + size-verified, and — crucially for the official Mistral —
+# registers the served id the pin expects (`mistralai/mistral-7b-instruct-v0.3`,
+# whose GGUF lives on-disk under lmstudio-community/). The mistralai/ HF repo
+# hosts only safetensors, so a raw curl of a .gguf 404s; `lms get` handles it.
+# Falls back to a resumable, Content-Length-verified curl for models given as an
+# explicit HF repo (e.g. TheBloke mirrors) when `lms` is unavailable.
 
 # GNU (Linux) and BSD (macOS) stat take different flags; try both.
 file_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
 
-# Ask the server for the real size. Only trust it on a clean 2xx (`-f` makes
-# curl exit non-zero otherwise) — gating on the exit status via `if` both keeps
-# a transient/404 HEAD from tripping `set -e` and avoids mistaking an error
-# page's Content-Length for the model's. The character classes match both
-# casings ("Content-Length" on HTTP/1.1, "content-length" on HTTP/2) without
-# awk's IGNORECASE, a GNU-awk-only extension absent on macOS's BSD awk. An empty
-# EXPECTED_SIZE just falls back to the old download-if-missing behaviour below.
 if $DRY_RUN; then
-    echo "  [DRY-RUN] Would check model at: $MODEL_FILE"
-    echo "  [DRY-RUN] Would download from: $HF_URL"
+    echo "  [DRY-RUN] Would download: $MODEL_ID ($QUANT) via 'lms get $MODEL_REPO@$QUANT'"
+elif command -v lms >/dev/null 2>&1; then
+    echo "Downloading $MODEL_ID ($QUANT) via lms get…"
+    lms get "$MODEL_REPO@$QUANT" -y || lms get "$MODEL_REPO" -y || \
+        { echo "  ✗ 'lms get $MODEL_REPO' failed" >&2; exit 1; }
+    echo "  ✓ Model present via lms"
 else
+    # Fallback: resumable, size-verified curl against the computed HF GGUF URL.
+    PARTIAL_FILE="$MODEL_FILE"
+    mkdir -p "$MODEL_DIR" || { echo "  ✗ Failed to create directory: $MODEL_DIR" >&2; exit 1; }
     if HEADERS="$(curl -fsIL "$HF_URL" 2>/dev/null)"; then
         EXPECTED_SIZE="$(printf '%s\n' "$HEADERS" \
           | awk '/^[Cc]ontent-[Ll]ength:/{cl=$2} END{gsub(/\r/,"",cl); print cl}')"
@@ -382,37 +380,24 @@ else
         EXPECTED_SIZE=""
     fi
     LOCAL_SIZE="$(file_size "$MODEL_FILE")"
-
     if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" = "$EXPECTED_SIZE" ]; then
         echo "  ✓ Model already present and complete ($LOCAL_SIZE bytes)"
     elif [ -z "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "0" ]; then
-        # Couldn't reach the server to verify (offline?), but a file is already
-        # here — trust it rather than running `curl -C -` against a complete file
-        # (which can 416 and, under `set -e`, abort setup).
         echo "  ✓ Model present ($LOCAL_SIZE bytes); skipped size check (server unreachable)"
     else
-        if [ "$LOCAL_SIZE" != "0" ]; then
-            echo "  ⚠ Model is $LOCAL_SIZE bytes, expected ${EXPECTED_SIZE:-unknown} — resuming download..."
-        else
-            echo "Downloading Qwen2.5-Coder-7B-Instruct $QUANT..."
-        fi
-        # Track partial file for cleanup on error
+        echo "Downloading $MODEL_ID $QUANT from $HF_URL…"
         PARTIAL_FILE="$MODEL_FILE.partial"
         curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$PARTIAL_FILE" || \
             { echo "  ✗ Download failed" >&2; exit 1; }
         mv "$PARTIAL_FILE" "$MODEL_FILE" || { echo "  ✗ Failed to move downloaded file" >&2; exit 1; }
         LOCAL_SIZE="$(file_size "$MODEL_FILE")"
         if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "$EXPECTED_SIZE" ]; then
-            # Clean up incomplete download
-            rm -f "$MODEL_FILE"
-            PARTIAL_FILE=""
+            rm -f "$MODEL_FILE"; PARTIAL_FILE=""
             echo "  ✗ Download incomplete: got $LOCAL_SIZE bytes, expected $EXPECTED_SIZE." >&2
-            echo "    Re-run 'make setup-lmstudio' to resume." >&2
             exit 1
         fi
         echo "  ✓ Download complete ($LOCAL_SIZE bytes)"
     fi
-    # Clear partial file tracker after successful download
     PARTIAL_FILE=""
 fi
 
@@ -438,15 +423,28 @@ elif $DRY_RUN; then
 fi
 
 # ── 5. Patch GGUF chat template ───────────────────────────────────────────────
+# Mistral's v0.3 GGUF template rejects the system role ("Only user and assistant
+# roles are supported!") → HTTP 400 on every mu/pi call until patched. The patch
+# is idempotent and MUST re-run after any re-download. `lms get` stores the file
+# under lmstudio-community/…, not the computed $MODEL_FILE, so resolve the real
+# path by recursive glob and patch every match.
 echo "Checking GGUF chat template..."
 if $DRY_RUN; then
-    echo "  [DRY-RUN] Would patch GGUF chat template for: $MODEL_FILE"
+    echo "  [DRY-RUN] Would patch GGUF chat template for: $MODEL_ID"
 else
-    if [ ! -f "$MODEL_FILE" ]; then
-        echo "  ⚠ Model file not found, skipping template patch" >&2
+    GGUFS=()
+    [ -f "$MODEL_FILE" ] && GGUFS+=("$MODEL_FILE")
+    if [ ${#GGUFS[@]} -eq 0 ] && [[ "$MODEL_ID" == *mistral* && "$MODEL_ID" == *v0.3* ]]; then
+        while IFS= read -r g; do GGUFS+=("$g"); done < <(
+            find "$HOME/.lmstudio/models" -iname '*mistral*7b*instruct*v0.3*.gguf' 2>/dev/null)
+    fi
+    if [ ${#GGUFS[@]} -eq 0 ]; then
+        echo "  ⚠ Model GGUF not found, skipping template patch" >&2
     else
-        python3 "$SCRIPT_DIR/patch-gguf-template.py" "$MODEL_FILE" || \
-            { echo "  ✗ Failed to patch GGUF template" >&2; exit 1; }
+        for g in "${GGUFS[@]}"; do
+            python3 "$SCRIPT_DIR/patch-gguf-template.py" "$g" || \
+                { echo "  ✗ Failed to patch GGUF template: $g" >&2; exit 1; }
+        done
     fi
 fi
 

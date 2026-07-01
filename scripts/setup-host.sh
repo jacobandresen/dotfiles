@@ -100,8 +100,11 @@ fi
 # scripts/setup-host.sh, which picks mu's model the same way, so mu and pi resolve
 # to the same local Mistral AI model without either repo depending on the other.
 #
-# For Mistral models on 6GB VRAM, use partial GPU offloading (--gpu 0.5) as the
-# 4.1GB Q4_K_M models are at the VRAM limit. Full GPU offloading fails.
+# On 6 GB VRAM the 4.4 GB Q4_K_M Mistral-7B runs FULLY on-GPU — shrink the KV
+# cache (q8_0 KV + flash attention) at ctx 8192 and it fits with ~1 GB free.
+# (The old "--gpu 0.5 / full offload fails" advice was a workaround for a 12288
+# fp16 KV cache spilling the card; it's 5-10x slower and no longer used. See the
+# mu repo's docs/MODELS.md for the measured VRAM table.)
 if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
     # Only use Codestral on very capable GPUs (16+ GB)
     PROFILE="codestral-q4"
@@ -117,11 +120,11 @@ else
     if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
         PROFILE="mistral-7b"
         QUANT="Q4_K_M"
-        PI_DEFAULT_MODEL="synatra-v0.3-rp-ashhlimarp-mistral-7b"   # 6-11 GB → Synatra Mistral-7B fine-tune
+        PI_DEFAULT_MODEL="mistralai/mistral-7b-instruct-v0.3"   # 6-11 GB → Mistral AI official 7B Instruct v0.3
     elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
         PROFILE="mistral-7b-q3"
         QUANT="Q3_K_L"
-        PI_DEFAULT_MODEL="synatra-v0.3-rp-ashhlimarp-mistral-7b"   # 4-6 GB → Synatra Mistral-7B fine-tune
+        PI_DEFAULT_MODEL="mistralai/mistral-7b-instruct-v0.3"   # 4-6 GB → Mistral AI official 7B Instruct v0.3 (Q3_K_L)
     else
         PROFILE="qwen-3b"
         QUANT="Q3_K_L"
@@ -192,10 +195,10 @@ try:
     with open(path) as f:
         s = json.load(f)
 except json.JSONDecodeError as e:
-    print(f"  ✗ Failed to parse {path}: {e}" >&2)
+    print(f"  ✗ Failed to parse {path}: {e}", file=sys.stderr)
     sys.exit(1)
 except FileNotFoundError:
-    print(f"  ✗ File not found: {path}" >&2)
+    print(f"  ✗ File not found: {path}", file=sys.stderr)
     sys.exit(1)
 
 if s.get("defaultModel") == model:
@@ -209,7 +212,7 @@ else:
             f.write("\n")
         print(f"  ✓ defaultModel: {old} → {model}")
     except IOError as e:
-        print(f"  ✗ Failed to write {path}: {e}" >&2)
+        print(f"  ✗ Failed to write {path}: {e}", file=sys.stderr)
         sys.exit(1)
 PYEOF
 fi

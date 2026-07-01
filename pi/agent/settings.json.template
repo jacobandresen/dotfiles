@@ -4,7 +4,7 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "synatra-v0.3-rp-ashhlimarp-mistral-7b",
+  "defaultModel": "mistralai/mistral-7b-instruct-v0.3",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
