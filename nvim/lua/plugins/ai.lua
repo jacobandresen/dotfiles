@@ -50,8 +50,8 @@ return {
           -- Before sending to AI: ensure LM Studio is running
           BeforeSend = function(gp)
             -- Check if we can reach LM Studio
-            local ok, _ = pcall(vim.fn.readfile, "http://localhost:1234/v1/models")
-            if not ok then
+            local ok = pcall(vim.fn.system, { "curl", "-s", "-f", "-o", "/dev/null", "http://localhost:1234/v1/models" })
+            if not ok or vim.v.shell_error ~= 0 then
               vim.notify("LM Studio may not be running. Start it first!", vim.log.levels.WARN)
             end
           end,

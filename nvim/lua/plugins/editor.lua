@@ -123,4 +123,89 @@ return {
   },
 
   { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
+
+  -- formatting with conform.nvim
+  {
+    "stevearc/conform.nvim",
+    event = "BufWritePre",
+    config = function()
+      require("conform").setup({
+        formatters_by_ft = {
+          lua = { "stylua" },
+          javascript = { "prettier" },
+          typescript = { "prettier" },
+          javascriptreact = { "prettier" },
+          typescriptreact = { "prettier" },
+          json = { "jq" },
+          jsonc = { "jq" },
+          rust = { "rustfmt" },
+          cpp = { "clang-format" },
+          c = { "clang-format" },
+          cs = { "dotnet-format" },
+          yaml = { "prettier" },
+          markdown = { "prettier" },
+          html = { "prettier" },
+          css = { "prettier" },
+          sh = { "shfmt" },
+          python = { "black", "isort" },
+          go = { "gofmt", "goimports" },
+        },
+        format_on_save = function(bufnr)
+          local disable_filetypes = {}
+          return {
+            timeout_ms = 500,
+            lsp_fallback = not disable_filetypes[vim.bo[bufnr].filetype],
+          }
+        end,
+        formatters = {
+          -- Custom formatter for markdown with frontmatter support
+          prettier = {
+            prepend_args = function()
+              return { "--end-of-line", "lf" }
+            end,
+          },
+          stylua = {
+            prepend_args = { "--indent-type", "Spaces", "--indent-width", "2" },
+          },
+        },
+      })
+    end,
+  },
+
+  -- indent guides
+  {
+    "lukas-reineke/indent-blankline.nvim",
+    main = "ibl",
+    event = "BufReadPre",
+    opts = {
+      indent = {
+        char = "│",
+        tab_char = "│",
+      },
+      scope = {
+        enabled = false,
+      },
+      exclude = {
+        filetypes = {
+          "lspinfo",
+          "packer",
+          "checkhealth",
+          "help",
+          "man",
+          "dashboard",
+          "lazy",
+          "mason",
+          "notify",
+          "toggleterm",
+          "oil",
+          "TelescopePrompt",
+          "TelescopeResults",
+        },
+        buftypes = {
+          "terminal",
+          "nofile",
+        },
+      },
+    },
+  },
 }
