@@ -18,11 +18,11 @@ return {
     config = function()
       require("gp").setup({
         -- ========================================================================
-        -- LM Studio (local Mistral models) — Zero config required!
+        -- LM Studio (local Mistral models) — Default provider
         -- ========================================================================
         openai_api_key = "lm-studio",           -- LM Studio uses this as a placeholder
         openai_base_url = "http://localhost:1234/v1",
-        openai_model_id = "auto",              -- Auto-detects your loaded model
+        openai_model_id = "mistral-7b-instruct-v0.3",  -- Pinned Mistral v0.3 model
         
         -- ========================================================================
         -- Simple defaults — just works with Mistral
