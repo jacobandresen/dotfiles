@@ -1,4 +1,4 @@
--- AI assistant via gp.nvim — talks to Bonsai-27B (PrismML ternary quant of
+-- AI assistant via gp.nvim — talks to Bonsai-27B (a ternary quant of
 -- Qwen3.6-27B), loaded like any other GGUF through LM Studio at port 1234.
 -- See README.md's "Bonsai-27B" section for why this is the default over the
 -- Mistral setup (capability vs. VRAM/thinking-token tradeoff) — both now run

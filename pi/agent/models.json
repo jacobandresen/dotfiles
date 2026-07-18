@@ -9,7 +9,7 @@
           "_launch": true,
           "id": "bonsai-27b",
           "input": ["text"],
-          "name": "Bonsai 27B (ternary, PrismML — Qwen3.6-27B 1-bit quant, via LM Studio)"
+          "name": "Bonsai 27B (ternary, Qwen3.6-27B 1-bit quant, via LM Studio)"
         },
         {
           "id": "mistralai/mistral-7b-instruct-v0.3",

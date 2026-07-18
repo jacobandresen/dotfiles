@@ -1,8 +1,8 @@
 # dotfiles
 
-[![Bonsai-27B](https://img.shields.io/badge/Powered%20by-Bonsai--27B-%237749ff?style=flat-square)](https://prismml.com/)
+![Bonsai-27B](https://img.shields.io/badge/Powered%20by-Bonsai--27B-%237749ff?style=flat-square)
 
-My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent — defaulting to **Bonsai-27B** (PrismML's ternary quantization of Qwen3.6-27B), loaded through [LM Studio](https://lmstudio.ai) like any other GGUF, with Mistral AI models ([Mistral-7B](https://mistral.ai/news/mistral-7b/), [Codestral](https://mistral.ai/news/codestral/)) available as a fallback.
+My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent — defaulting to **Bonsai-27B** (a ternary quantization of Qwen3.6-27B), loaded through [LM Studio](https://lmstudio.ai) like any other GGUF, with Mistral AI models ([Mistral-7B](https://mistral.ai/news/mistral-7b/), [Codestral](https://mistral.ai/news/codestral/)) available as a fallback.
 
 ## Setup
 
@@ -72,7 +72,7 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 ## pi agent
 
 [pi](https://pi.dev) is a local-first AI coding agent. **Default model: Bonsai-27B**
-— PrismML's ternary/1-bit quantization of Qwen3.6-27B, a 27B-parameter model
+— a ternary/1-bit quantization of Qwen3.6-27B, a 27B-parameter model
 squeezed to a 3.6–3.9 GB footprint that runs fully on a 6 GB card. It loads
 through [LM Studio](https://lmstudio.ai) at `localhost:1234` like any other
 GGUF — no separate server, no separate port. Mistral AI models (Mistral-7B,
@@ -106,11 +106,8 @@ metadata, not the filename — currently `bonsai-27b` (check with
 `lms ls --llm --json`'s `modelKey` field if this ever changes on a re-import,
 and update `pi/agent/models.json` + `settings.json.template` to match). See
 the [mu repo](https://github.com/jacobandresen/mu)'s `docs/MODELS.md` §
-Bonsai-27B for the full model story (including why the PrismML fork this used
-to require is no longer necessary — mainline llama.cpp gained STQ1_0 ternary
-quant support and Qwen3.6's hybrid-attention architecture in mid-2026) and
-`docs/tech-repair.md` for the ctx/parallel/spec-decode tuning this config
-is based on.
+Bonsai-27B for the full model story and `docs/tech-repair.md` for the
+ctx/parallel/spec-decode tuning this config is based on.
 
 ### LM Studio + Mistral AI (fallback / alternative)
 
