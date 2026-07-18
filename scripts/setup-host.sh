@@ -5,6 +5,12 @@
 #                 Mistral-7B, Mixtral-8x7B) with appropriate quant for the VRAM.
 #   • pi        — sets defaultModel in ~/.pi/agent/settings.json to Codestral
 #                 on capable hardware, or a lighter Mistral variant otherwise.
+#                 EXCEPTION: skips this entirely if defaultModel is already a
+#                 Bonsai-27B id — that means the host opted into the Bonsai-27B
+#                 default (see README.md § pi agent; loaded through the same
+#                 LM Studio server as the Mistral AI models below, just a
+#                 different model id), so leave it alone rather than
+#                 overwriting it with a Mistral/Codestral pick.
 #
 # (mu, the other consumer of this LM Studio server, tunes itself — see
 # `make setup-host` in the mu repo, which writes ~/.zshrc.mu independently.)
@@ -163,6 +169,13 @@ echo ""
 # hardware-derived field, defaultModel, leaving the rest untouched. Because the
 # file is shared across machines, this field is host-managed: each host's
 # 'make setup-host' sets its own value, so don't commit a host-specific default.
+#
+# EXCEPTION: if defaultModel is already a Bonsai-27B id, this host has
+# deliberately opted into the Bonsai-27B default (see README.md § pi agent) —
+# this script only knows how to pick Mistral/Codestral, so leave it alone
+# rather than overwriting it. (Bonsai and Mistral both live under the same
+# "lmstudio" provider now, so there's no defaultProvider to key off of —
+# check the model id instead.)
 echo "── pi agent (~/.pi/agent/settings.json) ────────────────────"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 
@@ -178,7 +191,15 @@ if [ ! -f "$PI_SETTINGS" ]; then
     exit 0
 fi
 
-if $DRY_RUN; then
+CURRENT_MODEL_ID=""
+if command -v python3 >/dev/null 2>&1; then
+    CURRENT_MODEL_ID=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', ''))" 2>/dev/null || echo "")
+fi
+
+if [[ "$CURRENT_MODEL_ID" == *Bonsai* ]] || [[ "$CURRENT_MODEL_ID" == *bonsai* ]]; then
+    echo "  ✓ defaultModel is '$CURRENT_MODEL_ID' — leaving pi's config alone (this"
+    echo "    host opted into the Bonsai-27B default; see README.md § pi agent)."
+elif $DRY_RUN; then
     # Check current value in dry-run mode
     if command -v python3 >/dev/null 2>&1; then
         CURRENT_MODEL=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', '<unset>'))" 2>/dev/null || echo "<error>")

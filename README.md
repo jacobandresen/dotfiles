@@ -1,8 +1,8 @@
 # dotfiles
 
-[![Mistral AI](https://img.shields.io/badge/Powered%20by-Mistral%20AI-%237749ff?style=flat-square)](https://mistral.ai/)
+[![Bonsai-27B](https://img.shields.io/badge/Powered%20by-Bonsai--27B-%237749ff?style=flat-square)](https://prismml.com/)
 
-My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent with **Mistral AI focus** — defaulting to [Mistral-7B](https://mistral.ai/news/mistral-7b/) for broad compatibility, with [Codestral](https://mistral.ai/news/codestral/) available for high-VRAM setups.
+My personal dotfiles: [Neovim](https://neovim.io/), [WezTerm](https://wezfurlong.org/wezterm/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent — defaulting to **Bonsai-27B** (PrismML's ternary quantization of Qwen3.6-27B), loaded through [LM Studio](https://lmstudio.ai) like any other GGUF, with Mistral AI models ([Mistral-7B](https://mistral.ai/news/mistral-7b/), [Codestral](https://mistral.ai/news/codestral/)) available as a fallback.
 
 ## Setup
 
@@ -71,58 +71,109 @@ editor is disabled so `F4` opens Neovim (`$EDITOR`).
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent. This setup uses [LM Studio](https://lmstudio.ai) as the backend with a **Mistral AI focus**. The default model is **Mistral-7B-Instruct v0.2** — a versatile, efficient coding model that runs well on most GPUs including the 6 GB GTX 1660 SUPER. For more capable hardware (11+ GB VRAM), **Codestral-22B** is available as an opt-in choice.
+[pi](https://pi.dev) is a local-first AI coding agent. **Default model: Bonsai-27B**
+— PrismML's ternary/1-bit quantization of Qwen3.6-27B, a 27B-parameter model
+squeezed to a 3.6–3.9 GB footprint that runs fully on a 6 GB card. It loads
+through [LM Studio](https://lmstudio.ai) at `localhost:1234` like any other
+GGUF — no separate server, no separate port. Mistral AI models (Mistral-7B,
+Codestral-22B) remain available as a fallback/alternative under the same
+`lmstudio` provider — see below.
 
-All model selection is **automatic and hardware-optimized** via `make setup-host`:
+`pi` (the standalone CLI agent), Neovim's gp.nvim, and the `mu` dojo agent all
+talk to the same LM Studio server on `http://localhost:1234`; there is no
+proxy in between.
+
+### Setup
+
+```sh
+lms server start
+curl -L -o /tmp/Bonsai-27B-Q1_0.gguf \
+  https://huggingface.co/prism-ml/Bonsai-27B-gguf/resolve/main/Bonsai-27B-Q1_0.gguf
+lms import -y -l /tmp/Bonsai-27B-Q1_0.gguf   # not hub-searchable, so a direct
+                                              # download + import (skips the
+                                              # useless hub-search step)
+pi                                                       # uses Bonsai by default
+                                                          # (pi/agent/models.json
+                                                          # + settings.json.template)
+```
+
+`Bonsai-27B-Q1_0.gguf` isn't listed in LM Studio's own model search, so it
+needs the manual download + `lms import` above (the `mu` repo automates this
+exact step for its own `mu model load bonsai-27b` — see its
+`client.py::_download_and_import_gguf` if you want the same for `pi`). LM
+Studio serves the import back under a model id it derives from the GGUF's own
+metadata, not the filename — currently `bonsai-27b` (check with
+`lms ls --llm --json`'s `modelKey` field if this ever changes on a re-import,
+and update `pi/agent/models.json` + `settings.json.template` to match). See
+the [mu repo](https://github.com/jacobandresen/mu)'s `docs/MODELS.md` §
+Bonsai-27B for the full model story (including why the PrismML fork this used
+to require is no longer necessary — mainline llama.cpp gained STQ1_0 ternary
+quant support and Qwen3.6's hybrid-attention architecture in mid-2026) and
+`docs/tech-repair.md` for the ctx/parallel/spec-decode tuning this config
+is based on.
+
+### LM Studio + Mistral AI (fallback / alternative)
+
+The previous default, kept available under the same `lmstudio` provider
+(`pi --model mistralai/mistral-7b-instruct-v0.3`). Model selection is
+**automatic and hardware-optimized** via `make setup-host`:
 
 - **≥16 GB VRAM** → Codestral-22B with Q4_K_M (~14 GB)
 - **11-16 GB VRAM** → Codestral-22B with Q3_K_L (~11 GB)
-- **6-11 GB VRAM** → Mistral-7B-Instruct with Q4_K_M (**default for most cards**, ~4.4 GB)
+- **6-11 GB VRAM** → Mistral-7B-Instruct with Q4_K_M (~4.4 GB)
 - **4-6 GB VRAM** → Mistral-7B-Instruct with Q3_K_L (~3.8 GB)
 - **<4 GB VRAM** → Qwen2.5-Coder-3B with Q3_K_L (~3.8 GB, fallback)
-
-`pi` (the standalone CLI agent), Neovim's gp.nvim, and the `mu` dojo agent all talk to the same LM Studio server on `http://localhost:1234` using the configured Mistral AI model; there is no proxy in between.
-
-### Supported Models
 
 | Model | Size | VRAM (Q4_K_M) | Default For | Notes |
 |-------|------|--------------|-------------|-------|
 | Codestral-22B | 22B | ~14 GB | 16+ GB VRAM | Opt-in flagship coding model |
 | Codestral-Latest | 22B | ~14 GB | 16+ GB VRAM | Latest Codestral version |
-| **Mistral-7B-Instruct v0.2** | **7B** | **~4.4 GB** | **6-11 GB VRAM** | **Default for most GPUs** |
+| Mistral-7B-Instruct v0.2 | 7B | ~4.4 GB | 6-11 GB VRAM | LM Studio-path default |
 | Mistral-7B-Instruct v0.1 | 7B | ~4.4 GB | 6-11 GB VRAM | Previous version |
 | Mixtral-8x7B | 47B | ~24 GB | 24+ GB VRAM | High-capability MoE |
 | Qwen2.5-Coder-7B | 7B | ~4.4 GB | Fallback | Compatibility |
 | Qwen2.5-Coder-3B | 3B | ~3.8 GB | <4 GB VRAM | Minimal VRAM |
-
-### Setup
 
 ```sh
 make setup-host       # auto-detect GPU, install Mistral-7B or Codestral
 make setup-lmstudio   # or just the model: downloads Mistral/Codestral, wires pi config
 ```
 
-`make setup-host` probes the GPU once and applies a hardware profile:
+`make setup-host` probes the GPU once, downloads the appropriate Mistral AI
+model via LM Studio, and writes `defaultModel` into `~/.pi/agent/settings.json`.
+**It leaves the Bonsai default alone**: if `defaultModel` is already a
+Bonsai-27B id, it skips the pi-settings patch entirely rather than overwriting
+it with a Mistral/Codestral pick (Bonsai and Mistral both run under the same
+`lmstudio` provider now, so there's no `defaultProvider` to key off of) —
+switching back to this path from Bonsai is a manual edit of
+`~/.pi/agent/settings.json`, not something running this script will do for you.
 
-- **LM Studio** — downloads the appropriate Mistral AI model with the right quant.
-- **pi** — sets `defaultModel` in `~/.pi/agent/settings.json` to Mistral-7B on typical hardware, or Codestral-22B on high-VRAM cards (≥11 GB). This is global for all pi consumers.
+mu shares the same LM Studio server when using this path but tunes itself:
+its own `make setup-host` writes `MU_AGENT_MODEL` / `MU_NUM_CTX` to
+`~/.zshrc.mu` (machine-local, sourced by `.zshrc`), applying the same GPU
+thresholds so mu and pi resolve to the same Mistral AI model.
 
-mu shares the same LM Studio server but tunes itself: its own `make setup-host` writes `MU_AGENT_MODEL` / `MU_NUM_CTX` to `~/.zshrc.mu` (machine-local, sourced by `.zshrc`), applying the same GPU thresholds so mu and pi resolve to the same Mistral AI model. See the [mu repo](https://github.com/jacobandresen/mu).
-
-The tracked `.zshrc` stays identical across machines. pi's `defaultModel` is *host-managed* — because `~/.pi` symlinks into the repo, the live `pi/agent/settings.json` is gitignored and seeded from `pi/agent/settings.json.template` by `make install-pi`, so each machine sets its own model (Mistral-7B for most, Codestral-22B for 11+ GB VRAM) without churning the repo. Re-run after a hardware change. `make setup-lmstudio` is the model-only subset (downloads Mistral-7B by default, applies quant logic, no pi tuning).
-
-**On this machine (GTX 1660 SUPER, 6 GB VRAM):** Runs Mistral-7B-Instruct v0.2 with Q4_K_M quant.
+The tracked `.zshrc` stays identical across machines. pi's `defaultModel` is
+*host-managed* — because `~/.pi` symlinks into the repo, the live
+`pi/agent/settings.json` is gitignored and seeded from
+`pi/agent/settings.json.template` by `make install-pi`, so each machine sets
+its own model without churning the repo.
 
 On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-studio`). On Linux, download the AppImage from [lmstudio.ai](https://lmstudio.ai) and run `make setup-host` after.
 
-Start LM Studio (load the model), then run `pi`. The config enables skill
-commands and bundles the `@ollama/pi-web-search` package for web search. `make
+Start LM Studio (load the model), then run `pi` (uses whatever `defaultModel`
+`make setup-host` set) or `pi --model mistralai/mistral-7b-instruct-v0.3` to
+pick Mistral explicitly over an already-set Bonsai default. `make
 setup-lmstudio` also patches the GGUF chat template (`scripts/patch-gguf-template.py`)
 so tool calls parse cleanly.
 
 ### Neovim integration
 
-The `gp.nvim` plugin connects directly to LM Studio via the OpenAI-compatible API at `http://localhost:1234/v1`. **Zero configuration needed** — it auto-detects your loaded Mistral model.
+The `gp.nvim` plugin (`nvim/lua/plugins/ai.lua`) connects to LM Studio's
+OpenAI-compatible API at `http://localhost:1234/v1`, pinned to
+`bonsai-27b`. It warns (doesn't block) if LM Studio isn't
+reachable when you send a message. To use Mistral instead, edit the
+`openai_model_id` field in that file to your loaded Mistral model id.
 
 **Keys:**
 - `<leader>ac` — Toggle chat

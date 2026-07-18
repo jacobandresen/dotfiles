@@ -4,7 +4,7 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "mistralai/mistral-7b-instruct-v0.3",
+  "defaultModel": "bonsai-27b",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
