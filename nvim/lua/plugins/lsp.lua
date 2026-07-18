@@ -14,16 +14,14 @@ return {
   {
     "WhoIsSethDaniel/mason-tool-installer.nvim",
     dependencies = { "mason-org/mason.nvim" },
-    config = function()
-      require("mason-tool-installer").setup({
-        ensure_installed = { "roslyn", "netcoredbg", "codelldb", "clangd", "js-debug-adapter" },
-        auto_update = false,
-        run_on_start = true,
-        integrations = {
-          ["mason-lspconfig"] = false,
-        },
-      })
-    end,
+    opts = {
+      ensure_installed = { "roslyn", "netcoredbg", "codelldb", "clangd", "js-debug-adapter", "rust-analyzer" },
+      auto_update = false,
+      run_on_start = true,
+      integrations = {
+        ["mason-lspconfig"] = false,
+      },
+    },
   },
 
   -- helm syntax
@@ -116,5 +114,43 @@ return {
         },
       },
     },
+  },
+
+  -- rustaceanvim: Rust LSP, inlay hints, macro expansion, codelldb DAP
+  {
+    "mrcjkb/rustaceanvim",
+    version = "^5",
+    ft = { "rust" },
+    keys = {
+      { "<leader>rb", "<cmd>make build<cr>", ft = "rust", desc = "Cargo build" },
+    },
+    init = function()
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "rust",
+        callback = function() vim.bo.makeprg = "cargo" end,
+      })
+    end,
+    config = function()
+      vim.g.rustaceanvim = {
+        server = {
+          default_settings = {
+            ["rust-analyzer"] = {
+              cargo = {
+                allFeatures = true,
+                loadOutDirsFromCheck = true,
+              },
+              checkOnSave = { command = "clippy" },
+              procMacro = { enable = true },
+              inlayHints = {
+                bindingModeHints = { enable = true },
+                closureCaptureHints = { enable = true },
+                closureReturnTypeHints = { enable = "always" },
+                lifetimeElisionHints = { enable = "skip_trivial" },
+              },
+            },
+          },
+        },
+      }
+    end,
   },
 }

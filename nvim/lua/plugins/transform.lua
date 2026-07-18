@@ -1,25 +1,23 @@
 -- Text transformations: JSON, URL, HTML, Base64
 -- Works on visual selection or entire buffer
 
-local M = {}
-
-M.transformations = {
-  { key = "mjp", name = "JSON Prettify",  cmd = "jq .",                                                                                    desc = "Format JSON" },
-  { key = "mjm", name = "JSON Minify",    cmd = "jq -c .",                                                                                 desc = "Compact JSON" },
-  { key = "mje", name = "JSON Escape",    cmd = "jq -Rs .",                                                                                desc = "Escape as JSON string" },
-  { key = "mju", name = "JSON Unescape",  cmd = "jq -r .",                                                                                 desc = "Unescape JSON string" },
+local transformations = {
+  { key = "mjp", name = "JSON Prettify",  cmd = "jq .",                                                    desc = "Format JSON" },
+  { key = "mjm", name = "JSON Minify",    cmd = "jq -c .",                                                 desc = "Compact JSON" },
+  { key = "mje", name = "JSON Escape",    cmd = "jq -Rs .",                                                desc = "Escape as JSON string" },
+  { key = "mju", name = "JSON Unescape",  cmd = "jq -r .",                                                 desc = "Unescape JSON string" },
   { key = "mue", name = "URL Encode",     cmd = [[python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip()),end='')"]],    desc = "Percent-encode URL" },
   { key = "mud", name = "URL Decode",     cmd = [[python3 -c "import sys,urllib.parse;print(urllib.parse.unquote(sys.stdin.read().strip()),end='')"]],  desc = "Decode URL" },
   { key = "mhe", name = "HTML Escape",    cmd = [[python3 -c "import sys,html;print(html.escape(sys.stdin.read()),end='')"]],              desc = "Escape HTML" },
   { key = "mhu", name = "HTML Unescape",  cmd = [[python3 -c "import sys,html;print(html.unescape(sys.stdin.read()),end='')"]],            desc = "Unescape HTML" },
-  { key = "mbe", name = "Base64 Encode",  cmd = "base64",                                                                                  desc = "Encode Base64" },
-  { key = "mbd", name = "Base64 Decode",  cmd = "base64 -d",                                                                               desc = "Decode Base64" },
+  { key = "mbe", name = "Base64 Encode",  cmd = "base64",                                                                   desc = "Encode Base64" },
+  { key = "mbd", name = "Base64 Decode",  cmd = "base64 -d",                                                desc = "Decode Base64" },
 }
 
 local function get_text(mode)
   if mode == "v" or mode == "V" or mode == "\22" then
     local start_pos = vim.fn.getpos("'<")
-    local end_pos = vim.fn.getpos("'>")
+    local end_pos = vim.fn.getpos(">")
     local start_row, start_col = start_pos[2] - 1, start_pos[3] - 1
     local end_row, end_col = end_pos[2] - 1, end_pos[3]
     local end_line = vim.api.nvim_buf_get_lines(0, end_row, end_row + 1, false)[1] or ""
@@ -42,7 +40,7 @@ local function set_text(new_text, start_pos, end_pos)
   end
 end
 
-function M.transform(cmd, mode)
+local function transform(cmd, mode)
   local text, start_pos, end_pos = get_text(mode)
   if not text or text == "" then
     vim.notify("No text to transform", vim.log.levels.WARN)
@@ -58,7 +56,7 @@ end
 
 local function telescope_transform(mode)
   mode = mode or "n"
-  local ok, _ = pcall(require, "telescope.builtin")
+  local ok = pcall(require, "telescope.builtin")
   if not ok then
     vim.notify("Telescope not available", vim.log.levels.ERROR)
     return
@@ -69,7 +67,7 @@ local function telescope_transform(mode)
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
   local items = {}
-  for _, t in ipairs(M.transformations) do
+  for _, t in ipairs(transformations) do
     table.insert(items, { display = string.format("%s — %s", t.name, t.desc), name = t.name, cmd = t.cmd })
   end
   pickers.new({}, {
@@ -81,11 +79,11 @@ local function telescope_transform(mode)
       end,
     }),
     sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _)
+    attach_mappings = function(prompt_bufnr)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = action_state.get_selected_entry()
-        if selection then M.transform(selection.value.cmd, mode) end
+        if selection then transform(selection.value.cmd, mode) end
       end)
       return true
     end,

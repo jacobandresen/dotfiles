@@ -37,12 +37,6 @@ map("n", "<leader>gc", "<cmd>Telescope git_commits<cr>", { desc = "Git commits" 
 map("n", "<leader>gB", "<cmd>Telescope git_branches<cr>", { desc = "Git branches" })
 map("n", "<leader>gs", "<cmd>Telescope git_status<cr>", { desc = "Git status" })
 
--- window navigation
-map("n", "<C-h>", "<C-w>h", { desc = "Move to left window" })
-map("n", "<C-j>", "<C-w>j", { desc = "Move to window below" })
-map("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
-map("n", "<C-l>", "<C-w>l", { desc = "Move to right window" })
-
 -- window resizing
 map("n", "<C-Up>",    "<cmd>resize +2<CR>", { desc = "Increase window height" })
 map("n", "<C-Down>",  "<cmd>resize -2<CR>", { desc = "Decrease window height" })
