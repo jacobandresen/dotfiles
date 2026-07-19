@@ -128,9 +128,9 @@ lms runtime select llama.cpp-linux-x86_64-avx2 --latest   # CPU engine, not vulk
 lms load --gpu 0 -c 32768 bonsai-27b                       # no GPU offload
 ```
 
-`scripts/setup-lmstudio.sh` does the runtime-engine selection automatically
-for the `bonsai-27b` model on Linux, and `scripts/setup-host.sh`'s
-Serenity profile hard-codes `--gpu 0` in `LMSTUDIO_LOAD_ARGS` for this reason
+`scripts/setup-host.sh` does the runtime-engine selection automatically
+for the `bonsai-27b` model on Linux, and its Serenity profile hard-codes
+`--gpu 0` in `LMSTUDIO_LOAD_ARGS` for this reason
 — see the comments next to both for details. If Bonsai ever produces garbage
 output again, check `lms runtime ls` for the `✓` next to an `avx2` (not
 `vulkan`) engine first.
@@ -161,11 +161,11 @@ underlying slowness.
 **Recommendation:** don't use Bonsai-27B (or any ~20B+ model) on hosts with no
 usable GPU offload. `scripts/setup-host.sh` no longer defaults Serenity to
 Bonsai-27B for this reason — it falls through to the same VRAM-based profile
-picker used for GPUless/low-VRAM hosts generally, landing on the lightweight
-`qwen2.5-coder-3b-instruct` fallback, which is small enough to run at
-usable speed on CPU alone. Bonsai remains available and is left alone by
-`setup-host.sh` if you set it manually (see § Setup above and the
-`setup-host.sh` "EXCEPTION" comment), but expect the numbers above.
+picker used for GPUless/low-VRAM hosts generally, landing on
+`qwen3-8b-aqua`, which offloads cleanly to Vulkan iGPUs and runs at usable
+speed. Bonsai remains available and is left alone by `setup-host.sh` if you
+set it manually (see § Setup above and the `setup-host.sh` "EXCEPTION"
+comment), but expect the numbers above.
 
 ### LM Studio + Mistral AI (fallback / alternative)
 
@@ -173,33 +173,34 @@ The previous default, kept available under the same `lmstudio` provider
 (`pi --model mistralai/mistral-7b-instruct-v0.3`). Model selection is
 **automatic and hardware-optimized** via `make setup-host`:
 
-- **≥16 GB VRAM** → Codestral-22B with Q4_K_M (~14 GB)
-- **11-16 GB VRAM** → Codestral-22B with Q3_K_L (~11 GB)
-- **6-11 GB VRAM** → Mistral-7B-Instruct with Q4_K_M (~4.4 GB)
-- **4-6 GB VRAM** → Mistral-7B-Instruct with Q3_K_L (~3.8 GB)
-- **<4 GB VRAM** → Qwen2.5-Coder-3B with Q3_K_L (~3.8 GB, fallback)
+- **NVIDIA, ≥16 GB VRAM** → Codestral-22B with Q4_K_M (~14 GB)
+- **NVIDIA, 11-16 GB VRAM** → Codestral-22B with Q3_K_L (~11 GB)
+- **NVIDIA, 6-11 GB VRAM** → Mistral-7B-Instruct with Q4_K_M (~4.4 GB)
+- **NVIDIA, 4-6 GB VRAM** → Mistral-7B-Instruct with Q3_K_L (~3.8 GB)
+- **NVIDIA, <4 GB VRAM** → Qwen2.5-Coder-3B with Q3_K_L (~3.8 GB)
+- **Non-NVIDIA or <4 GB VRAM** → qwen3-8b-aqua (GPU/iGPU offload via Vulkan)
 
 | Model | Size | VRAM (Q4_K_M) | Default For | Notes |
 |-------|------|--------------|-------------|-------|
-| Codestral-22B | 22B | ~14 GB | 16+ GB VRAM | Opt-in flagship coding model |
+| Codestral-22B | 22B | ~14 GB | NVIDIA, 16+ GB VRAM | Opt-in flagship coding model |
 | Codestral-Latest | 22B | ~14 GB | 16+ GB VRAM | Latest Codestral version |
-| Mistral-7B-Instruct v0.2 | 7B | ~4.4 GB | 6-11 GB VRAM | LM Studio-path default |
+| Mistral-7B-Instruct v0.2 | 7B | ~4.4 GB | NVIDIA, 6-11 GB VRAM | LM Studio-path default |
 | Mistral-7B-Instruct v0.1 | 7B | ~4.4 GB | 6-11 GB VRAM | Previous version |
 | Mixtral-8x7B | 47B | ~24 GB | 24+ GB VRAM | High-capability MoE |
+| Qwen3-8b-aqua | 8B | ~4.4 GB | Non-NVIDIA hosts | Vulkan iGPU offload |
 | Qwen2.5-Coder-7B | 7B | ~4.4 GB | Fallback | Compatibility |
-| Qwen2.5-Coder-3B | 3B | ~3.8 GB | <4 GB VRAM | Minimal VRAM |
+| Qwen2.5-Coder-3B | 3B | ~3.8 GB | NVIDIA, <4 GB VRAM | Minimal VRAM |
 
 ```sh
-make setup-host       # auto-detect GPU, install Mistral-7B or Codestral
-make setup-lmstudio   # or just the model: downloads Mistral/Codestral, wires pi config
+make setup-host       # auto-detect GPU, install appropriate model, configure LM Studio + pi
 ```
 
-`make setup-host` probes the GPU once, downloads the appropriate Mistral AI
-model via LM Studio, and writes `defaultModel` into `~/.pi/agent/settings.json`.
+`make setup-host` probes the GPU once, downloads the appropriate model
+(via LM Studio), and writes `defaultModel` into `~/.pi/agent/settings.json`.
 **It leaves the Bonsai default alone**: if `defaultModel` is already a
 Bonsai-27B id, it skips the pi-settings patch entirely rather than overwriting
-it with a Mistral/Codestral pick (Bonsai and Mistral both run under the same
-`lmstudio` provider now, so there's no `defaultProvider` to key off of) —
+it with a Mistral/Codestral/Qwen pick (Bonsai and Mistral/Qwen both run under the
+same `lmstudio` provider, so there's no `defaultProvider` to key off of) —
 switching back to this path from Bonsai is a manual edit of
 `~/.pi/agent/settings.json`, not something running this script will do for you.
 
@@ -218,8 +219,8 @@ On macOS, LM Studio is also installed via `make deps` (`brew install --cask lm-s
 
 Start LM Studio (load the model), then run `pi` (uses whatever `defaultModel`
 `make setup-host` set) or `pi --model mistralai/mistral-7b-instruct-v0.3` to
-pick Mistral explicitly over an already-set Bonsai default. `make
-setup-lmstudio` also patches the GGUF chat template (`scripts/patch-gguf-template.py`)
+pick Mistral explicitly over an already-set Bonsai default. `make setup-host`
+also patches the GGUF chat template (`scripts/patch-gguf-template.py`)
 so tool calls parse cleanly.
 
 ### Neovim integration

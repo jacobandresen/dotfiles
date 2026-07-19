@@ -170,9 +170,10 @@ endif
 
 # Download/configure the right Qwen2.5-Coder-7B quant for this host's GPU and wire
 # up LM Studio for pi. Standalone: a multi-GB model download shouldn't run on every
-# install. See scripts/setup-lmstudio.sh for the per-host quant reasoning.
-setup-lmstudio:
-	@./scripts/setup-lmstudio.sh
+# install. See scripts/setup-host.sh for the per-host quant reasoning (LM Studio
+# setup is now folded into setup-host.sh).
+setup-lmstudio: ## Run setup-host.sh (formerly setup-lmstudio.sh)
+	@./scripts/setup-host.sh
 
 # Tune the local-LLM stack (LM Studio quant + pi model) to this machine's GPU in
 # one pass, host-managed so the committed, cross-machine dotfiles stay untouched.
