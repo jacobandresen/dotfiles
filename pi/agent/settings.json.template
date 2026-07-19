@@ -4,7 +4,7 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "qwen2.5-coder-7b-instruct",
+  "defaultModel": "qwen3-8b-aqua",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
