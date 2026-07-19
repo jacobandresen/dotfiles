@@ -67,11 +67,11 @@ def patch(model_path: str) -> None:
     """
     # Validate file exists and is readable
     if not os.path.isfile(model_path):
-        print(f"  ✗ File not found: {model_path}" >&2)
+        print(f"  ✗ File not found: {model_path}", file=sys.stderr)
         sys.exit(1)
     
     if not os.access(model_path, os.R_OK | os.W_OK):
-        print(f"  ✗ No read/write permission for: {model_path}" >&2)
+        print(f"  ✗ No read/write permission for: {model_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -80,7 +80,7 @@ def patch(model_path: str) -> None:
         with open(model_path, "rb") as f:
             header = f.read(read_size)
     except IOError as e:
-        print(f"  ✗ Failed to read {model_path}: {e}" >&2)
+        print(f"  ✗ Failed to read {model_path}: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Already patched?
@@ -96,7 +96,7 @@ def patch(model_path: str) -> None:
     # Pad new template to the exact same byte length
     pad = len(OLD_TEMPLATE) - len(NEW_TEMPLATE_BASE)
     if pad < 0:
-        print("  ✗ ERROR: new template is longer than old — cannot patch in-place" >&2)
+        print("  ✗ ERROR: new template is longer than old — cannot patch in-place", file=sys.stderr)
         sys.exit(1)
     new_template = NEW_TEMPLATE_BASE + b" " * pad
     assert len(new_template) == len(OLD_TEMPLATE), "Template length mismatch"
@@ -108,7 +108,7 @@ def patch(model_path: str) -> None:
             print(f"  Creating backup: {backup}")
             shutil.copy2(model_path, backup)
     except IOError as e:
-        print(f"  ✗ Failed to create backup: {e}" >&2)
+        print(f"  ✗ Failed to create backup: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Write patch
@@ -117,7 +117,7 @@ def patch(model_path: str) -> None:
             f.seek(idx)
             f.write(new_template)
     except IOError as e:
-        print(f"  ✗ Failed to write patch: {e}" >&2)
+        print(f"  ✗ Failed to write patch: {e}", file=sys.stderr)
         sys.exit(1)
 
     print(f"  ✓ Chat template patched at offset 0x{idx:x}")
@@ -126,6 +126,6 @@ def patch(model_path: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <model.gguf>" >&2)
+        print(f"Usage: {sys.argv[0]} <model.gguf>", file=sys.stderr)
         sys.exit(1)
     patch(sys.argv[1])

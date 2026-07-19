@@ -4,10 +4,11 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "bonsai-27b",
+  "defaultModel": "qwen2.5-coder-7b-instruct",
   "defaultProvider": "lmstudio",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
+  "httpIdleTimeoutMs": 0,
   "lastChangelogVersion": "0.80.0",
   "packages": [
     "npm:@ollama/pi-web-search"

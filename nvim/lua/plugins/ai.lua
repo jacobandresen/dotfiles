@@ -1,8 +1,12 @@
--- AI assistant via gp.nvim — talks to Bonsai-27B (a ternary quant of
--- Qwen3.6-27B), loaded like any other GGUF through LM Studio at port 1234.
--- See README.md's "Bonsai-27B" section for why this is the default over the
--- Mistral setup (capability vs. VRAM/thinking-token tradeoff) — both now run
--- through the same LM Studio server, just different model ids.
+-- AI assistant via gp.nvim — talks to Qwen2.5-Coder-7B-Instruct, loaded like
+-- any other GGUF through LM Studio at port 1234. Chosen as the default over
+-- Bonsai-27B: Bonsai's ternary Q1_0 quant only dequantizes correctly on
+-- llama.cpp's CPU/CUDA backends, not Vulkan (used for Intel/AMD iGPUs like
+-- this host's Arc), so it's CPU-bound here (~2.4 tok/s, 5+ min prompt-eval
+-- stalls). Qwen2.5-Coder's standard quant offloads fine to Vulkan and loads/
+-- answers in seconds — see README.md's "GPU offload: CUDA works, Vulkan
+-- doesn't" section. Both models run through the same LM Studio server, just
+-- different model ids.
 return {
   {
     "Robitx/gp.nvim",
@@ -22,25 +26,21 @@ return {
     config = function()
       require("gp").setup({
         -- ========================================================================
-        -- Bonsai-27B via LM Studio — Default provider
+        -- Qwen2.5-Coder-7B-Instruct via LM Studio — Default provider
         -- ========================================================================
         openai_api_key = "lm-studio",           -- LM Studio uses this as a placeholder
         openai_base_url = "http://localhost:1234/v1",
-        openai_model_id = "bonsai-27b",
+        openai_model_id = "qwen2.5-coder-7b-instruct",
 
         -- ========================================================================
-        -- Simple defaults — just works with Bonsai
+        -- Simple defaults — just works with Qwen2.5-Coder
         -- ========================================================================
         disable_stream = false,                -- See responses as they're generated
         temperature = 0.7,                     -- Balanced creativity
-        max_tokens = 4096,                     -- Bonsai's hidden thinking eats into
-                                                -- this budget (~190 tokens minimum,
-                                                -- 2-3k for a complex request) — higher
-                                                -- than Mistral's 2048 to leave room
-                                                -- for an actual answer after it.
+        max_tokens = 4096,                     -- Room for a full code response
 
         -- ========================================================================
-        -- Prompt for Bonsai — tells it to be a coding assistant
+        -- Prompt for Qwen2.5-Coder — tells it to be a coding assistant
         -- ========================================================================
         system_prompt = "You are a helpful AI coding assistant. " ..
                        "Write clean, correct, well-commented code. " ..

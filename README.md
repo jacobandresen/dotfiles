@@ -109,6 +109,64 @@ the [mu repo](https://github.com/jacobandresen/mu)'s `docs/MODELS.md` §
 Bonsai-27B for the full model story and `docs/tech-repair.md` for the
 ctx/parallel/spec-decode tuning this config is based on.
 
+#### GPU offload: CUDA works, Vulkan doesn't
+
+Bonsai-27B's `Q1_0` ternary quant only has correct dequantization kernels in
+llama.cpp's **CPU** and **CUDA** backends. The **Vulkan** backend (used for
+Intel/AMD iGPUs, including Serenity's Arc iGPU) loads the GGUF and runs
+without error, but its `Q1_0` dequant kernel is wrong/unimplemented — it
+silently produces garbage tokens (e.g. stray punctuation, no coherent text)
+instead of failing loudly.
+
+This is why offloading to the GPU works fine on an nvidia box (CUDA has real
+`Q1_0` kernels) but breaks on the machine without nvidia (Vulkan iGPU). The fix is to pin
+LM Studio's GGUF runtime to the **CPU-only `llama.cpp-…-avx2` engine** and
+load with `--gpu 0`, never `--gpu max`, whenever Bonsai is the active model:
+
+```sh
+lms runtime select llama.cpp-linux-x86_64-avx2 --latest   # CPU engine, not vulkan
+lms load --gpu 0 -c 32768 bonsai-27b                       # no GPU offload
+```
+
+`scripts/setup-lmstudio.sh` does the runtime-engine selection automatically
+for the `bonsai-27b` model on Linux, and `scripts/setup-host.sh`'s
+Serenity profile hard-codes `--gpu 0` in `LMSTUDIO_LOAD_ARGS` for this reason
+— see the comments next to both for details. If Bonsai ever produces garbage
+output again, check `lms runtime ls` for the `✓` next to an `avx2` (not
+`vulkan`) engine first.
+
+#### CPU-only performance: not recommended on ultra-low-VRAM hosts
+
+Because Bonsai-27B must run on the CPU-only `avx2` engine (previous section),
+a 27-billion-parameter model is fully CPU-bound on hosts with no usable dGPU
+— like Serenity (Intel Core Ultra 5 135U, no dGPU, Intel Arc iGPU unusable
+per above). Measured on Serenity (2026-07-19, 12 CPU threads, ctx 32768,
+`pi -p "What is 2+2?"`):
+
+| Metric | Measured |
+| --- | --- |
+| Prompt eval | ~2.8 tok/s |
+| Generation | ~2.4 tok/s |
+| pi's ~1900-token tool-call system prompt, cold | 5+ min, stuck at "Prompt processing progress: 0.0%" |
+| Trivial round-trip, warm model | ~3.5 min |
+| Trivial round-trip, cold + retries | ~13.5 min |
+
+The 5+ minute prompt-processing stall is long enough to trip pi's default
+5-minute HTTP idle timeout (`stopReason: "error"`, `errorMessage: "terminated"`,
+silently retried) — see `pi/agent/settings.json`'s `httpIdleTimeoutMs: 0`,
+which disables that timeout so slow-but-eventually-successful requests aren't
+killed mid-flight. Disabling the timeout fixes the errors but not the
+underlying slowness.
+
+**Recommendation:** don't use Bonsai-27B (or any ~20B+ model) on hosts with no
+usable GPU offload. `scripts/setup-host.sh` no longer defaults Serenity to
+Bonsai-27B for this reason — it falls through to the same VRAM-based profile
+picker used for GPUless/low-VRAM hosts generally, landing on the lightweight
+`qwen2.5-coder-3b-instruct` fallback, which is small enough to run at
+usable speed on CPU alone. Bonsai remains available and is left alone by
+`setup-host.sh` if you set it manually (see § Setup above and the
+`setup-host.sh` "EXCEPTION" comment), but expect the numbers above.
+
 ### LM Studio + Mistral AI (fallback / alternative)
 
 The previous default, kept available under the same `lmstudio` provider

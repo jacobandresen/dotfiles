@@ -112,23 +112,38 @@ fi
 # fp16 KV cache spilling the card; it's 5-10x slower and no longer used. See the
 # mu repo's docs/MODELS.md for the measured VRAM table.)
 
-# ── Serenity-specific profile (Intel Core Ultra 5 135U, 32 GB RAM, no dGPU) ──
-# This machine has no NVIDIA GPU so nvidia-smi returns nothing; detect it by
-# hostname instead. Bonsai-27B (3.6 GB, ultra-low quant) fits easily in system
-# RAM and is the preferred model here.
-#   • CPU threads: 12 of 14 logical cores (leaves 2 for system/UI)
-#   • GPU offload:  full (--gpu max via Vulkan/Intel Arc iGPU)
-#   • Context:     32 768 tokens (generous but won't bloat the KV cache)
-# These values are intentionally NOT emitted for other hosts — the Bonsai GGUF
-# is symlinked only on Serenity (~/.lmstudio/models/prism-ml/Bonsai-27B-gguf/).
+# ── GPU-less / CPU-only hosts (e.g. Serenity: Intel Core Ultra 5 135U, no
+# dGPU) — detect by hostname since nvidia-smi returns nothing here.
+#
+# Bonsai-27B (3.6 GB, ternary quant) is NOT recommended on CPU-only hosts
+# despite fitting in system RAM. Measured on Serenity (2026-07-19, avx2 CPU
+# engine, 12 threads, ctx 32768): ~2.4 tok/s generation and ~2.8 tok/s prompt
+# eval, and ingesting pi's ~1900-token tool-call system prompt routinely took
+# 5+ minutes of wall-clock time with the LM Studio server showing "Prompt
+# processing progress: 0.0%" the whole time. That alone was long enough to
+# trip pi's default 5-minute HTTP idle timeout ("terminated" errors, silently
+# retried), and even with that timeout disabled, a single trivial prompt
+# round-trip still took ~3.5 minutes warm / ~13 minutes cold (retries). A 27B
+# model simply has no viable CPU-only path — prefer Qwen2.5-Coder-7B-Instruct
+# instead, which offloads cleanly to Vulkan iGPUs (falls through to the
+# qwen-7b profile below, since VRAM_MIB is unset on these hosts).
+#
+# On NVIDIA GPU hosts, Bonsai-27B IS recommended instead: its ternary quant
+# has correct dequantization kernels in llama.cpp's CUDA backend (unlike
+# Vulkan, used for Intel/AMD iGPUs, which silently corrupts its output — see
+# README.md § pi agent § GPU offload: CUDA works, Vulkan doesn't). At only
+# 3.6-3.9 GB it fits comfortably with full GPU offload even on a 6 GB card,
+# undercutting Mistral-7B Q4_K_M's 4.4 GB footprint while offering more
+# parameters, so it now replaces the Mistral-7B tiers below for any detected
+# NVIDIA GPU.
 CURRENT_HOSTNAME="$(hostname 2>/dev/null || true)"
 if [[ "$CURRENT_HOSTNAME" == "Serenity" ]]; then
-    PROFILE="bonsai-27b"
-    QUANT="PRELOADED"
-    PI_DEFAULT_MODEL="prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf"
-    LMSTUDIO_LOAD_ARGS="--gpu max -c 32768"
-    LMSTUDIO_LOAD_THREADS=12   # set manually in LM Studio UI: Advanced → CPU Threads
-elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
+    echo "  ⚠ Bonsai-27B is not recommended on Serenity (CPU-only, no dGPU):"
+    echo "    measured ~2.4 tok/s and 5+ min prompt-processing stalls on"
+    echo "    pi's tool-heavy system prompt. Falling through to a smaller,"
+    echo "    CPU-appropriate model instead."
+fi
+if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
     # Only use Codestral on very capable GPUs (16+ GB)
     PROFILE="codestral-q4"
     QUANT="Q4_K_M"
@@ -142,23 +157,31 @@ elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 11000 ] 2>/dev/null; then
     PI_DEFAULT_MODEL="codestral-22b-v0.1"   # mid-high → Codestral with Q3_K_L
     LMSTUDIO_LOAD_ARGS=""
     LMSTUDIO_LOAD_THREADS=""
-else
-    # Default to Mistral-7B for all other cases (including 6 GB cards)
-    LMSTUDIO_LOAD_ARGS=""
+elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
+    # NVIDIA GPU, 4-11 GB (includes the 6 GB card): Bonsai-27B via CUDA full
+    # offload — its CUDA kernels are correct (unlike Vulkan), and its 3.6-3.9
+    # GB footprint fits with room to spare.
+    PROFILE="bonsai-27b-cuda"
+    QUANT="PRELOADED"
+    PI_DEFAULT_MODEL="prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf"
+    LMSTUDIO_LOAD_ARGS="--gpu max -c 32768"
     LMSTUDIO_LOAD_THREADS=""
-    if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
-        PROFILE="mistral-7b"
-        QUANT="Q4_K_M"
-        PI_DEFAULT_MODEL="mistralai/mistral-7b-instruct-v0.3"   # 6-11 GB → Mistral AI official 7B Instruct v0.3
-    elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 4000 ] 2>/dev/null; then
-        PROFILE="mistral-7b-q3"
-        QUANT="Q3_K_L"
-        PI_DEFAULT_MODEL="mistralai/mistral-7b-instruct-v0.3"   # 4-6 GB → Mistral AI official 7B Instruct v0.3 (Q3_K_L)
-    else
-        PROFILE="qwen-3b"
-        QUANT="Q3_K_L"
-        PI_DEFAULT_MODEL="qwen2.5-coder-3b-instruct"   # <4 GB → lightweight fallback
-    fi
+else
+    # No NVIDIA GPU detected (or <4 GB VRAM): Qwen2.5-Coder-7B-Instruct is the
+    # default here too — still GPU-offloaded where a usable GPU exists. Unlike
+    # Bonsai's ternary quant, Qwen2.5-Coder's standard GGUF quant has correct
+    # Vulkan dequant kernels, so on Linux hosts with an iGPU (e.g. Serenity's
+    # Intel Arc), setup-lmstudio.sh selects the Vulkan engine and this loads
+    # fully offloaded to it instead of falling back to CPU. Measured on
+    # Serenity (2026-07-19): qwen2.5-coder-7b-instruct on Vulkan iGPU loaded
+    # in ~5s and answered a trivial prompt in ~3s total, vs. Bonsai-27B's
+    # CPU-only ~2.4 tok/s / 5+ min prompt-processing stalls — so the 7B, not
+    # the smaller 3B, is the right fallback here.
+    PROFILE="qwen-7b"
+    QUANT="Q4_K_M"
+    PI_DEFAULT_MODEL="qwen2.5-coder-7b-instruct"
+    LMSTUDIO_LOAD_ARGS="--gpu max -c 8192"
+    LMSTUDIO_LOAD_THREADS=""
 fi
 
 echo "Host hardware profile (Mistral AI optimized)"
@@ -186,28 +209,11 @@ run_cmd() {
 
 # ── 1. LM Studio: download/keep the right quant ───────────────────────────────
 # Hand the chosen quant down so setup-lmstudio.sh skips its own GPU probe.
-# On Serenity (bonsai-27b profile), also pass --model bonsai-27b so the script
-# verifies the symlink and skips download/patch steps.
 echo "── LM Studio ───────────────────────────────────────────────"
 if $DRY_RUN; then
-    if [[ "$PROFILE" == "bonsai-27b" ]]; then
-        echo "  [DRY-RUN] Would run: bash $SCRIPT_DIR/setup-lmstudio.sh --model bonsai-27b"
-        echo "  [DRY-RUN] Optimal load (run after LM Studio starts):"
-        echo "    lms load $LMSTUDIO_LOAD_ARGS $PI_DEFAULT_MODEL"
-        echo "  [DRY-RUN] Also set in LM Studio UI: Advanced → CPU Threads = $LMSTUDIO_LOAD_THREADS"
-    else
-        echo "  [DRY-RUN] Would run: QUANT=$QUANT bash $SCRIPT_DIR/setup-lmstudio.sh"
-    fi
+    echo "  [DRY-RUN] Would run: QUANT=$QUANT bash $SCRIPT_DIR/setup-lmstudio.sh --model $PI_DEFAULT_MODEL"
 else
-    if [[ "$PROFILE" == "bonsai-27b" ]]; then
-        bash "$SCRIPT_DIR/setup-lmstudio.sh" --model bonsai-27b
-        echo ""
-        echo "  ✓ Optimal load command for Serenity (run after LM Studio starts):"
-        echo "    lms load $LMSTUDIO_LOAD_ARGS $PI_DEFAULT_MODEL"
-        echo "  ⚠ Also set in LM Studio UI: Advanced → CPU Threads = $LMSTUDIO_LOAD_THREADS"
-    else
-        QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh"
-    fi
+    QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh" --model "$PI_DEFAULT_MODEL"
 fi
 echo ""
 
@@ -217,12 +223,10 @@ echo ""
 # file is shared across machines, this field is host-managed: each host's
 # 'make setup-host' sets its own value, so don't commit a host-specific default.
 #
-# EXCEPTION: if defaultModel is already a Bonsai-27B id, this host has
-# deliberately opted into the Bonsai-27B default (see README.md § pi agent) —
-# this script only knows how to pick Mistral/Codestral, so leave it alone
-# rather than overwriting it. (Bonsai and Mistral both live under the same
-# "lmstudio" provider now, so there's no defaultProvider to key off of —
-# check the model id instead.)
+# The profile picker above already accounts for Bonsai-27B (recommended only
+# on NVIDIA GPU hosts, via CUDA) vs. Mistral/Codestral/Qwen, so this always
+# overwrites defaultModel to match — including correcting away from a
+# leftover Bonsai-27B default on a CPU-only host, or the reverse.
 echo "── pi agent (~/.pi/agent/settings.json) ────────────────────"
 PI_SETTINGS="$HOME/.pi/agent/settings.json"
 
@@ -243,10 +247,14 @@ if command -v python3 >/dev/null 2>&1; then
     CURRENT_MODEL_ID=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', ''))" 2>/dev/null || echo "")
 fi
 
-if [[ "$CURRENT_MODEL_ID" == *Bonsai* ]] || [[ "$CURRENT_MODEL_ID" == *bonsai* ]]; then
-    echo "  ✓ defaultModel is '$CURRENT_MODEL_ID' — leaving pi's config alone (this"
-    echo "    host opted into the Bonsai-27B default; see README.md § pi agent)."
-elif $DRY_RUN; then
+if [[ -z "${VRAM_MIB:-}" ]] && { [[ "$CURRENT_MODEL_ID" == *Bonsai* ]] || [[ "$CURRENT_MODEL_ID" == *bonsai* ]]; }; then
+    echo "  ⚠ defaultModel is '$CURRENT_MODEL_ID' but no NVIDIA GPU was detected —"
+    echo "    Bonsai-27B is CPU-only here and measured ~2.4 tok/s with 5+ min"
+    echo "    prompt-processing stalls (see README.md § pi agent § CPU-only"
+    echo "    performance). Correcting defaultModel to '$PI_DEFAULT_MODEL'."
+fi
+
+if $DRY_RUN; then
     # Check current value in dry-run mode
     if command -v python3 >/dev/null 2>&1; then
         CURRENT_MODEL=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', '<unset>'))" 2>/dev/null || echo "<error>")
@@ -284,6 +292,62 @@ else:
         sys.exit(1)
 PYEOF
 fi
+
+# ── 3. pi: make sure the model is actually registered ─────────────────────────
+# settings.json's defaultModel is only ever *used* if pi's model catalog
+# (~/.pi/agent/models.json, also a symlink into this repo) knows about that
+# model id for the "lmstudio" provider — pi does NOT query LM Studio's live
+# /v1/models list, it only looks up ids configured here. If defaultModel points
+# at an id missing from models.json, pi silently falls back to the first
+# configured lmstudio model instead (which was Bonsai-27B here — exactly the
+# CPU-only model this script exists to move hosts away from), with no error.
+# So: register PI_DEFAULT_MODEL in models.json if it isn't there yet.
+echo "── pi agent (~/.pi/agent/models.json) ───────────────────────"
+PI_MODELS="$HOME/.pi/agent/models.json"
+
+case "$PROFILE" in
+    codestral-q4|codestral-q3) MODEL_NAME="Codestral 22B v0.1 ($QUANT, via LM Studio)" ;;
+    bonsai-27b-cuda)           MODEL_NAME="Bonsai 27B (ternary, Qwen3.6-27B 1-bit quant, CUDA GPU offload, via LM Studio)" ;;
+    qwen-7b)                   MODEL_NAME="Qwen2.5-Coder 7B Instruct ($QUANT, GPU/iGPU offload, via LM Studio)" ;;
+    *)                         MODEL_NAME="$PI_DEFAULT_MODEL (via LM Studio)" ;;
+esac
+
+if [ ! -f "$PI_MODELS" ]; then
+    echo "  ⚠ $PI_MODELS not found — run 'make install-pi' first, then re-run."
+elif $DRY_RUN; then
+    echo "  [DRY-RUN] Would ensure models.json has an lmstudio entry for '$PI_DEFAULT_MODEL'"
+else
+    python3 - "$PI_MODELS" "$PI_DEFAULT_MODEL" "$MODEL_NAME" <<'PYEOF'
+import json, sys
+path, model, name = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+except (json.JSONDecodeError, FileNotFoundError) as e:
+    print(f"  ✗ Failed to read {path}: {e}", file=sys.stderr)
+    sys.exit(1)
+
+lmstudio = cfg.setdefault("providers", {}).setdefault("lmstudio", {})
+models = lmstudio.setdefault("models", [])
+
+existing = next((m for m in models if m.get("id") == model), None)
+if existing is not None:
+    print(f"  ✓ models.json already registers '{model}'")
+else:
+    for m in models:
+        m.pop("_launch", None)
+    models.append({"_launch": True, "id": model, "input": ["text"], "name": name})
+    try:
+        with open(path, "w") as f:
+            json.dump(cfg, f, indent=2)
+            f.write("\n")
+        print(f"  ✓ models.json: registered '{model}' ({name})")
+    except IOError as e:
+        print(f"  ✗ Failed to write {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+PYEOF
+fi
+echo ""
 
 if ! $DRY_RUN; then
     echo ""

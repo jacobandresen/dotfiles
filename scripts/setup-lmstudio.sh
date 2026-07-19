@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # setup-lmstudio.sh — Download and configure models for LM Studio + pi.
-# Default model: Bonsai-27B (Prism ML) — ultra-low-quant, pre-downloaded,
-# only ~3.6 GB on disk, safe to run on any GPU.
+# Default model: Qwen2.5-Coder-7B-Instruct — GPU/iGPU-offloadable, fast on
+# both discrete and integrated GPUs. Bonsai-27B is NOT the default: it's a
+# 27B model that's fully CPU-bound on hosts with no usable CUDA GPU (its
+# ternary quant only dequantizes correctly on CPU/CUDA, not Vulkan — measured
+# ~2.4 tok/s and 5+ min prompt-processing stalls on Serenity; see README.md
+# § pi agent § CPU-only performance). It remains available via --model
+# bonsai-27b for hosts that deliberately opt into it (e.g. NVIDIA GPUs).
 # Also supports Mistral AI models (Codestral, Mistral, Mixtral) and Qwen
 # models via --model.
 #
 # Model selection priority:
-#   1. Bonsai-27B - default
+#   1. Qwen2.5-Coder-7B-Instruct - default (GPU/iGPU offload, via LM Studio)
 #   2. Mistral AI models (Codestral, Mistral, Mixtral) - opt-in via --model
-#   3. Qwen models - fallback for compatibility
+#   3. Bonsai-27B - opt-in via --model, best on NVIDIA GPUs (CUDA)
 #
 # See: https://mistral.ai/, https://huggingface.co/mistralai
 # For quantization details: https://github.com/mistralai/mistral-src
@@ -31,18 +36,20 @@ Options:
   --provider PROVIDER    Specify provider (lmstudio, mistral, openrouter)
 
 Supported Models:
-  - bonsai-27b                  (default, ~3.6 GB, pre-downloaded/symlinked)
+  - qwen2.5-coder-7b-instruct   (default, ~4.4 GB, GPU/iGPU offload)
+  - qwen2.5-coder-3b-instruct   (~3.8 GB, lightweight, CPU-friendly fallback)
   - mistral-7b-instruct-v0.3    (~4.4 GB Q4_K_M)
   - mistral-7b-instruct-v0.2    (~4.4 GB Q4_K_M)
   - mistral-7b-instruct-v0.1    (~4.4 GB Q4_K_M)
   - mixtral-8x7b-instruct-v0.1  (~24 GB Q4_K_M)
   - codestral-22b-v0.1          (~14 GB Q4_K_M, requires 11+ GB VRAM)
   - codestral-latest            (latest, ~14 GB Q4_K_M, requires 11+ GB VRAM)
-  - qwen2.5-coder-7b-instruct   (fallback, ~4.4 GB)
-  - qwen2.5-coder-3b-instruct   (fallback, ~3.8 GB, lightweight)
+  - bonsai-27b                  (~3.6 GB, pre-downloaded/symlinked; best on
+                                 NVIDIA GPUs (CUDA) — see README.md § pi agent
+                                 § GPU offload: CUDA works, Vulkan doesn't)
 
 Examples:
-  $(basename "$0")                              # Auto-detect and download Bonsai-27B
+  $(basename "$0")                              # Auto-detect and download Qwen2.5-Coder-7B
   $(basename "$0") --model codestral-22b-v0.1  # Download specific model
   $(basename "$0") --model mistral-7b-instruct-v0.2
   $(basename "$0") --quant Q4_K_M                # Force specific quant
@@ -125,12 +132,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Model configuration -------------------------------------------------------
 
-# Set default model to Bonsai-27B (pre-downloaded, ultra-low-quant, only 3.6 GB
-# on disk — safe for any GPU). Use --model to opt into Mistral/Codestral/Qwen.
+# Set default model to Qwen2.5-Coder-7B-Instruct (~4.4 GB, GPU/iGPU offload).
+# Use --model to opt into Mistral/Codestral/Bonsai-27B explicitly. Bonsai-27B
+# is NOT the default: it's fully CPU-bound without a usable NVIDIA GPU (see
+# README.md § pi agent § CPU-only performance for measured numbers).
 if [ -n "$EXPLICIT_MODEL" ]; then
     MODEL_ID="$EXPLICIT_MODEL"
 else
-    MODEL_ID="bonsai-27b"
+    MODEL_ID="qwen2.5-coder-7b-instruct"
 fi
 
 # Set default provider
@@ -258,20 +267,18 @@ if $DRY_RUN; then
 fi
 
 # Determine model directory and file based on model repo
-# For Mistral models: mistralai/Codestral-22B-v0.1-GGUF
-# For Qwen models: lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF
-MODEL_BASENAME=$(basename "$MODEL_REPO" .GGUF)
-MODEL_DIR="$HOME/.lmstudio/models/$(dirname "$MODEL_REPO")"
+# Repo naming convention: "<publisher>/<ModelName>-GGUF" on disk/HF, with each
+# quant's file named "<ModelName>-<QUANT>.gguf" (no repeated "-GGUF" suffix).
+# LM Studio lays models out as models/<publisher>/<ModelName>-GGUF/<file>.gguf
+# (verified via `lms ls --llm --json`'s "path" field) — i.e. the full repo
+# path is the directory, not just its dirname. Works for any size/publisher
+# (Qwen 3B/7B, Mistral, Codestral, Mixtral, ...).
+MODEL_BASENAME=$(basename "$MODEL_REPO")
+MODEL_BASENAME="${MODEL_BASENAME%-GGUF}"
+MODEL_DIR="$HOME/.lmstudio/models/$MODEL_REPO"
 MODEL_FILENAME="${MODEL_BASENAME}-${QUANT}.gguf"
 MODEL_FILE="$MODEL_DIR/$MODEL_FILENAME"
 HF_URL="https://huggingface.co/$MODEL_REPO/resolve/main/$MODEL_FILENAME"
-
-# For Qwen models, use the old directory structure for backward compatibility
-if [[ "$MODEL_REPO" == *"Qwen2.5-Coder"* ]]; then
-    MODEL_DIR="$HOME/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF"
-    MODEL_FILE="$MODEL_DIR/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
-    HF_URL="https://huggingface.co/lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-$QUANT.gguf"
-fi
 
 echo "Model configuration:"
 echo "  Model: $MODEL_ID"
@@ -380,43 +387,120 @@ if [[ "$QUANT" == "PRELOADED" ]]; then
         echo "    Ensure the symlink exists: ~/.lmstudio/models/prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf" >&2
         exit 1
     fi
-elif $DRY_RUN; then
-    echo "  [DRY-RUN] Would download: $MODEL_ID ($QUANT) via 'lms get $MODEL_REPO@$QUANT'"
-elif command -v lms >/dev/null 2>&1; then
-    echo "Downloading $MODEL_ID ($QUANT) via lms get…"
-    lms get "$MODEL_REPO@$QUANT" -y || lms get "$MODEL_REPO" -y || \
-        { echo "  ✗ 'lms get $MODEL_REPO' failed" >&2; exit 1; }
-    echo "  ✓ Model present via lms"
-else
-    # Fallback: resumable, size-verified curl against the computed HF GGUF URL.
-    PARTIAL_FILE="$MODEL_FILE"
-    mkdir -p "$MODEL_DIR" || { echo "  ✗ Failed to create directory: $MODEL_DIR" >&2; exit 1; }
-    if HEADERS="$(curl -fsIL "$HF_URL" 2>/dev/null)"; then
-        EXPECTED_SIZE="$(printf '%s\n' "$HEADERS" \
-          | awk '/^[Cc]ontent-[Ll]ength:/{cl=$2} END{gsub(/\r/,"",cl); print cl}')"
-    else
-        EXPECTED_SIZE=""
+
+    # Bonsai-27B is a ternary (BitNet-style) quant. Its custom GGUF quant
+    # kernels have correct dequantization only in llama.cpp's CPU and CUDA
+    # backends — the Vulkan backend (Intel/AMD iGPUs) loads it without error
+    # but silently produces garbage tokens. So: NVIDIA GPU present → use the
+    # CUDA engine with real GPU offload (fast); no NVIDIA GPU → CPU-only avx2
+    # engine (Vulkan would silently corrupt output). See README.md § pi agent
+    # § GPU offload: CUDA works, Vulkan doesn't.
+    if [[ "$(uname -s)" == "Linux" ]] && command -v lms >/dev/null 2>&1; then
+        BONSAI_VRAM_MIB="$(nvidia_vram_mib || true)"
+        if [ -n "${BONSAI_VRAM_MIB:-}" ]; then
+            BONSAI_ENGINE="llama.cpp-linux-x86_64-nvidia-cuda-avx2"
+            BONSAI_ENGINE_DESC="CUDA (GPU offload, ${BONSAI_VRAM_MIB} MiB VRAM detected)"
+        else
+            BONSAI_ENGINE="llama.cpp-linux-x86_64-avx2"
+            BONSAI_ENGINE_DESC="CPU avx2 (no NVIDIA GPU detected; Vulkan iGPU corrupts Bonsai's ternary quant)"
+        fi
+        if $DRY_RUN; then
+            echo "  [DRY-RUN] Would run: lms runtime select $BONSAI_ENGINE --latest"
+        else
+            echo "Selecting $BONSAI_ENGINE_DESC llama.cpp engine for Bonsai-27B..."
+            if lms runtime select "$BONSAI_ENGINE" --latest; then
+                echo "  ✓ $BONSAI_ENGINE_DESC engine selected for GGUF"
+            else
+                echo "  ✗ Failed to select $BONSAI_ENGINE engine" >&2
+                echo "    Run manually: lms runtime ls   # then: lms runtime select <alias>" >&2
+                exit 1
+            fi
+        fi
     fi
-    LOCAL_SIZE="$(file_size "$MODEL_FILE")"
-    if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" = "$EXPECTED_SIZE" ]; then
-        echo "  ✓ Model already present and complete ($LOCAL_SIZE bytes)"
-    elif [ -z "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "0" ]; then
-        echo "  ✓ Model present ($LOCAL_SIZE bytes); skipped size check (server unreachable)"
-    else
-        echo "Downloading $MODEL_ID $QUANT from $HF_URL…"
-        PARTIAL_FILE="$MODEL_FILE.partial"
-        curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$PARTIAL_FILE" || \
-            { echo "  ✗ Download failed" >&2; exit 1; }
-        mv "$PARTIAL_FILE" "$MODEL_FILE" || { echo "  ✗ Failed to move downloaded file" >&2; exit 1; }
+elif $DRY_RUN; then
+    echo "  [DRY-RUN] Would download: $MODEL_ID ($QUANT) via 'lms get $MODEL_REPO@$QUANT',"
+    echo "  [DRY-RUN] falling back to a direct HF download if the LM Studio Hub is unreachable"
+else
+    # Resumable, size-verified direct download against the computed HF GGUF
+    # URL. Used when `lms` is unavailable, and as a fallback when `lms get`
+    # can't resolve the artifact (e.g. LM Studio Hub API unreachable/down —
+    # observed returning "artifact does not exist" for valid, HF-reachable
+    # repos). HF itself doesn't need the Hub API, so this still succeeds.
+    curl_download_model() {
+        PARTIAL_FILE="$MODEL_FILE"
+        mkdir -p "$MODEL_DIR" || { echo "  ✗ Failed to create directory: $MODEL_DIR" >&2; exit 1; }
+        if HEADERS="$(curl -fsIL "$HF_URL" 2>/dev/null)"; then
+            EXPECTED_SIZE="$(printf '%s\n' "$HEADERS" \
+              | awk '/^[Cc]ontent-[Ll]ength:/{cl=$2} END{gsub(/\r/,"",cl); print cl}')"
+        else
+            EXPECTED_SIZE=""
+        fi
         LOCAL_SIZE="$(file_size "$MODEL_FILE")"
-        if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "$EXPECTED_SIZE" ]; then
-            rm -f "$MODEL_FILE"; PARTIAL_FILE=""
-            echo "  ✗ Download incomplete: got $LOCAL_SIZE bytes, expected $EXPECTED_SIZE." >&2
+        if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" = "$EXPECTED_SIZE" ]; then
+            echo "  ✓ Model already present and complete ($LOCAL_SIZE bytes)"
+        elif [ -z "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "0" ]; then
+            echo "  ✓ Model present ($LOCAL_SIZE bytes); skipped size check (server unreachable)"
+        else
+            echo "Downloading $MODEL_ID $QUANT from $HF_URL…"
+            PARTIAL_FILE="$MODEL_FILE.partial"
+            curl -L -C - --retry 3 --retry-delay 2 --progress-bar "$HF_URL" -o "$PARTIAL_FILE" || \
+                { echo "  ✗ Download failed" >&2; exit 1; }
+            mv "$PARTIAL_FILE" "$MODEL_FILE" || { echo "  ✗ Failed to move downloaded file" >&2; exit 1; }
+            LOCAL_SIZE="$(file_size "$MODEL_FILE")"
+            if [ -n "$EXPECTED_SIZE" ] && [ "$LOCAL_SIZE" != "$EXPECTED_SIZE" ]; then
+                rm -f "$MODEL_FILE"; PARTIAL_FILE=""
+                echo "  ✗ Download incomplete: got $LOCAL_SIZE bytes, expected $EXPECTED_SIZE." >&2
+                exit 1
+            fi
+            echo "  ✓ Download complete ($LOCAL_SIZE bytes)"
+        fi
+        PARTIAL_FILE=""
+    }
+
+    if command -v lms >/dev/null 2>&1; then
+        echo "Downloading $MODEL_ID ($QUANT) via lms get…"
+        if lms get "$MODEL_REPO@$QUANT" -y || lms get "$MODEL_REPO" -y; then
+            echo "  ✓ Model present via lms"
+        else
+            echo "  ⚠ 'lms get $MODEL_REPO' failed (LM Studio Hub unreachable?) — falling back to direct HF download" >&2
+            curl_download_model
+        fi
+    else
+        curl_download_model
+    fi
+fi
+
+# ── Select a GPU-capable engine when one fits ─────────────────────────────────
+# Bonsai-27B's engine is pinned above (CUDA/CPU only — Vulkan corrupts its
+# ternary quant). Every other supported model here uses a standard GGUF quant
+# with correct Vulkan dequant kernels, so on Linux hosts with no NVIDIA GPU we
+# still want GPU offload via the Intel/AMD iGPU rather than falling back to
+# CPU: measured on Serenity's Intel Arc iGPU (Vulkan, qwen2.5-coder-7b-instruct,
+# 2026-07-19), full offload loaded in ~5s and answered a trivial prompt in
+# ~3s total — night-and-day vs. Bonsai's CPU-only ~2.4 tok/s. `lms load` in
+# setup-host.sh estimates whether the model fits before offloading; this just
+# makes sure the right engine is selected first.
+if [[ "$QUANT" != "PRELOADED" ]] && [[ "$(uname -s)" == "Linux" ]] && command -v lms >/dev/null 2>&1; then
+    GPU_VRAM_MIB="$(nvidia_vram_mib || true)"
+    if [ -n "${GPU_VRAM_MIB:-}" ]; then
+        GPU_ENGINE="llama.cpp-linux-x86_64-nvidia-cuda-avx2"
+        GPU_ENGINE_DESC="CUDA (GPU offload, ${GPU_VRAM_MIB} MiB VRAM detected)"
+    else
+        GPU_ENGINE="llama.cpp-linux-x86_64-vulkan-avx2"
+        GPU_ENGINE_DESC="Vulkan (iGPU offload; no NVIDIA GPU detected)"
+    fi
+    if $DRY_RUN; then
+        echo "  [DRY-RUN] Would run: lms runtime select $GPU_ENGINE --latest"
+    else
+        echo "Selecting $GPU_ENGINE_DESC llama.cpp engine for $MODEL_ID..."
+        if lms runtime select "$GPU_ENGINE" --latest; then
+            echo "  ✓ $GPU_ENGINE_DESC engine selected for GGUF"
+        else
+            echo "  ✗ Failed to select $GPU_ENGINE engine" >&2
+            echo "    Run manually: lms runtime ls   # then: lms runtime select <alias>" >&2
             exit 1
         fi
-        echo "  ✓ Download complete ($LOCAL_SIZE bytes)"
     fi
-    PARTIAL_FILE=""
 fi
 
 # ── 4. Remove other quants of this model ──────────────────────────────────────

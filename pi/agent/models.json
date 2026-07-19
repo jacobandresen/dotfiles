@@ -6,15 +6,33 @@
       "baseUrl": "http://127.0.0.1:1234/v1",
       "models": [
         {
-          "_launch": true,
           "id": "bonsai-27b",
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "name": "Bonsai 27B (ternary, Qwen3.6-27B 1-bit quant, via LM Studio)"
         },
         {
           "id": "mistralai/mistral-7b-instruct-v0.3",
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "name": "Mistral 7B Instruct v0.3 (official)"
+        },
+        {
+          "_launch": true,
+          "id": "qwen2.5-coder-7b-instruct",
+          "input": [
+            "text"
+          ],
+          "name": "Qwen2.5-Coder 7B Instruct (GPU/iGPU offload, via LM Studio)"
+        },
+        {
+          "id": "qwen2.5-coder-3b-instruct",
+          "input": [
+            "text"
+          ],
+          "name": "Qwen2.5-Coder 3B Instruct (Q3_K_L, GPU/iGPU offload, via LM Studio)"
         }
       ]
     }
