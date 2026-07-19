@@ -111,18 +111,41 @@ fi
 # (The old "--gpu 0.5 / full offload fails" advice was a workaround for a 12288
 # fp16 KV cache spilling the card; it's 5-10x slower and no longer used. See the
 # mu repo's docs/MODELS.md for the measured VRAM table.)
-if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
+
+# ── Serenity-specific profile (Intel Core Ultra 5 135U, 32 GB RAM, no dGPU) ──
+# This machine has no NVIDIA GPU so nvidia-smi returns nothing; detect it by
+# hostname instead. Bonsai-27B (3.6 GB, ultra-low quant) fits easily in system
+# RAM and is the preferred model here.
+#   • CPU threads: 12 of 14 logical cores (leaves 2 for system/UI)
+#   • GPU offload:  full (--gpu max via Vulkan/Intel Arc iGPU)
+#   • Context:     32 768 tokens (generous but won't bloat the KV cache)
+# These values are intentionally NOT emitted for other hosts — the Bonsai GGUF
+# is symlinked only on Serenity (~/.lmstudio/models/prism-ml/Bonsai-27B-gguf/).
+CURRENT_HOSTNAME="$(hostname 2>/dev/null || true)"
+if [[ "$CURRENT_HOSTNAME" == "Serenity" ]]; then
+    PROFILE="bonsai-27b"
+    QUANT="PRELOADED"
+    PI_DEFAULT_MODEL="prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf"
+    LMSTUDIO_LOAD_ARGS="--gpu max -c 32768"
+    LMSTUDIO_LOAD_THREADS=12   # set manually in LM Studio UI: Advanced → CPU Threads
+elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 16000 ] 2>/dev/null; then
     # Only use Codestral on very capable GPUs (16+ GB)
     PROFILE="codestral-q4"
     QUANT="Q4_K_M"
     PI_DEFAULT_MODEL="codestral-22b-v0.1"   # high-end → Codestral with Q4_K_M
+    LMSTUDIO_LOAD_ARGS=""
+    LMSTUDIO_LOAD_THREADS=""
 elif [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 11000 ] 2>/dev/null; then
     # Codestral with Q3_K_L for 11-16 GB
     PROFILE="codestral-q3"
     QUANT="Q3_K_L"
     PI_DEFAULT_MODEL="codestral-22b-v0.1"   # mid-high → Codestral with Q3_K_L
+    LMSTUDIO_LOAD_ARGS=""
+    LMSTUDIO_LOAD_THREADS=""
 else
     # Default to Mistral-7B for all other cases (including 6 GB cards)
+    LMSTUDIO_LOAD_ARGS=""
+    LMSTUDIO_LOAD_THREADS=""
     if [ -n "${VRAM_MIB:-}" ] && [ "$VRAM_MIB" -ge 6000 ] 2>/dev/null; then
         PROFILE="mistral-7b"
         QUANT="Q4_K_M"
@@ -139,10 +162,17 @@ else
 fi
 
 echo "Host hardware profile (Mistral AI optimized)"
+echo "  Hostname:   $CURRENT_HOSTNAME"
 echo "  GPU:        $GPU_DESC"
 echo "  Profile:    $PROFILE"
-echo "  LM Studio:  $PI_DEFAULT_MODEL $QUANT"
+echo "  LM Studio:  $PI_DEFAULT_MODEL ${QUANT:-}"
 echo "  pi model:   $PI_DEFAULT_MODEL"
+if [ -n "${LMSTUDIO_LOAD_THREADS:-}" ]; then
+    echo "  CPU threads: $LMSTUDIO_LOAD_THREADS (set in LM Studio UI: Advanced → CPU Threads)"
+fi
+if [ -n "${LMSTUDIO_LOAD_ARGS:-}" ]; then
+    echo "  Load args:  lms load $LMSTUDIO_LOAD_ARGS $PI_DEFAULT_MODEL"
+fi
 echo ""
 
 # --- Run helper: execute command or show dry-run message ---------------------
@@ -156,11 +186,28 @@ run_cmd() {
 
 # ── 1. LM Studio: download/keep the right quant ───────────────────────────────
 # Hand the chosen quant down so setup-lmstudio.sh skips its own GPU probe.
+# On Serenity (bonsai-27b profile), also pass --model bonsai-27b so the script
+# verifies the symlink and skips download/patch steps.
 echo "── LM Studio ───────────────────────────────────────────────"
 if $DRY_RUN; then
-    echo "  [DRY-RUN] Would run: QUANT=$QUANT bash $SCRIPT_DIR/setup-lmstudio.sh"
+    if [[ "$PROFILE" == "bonsai-27b" ]]; then
+        echo "  [DRY-RUN] Would run: bash $SCRIPT_DIR/setup-lmstudio.sh --model bonsai-27b"
+        echo "  [DRY-RUN] Optimal load (run after LM Studio starts):"
+        echo "    lms load $LMSTUDIO_LOAD_ARGS $PI_DEFAULT_MODEL"
+        echo "  [DRY-RUN] Also set in LM Studio UI: Advanced → CPU Threads = $LMSTUDIO_LOAD_THREADS"
+    else
+        echo "  [DRY-RUN] Would run: QUANT=$QUANT bash $SCRIPT_DIR/setup-lmstudio.sh"
+    fi
 else
-    QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh"
+    if [[ "$PROFILE" == "bonsai-27b" ]]; then
+        bash "$SCRIPT_DIR/setup-lmstudio.sh" --model bonsai-27b
+        echo ""
+        echo "  ✓ Optimal load command for Serenity (run after LM Studio starts):"
+        echo "    lms load $LMSTUDIO_LOAD_ARGS $PI_DEFAULT_MODEL"
+        echo "  ⚠ Also set in LM Studio UI: Advanced → CPU Threads = $LMSTUDIO_LOAD_THREADS"
+    else
+        QUANT="$QUANT" bash "$SCRIPT_DIR/setup-lmstudio.sh"
+    fi
 fi
 echo ""
 

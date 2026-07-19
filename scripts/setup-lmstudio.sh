@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # setup-lmstudio.sh — Download and configure models for LM Studio + pi.
-# Primary focus: Mistral AI models (Codestral, Mistral, Mixtral).
-# Supports Qwen models as fallback.
-#
-# The quant/model is host-aware: pick the largest that loads fully on-GPU on this
-# machine. Default is Codestral-22B with Q4_K_M quant (~14 GB) for capable GPUs,
-# falling back to smaller variants for constrained hardware.
+# Default model: Bonsai-27B (Prism ML) — ultra-low-quant, pre-downloaded,
+# only ~3.6 GB on disk, safe to run on any GPU.
+# Also supports Mistral AI models (Codestral, Mistral, Mixtral) and Qwen
+# models via --model.
 #
 # Model selection priority:
-#   1. Mistral AI models (Codestral, Mistral, Mixtral) - preferred
-#   2. Qwen models - fallback for compatibility
+#   1. Bonsai-27B - default
+#   2. Mistral AI models (Codestral, Mistral, Mixtral) - opt-in via --model
+#   3. Qwen models - fallback for compatibility
 #
 # See: https://mistral.ai/, https://huggingface.co/mistralai
 # For quantization details: https://github.com/mistralai/mistral-src
@@ -31,8 +30,10 @@ Options:
   --quant Q              Override quant selection (e.g., Q4_K_M, Q3_K_L)
   --provider PROVIDER    Specify provider (lmstudio, mistral, openrouter)
 
-Supported Mistral AI Models:
-  - mistral-7b-instruct-v0.2    (default, ~4.4 GB Q4_K_M)
+Supported Models:
+  - bonsai-27b                  (default, ~3.6 GB, pre-downloaded/symlinked)
+  - mistral-7b-instruct-v0.3    (~4.4 GB Q4_K_M)
+  - mistral-7b-instruct-v0.2    (~4.4 GB Q4_K_M)
   - mistral-7b-instruct-v0.1    (~4.4 GB Q4_K_M)
   - mixtral-8x7b-instruct-v0.1  (~24 GB Q4_K_M)
   - codestral-22b-v0.1          (~14 GB Q4_K_M, requires 11+ GB VRAM)
@@ -41,7 +42,7 @@ Supported Mistral AI Models:
   - qwen2.5-coder-3b-instruct   (fallback, ~3.8 GB, lightweight)
 
 Examples:
-  $(basename "$0")                              # Auto-detect and download Codestral
+  $(basename "$0")                              # Auto-detect and download Bonsai-27B
   $(basename "$0") --model codestral-22b-v0.1  # Download specific model
   $(basename "$0") --model mistral-7b-instruct-v0.2
   $(basename "$0") --quant Q4_K_M                # Force specific quant
@@ -124,12 +125,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Model configuration -------------------------------------------------------
 
-# Set default model to Mistral-7B (safe for most GPUs)
-# Codestral-22B requires 11+ GB VRAM - use --model flag to opt-in
+# Set default model to Bonsai-27B (pre-downloaded, ultra-low-quant, only 3.6 GB
+# on disk — safe for any GPU). Use --model to opt into Mistral/Codestral/Qwen.
 if [ -n "$EXPLICIT_MODEL" ]; then
     MODEL_ID="$EXPLICIT_MODEL"
 else
-    MODEL_ID="mistral-7b-instruct-v0.3"
+    MODEL_ID="bonsai-27b"
 fi
 
 # Set default provider
@@ -165,6 +166,11 @@ get_model_info() {
             ;;
         qwen2.5-coder-3b-instruct)
             echo "lmstudio-community/Qwen2.5-Coder-3B-Instruct-GGUF Q3_K_L"
+            ;;
+        bonsai-27b|bonsai|prism-ml/bonsai-27b)
+            # Bonsai-27B by Prism ML — ultra-low-quant 27B, only 3.6 GB on disk.
+            # Model is pre-downloaded and symlinked into .lmstudio/models/.
+            echo "prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf PRELOADED"
             ;;
         *)
             echo "$model_id Q4_K_M"
@@ -228,17 +234,19 @@ if [ -n "$EXPLICIT_QUANT" ]; then
     echo "Using explicit quant from --quant flag: $QUANT."
 fi
 
-# Validate quant value
-case "$QUANT" in
-    Q2_K|Q3_K_L|Q4_K_M|Q5_K_M|Q6_K|Q8_0)
-        # Valid quants
-        ;;
-    *)
-        echo "  ✗ Invalid quant: $QUANT" >&2
-        echo "  Valid options: Q2_K, Q3_K_L, Q4_K_M, Q5_K_M, Q6_K, Q8_0" >&2
-        exit 1
-        ;;
-esac
+# Validate quant value (skip for pre-downloaded models)
+if [[ "$QUANT" != "PRELOADED" ]]; then
+    case "$QUANT" in
+        Q2_K|Q3_K_L|Q4_K_M|Q5_K_M|Q6_K|Q8_0)
+            # Valid quants
+            ;;
+        *)
+            echo "  ✗ Invalid quant: $QUANT" >&2
+            echo "  Valid options: Q2_K, Q3_K_L, Q4_K_M, Q5_K_M, Q6_K, Q8_0" >&2
+            exit 1
+            ;;
+    esac
+fi
 
 # Dry-run mode
 if $DRY_RUN; then
@@ -362,7 +370,17 @@ fi
 # GNU (Linux) and BSD (macOS) stat take different flags; try both.
 file_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
 
-if $DRY_RUN; then
+# For pre-downloaded models (e.g. Bonsai-27B), skip download entirely.
+if [[ "$QUANT" == "PRELOADED" ]]; then
+    BONSAI_FILE="$HOME/.lmstudio/models/$MODEL_REPO"
+    if [ -f "$BONSAI_FILE" ]; then
+        echo "  ✓ Model already on disk: $BONSAI_FILE"
+    else
+        echo "  ✗ Expected model file not found: $BONSAI_FILE" >&2
+        echo "    Ensure the symlink exists: ~/.lmstudio/models/prism-ml/Bonsai-27B-gguf/bonsai-27b.gguf" >&2
+        exit 1
+    fi
+elif $DRY_RUN; then
     echo "  [DRY-RUN] Would download: $MODEL_ID ($QUANT) via 'lms get $MODEL_REPO@$QUANT'"
 elif command -v lms >/dev/null 2>&1; then
     echo "Downloading $MODEL_ID ($QUANT) via lms get…"
@@ -409,7 +427,7 @@ fi
 # load fails ("Failed to load model"). Drop every sibling quant except the one we 
 # just verified — and its .bak left by the template patcher — so the id stays 
 # unambiguous (and we reclaim the disk).
-if ! $DRY_RUN && [ -d "$MODEL_DIR" ]; then
+if [[ "$QUANT" != "PRELOADED" ]] && ! $DRY_RUN && [ -d "$MODEL_DIR" ]; then
     # Build glob pattern based on model filename
     MODEL_BASE=$(basename "$MODEL_FILENAME" | sed "s|-$QUANT.gguf$||")
     for stale in "$MODEL_DIR"/${MODEL_BASE}-*.gguf; do
