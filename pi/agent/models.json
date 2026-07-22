@@ -42,6 +42,48 @@
           "name": "Qwen3-8b-aqua"
         }
       ]
+    },
+    "ollama": {
+      "api": "openai-completions",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "models": [
+        {
+          "_launch": true,
+          "id": "llama3.2:8b",
+          "input": [
+            "text"
+          ],
+          "name": "Llama 3.2 8B (via Ollama)"
+        },
+        {
+          "id": "llama3.2:3b",
+          "input": [
+            "text"
+          ],
+          "name": "Llama 3.2 3B (via Ollama)"
+        },
+        {
+          "id": "mistral:7b",
+          "input": [
+            "text"
+          ],
+          "name": "Mistral 7B (via Ollama)"
+        },
+        {
+          "id": "qwen2.5:7b",
+          "input": [
+            "text"
+          ],
+          "name": "Qwen 2.5 7B (via Ollama)"
+        },
+        {
+          "id": "phi3:3.8b",
+          "input": [
+            "text"
+          ],
+          "name": "Phi-3 3.8B (via Ollama)"
+        }
+      ]
     }
   }
 }

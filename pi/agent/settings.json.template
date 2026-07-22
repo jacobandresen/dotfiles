@@ -4,8 +4,8 @@
     "keepRecentTokens": 50000,
     "reserveTokens": 16384
   },
-  "defaultModel": "qwen3-8b-aqua",
-  "defaultProvider": "lmstudio",
+  "defaultModel": "llama3.2:8b",
+  "defaultProvider": "ollama",
   "defaultThinkingLevel": "high",
   "enableSkillCommands": true,
   "httpIdleTimeoutMs": 0,
