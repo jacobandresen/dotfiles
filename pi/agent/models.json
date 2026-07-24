@@ -1,59 +1,17 @@
 {
   "providers": {
-    "lmstudio": {
-      "api": "openai-completions",
-      "apiKey": "lm-studio",
-      "baseUrl": "http://127.0.0.1:1234/v1",
-      "models": [
-        {
-          "id": "bonsai-27b",
-          "input": [
-            "text"
-          ],
-          "name": "Bonsai 27B (ternary, Qwen3.6-27B 1-bit quant, via LM Studio)"
-        },
-        {
-          "id": "mistralai/mistral-7b-instruct-v0.3",
-          "input": [
-            "text"
-          ],
-          "name": "Mistral 7B Instruct v0.3 (official)"
-        },
-        {
-          "id": "qwen2.5-coder-7b-instruct",
-          "input": [
-            "text"
-          ],
-          "name": "Qwen2.5-Coder 7B Instruct (GPU/iGPU offload, via LM Studio)"
-        },
-        {
-          "id": "qwen2.5-coder-3b-instruct",
-          "input": [
-            "text"
-          ],
-          "name": "Qwen2.5-Coder 3B Instruct (Q3_K_L, GPU/iGPU offload, via LM Studio)"
-        },
-        {
-          "_launch": true,
-          "id": "qwen3-8b-aqua",
-          "input": [
-            "text"
-          ],
-          "name": "Qwen3-8b-aqua"
-        }
-      ]
-    },
     "ollama": {
       "api": "openai-completions",
+      "apiKey": "not-needed",
       "baseUrl": "http://127.0.0.1:11434/v1",
       "models": [
         {
           "_launch": true,
-          "id": "llama3.2:8b",
+          "id": "gemma4:12b",
           "input": [
             "text"
           ],
-          "name": "Llama 3.2 8B (via Ollama)"
+          "name": "Gemma 4 12B (via Ollama)"
         },
         {
           "id": "llama3.2:3b",
@@ -68,20 +26,6 @@
             "text"
           ],
           "name": "Mistral 7B (via Ollama)"
-        },
-        {
-          "id": "qwen2.5:7b",
-          "input": [
-            "text"
-          ],
-          "name": "Qwen 2.5 7B (via Ollama)"
-        },
-        {
-          "id": "phi3:3.8b",
-          "input": [
-            "text"
-          ],
-          "name": "Phi-3 3.8B (via Ollama)"
         }
       ]
     }

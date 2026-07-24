@@ -6,19 +6,32 @@ return {
     "rcarriga/nvim-dap-ui",
     dependencies = { "mfussenegger/nvim-dap", "nvim-neotest/nvim-nio" },
     keys = {
-      { "<F5>",       function() require("dap").continue() end,             desc = "Debug: Continue" },
-      { "<F4>",       function() require("dap").terminate() end,            desc = "Debug: Stop" },
-      { "<F9>",       function() require("dap").restart() end,              desc = "Debug: Restart" },
-      { "<F10>",      function() require("dap").step_over() end,            desc = "Debug: Step Over" },
-      { "<F11>",      function() require("dap").step_into() end,            desc = "Debug: Step Into" },
-      { "<F12>",      function() require("dap").step_out() end,             desc = "Debug: Step Out" },
-      { "<leader>db", function() require("dap").toggle_breakpoint() end,    desc = "Debug: Toggle Breakpoint" },
-      { "<leader>dB", function() require("dap").set_breakpoint(vim.fn.input("Condition: ")) end, desc = "Debug: Conditional Breakpoint" },
-      { "<leader>dl", function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log: ")) end, desc = "Debug: Logpoint" },
-      { "<leader>dC", function() require("dap").clear_breakpoints() end,    desc = "Debug: Clear Breakpoints" },
-      { "<leader>du", function() require("dapui").toggle() end,             desc = "Debug: Toggle UI" },
-      { "<leader>de", function() require("dapui").eval() end,               desc = "Debug: Eval",               mode = { "n", "v" } },
-      { "<leader>dr", function() require("dap").repl.open() end,            desc = "Debug: REPL" },
+      -- Function keys (fast access)
+      { "<F5>",  function() require("dap").continue() end,               desc = "Continue" },
+      { "<F4>",  function() require("dap").terminate() end,             desc = "Stop" },
+      { "<F9>",  function() require("dap").restart() end,               desc = "Restart" },
+      { "<F10>", function() require("dap").step_over() end,             desc = "Step Over" },
+      { "<F11>", function() require("dap").step_into() end,             desc = "Step Into" },
+      { "<F12>", function() require("dap").step_out() end,              desc = "Step Out" },
+
+      -- Leader + d for discoverability
+      { "<leader>dc", function() require("dap").continue() end,         desc = "Continue" },
+      { "<leader>ds",  function() require("dap").step_over() end,        desc = "Step Over" },
+      { "<leader>di",  function() require("dap").step_into() end,        desc = "Step Into" },
+      { "<leader>do",  function() require("dap").step_out() end,         desc = "Step Out" },
+      { "<leader>dt",  function() require("dap").terminate() end,        desc = "Terminate" },
+      { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
+
+      -- Breakpoints
+      { "<leader>db",  function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },
+      { "<leader>dB",  function() require("dap").set_breakpoint(vim.fn.input("Condition: ")) end, desc = "Conditional Breakpoint" },
+      { "<leader>dl",  function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log: ")) end, desc = "Logpoint" },
+      { "<leader>dC",  function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" },
+
+      -- UI
+      { "<leader>du",  function() require("dapui").toggle() end,        desc = "Toggle UI" },
+      { "<leader>de",  function() require("dapui").eval() end,           desc = "Eval", mode = { "n", "v" } },
+      { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
     },
     config = function()
       local dap, dapui = require("dap"), require("dapui")
