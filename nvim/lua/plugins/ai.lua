@@ -1,12 +1,5 @@
--- AI assistant via gp.nvim — talks to Qwen3-8b-aqua, loaded like
--- any other GGUF through LM Studio at port 1234. Chosen as the default over
--- Bonsai-27B: Bonsai's ternary Q1_0 quant only dequantizes correctly on
--- llama.cpp's CPU/CUDA backends, not Vulkan (used for Intel/AMD iGPUs like
--- this host's Arc), so it's CPU-bound here (~2.4 tok/s, 5+ min prompt-eval
--- stalls). Qwen3-8b-aqua's standard quant offloads fine to Vulkan and loads/
--- answers in seconds — see README.md's "GPU offload: CUDA works, Vulkan
--- doesn't" section. Both models run through the same LM Studio server, just
--- different model ids.
+-- AI assistant via gp.nvim — talks to gemma4:12b via Ollama at port 11434.
+-- gemma4:12b is the unified model for all platforms, running through Ollama.
 return {
   {
     "Robitx/gp.nvim",
@@ -26,21 +19,21 @@ return {
     config = function()
       require("gp").setup({
         -- ========================================================================
-        -- Qwen3-8b-aqua via LM Studio — Default provider
+        -- gemma4:12b via Ollama — Default provider
         -- ========================================================================
-        openai_api_key = "lm-studio",           -- LM Studio uses this as a placeholder
-        openai_base_url = "http://localhost:1234/v1",
-        openai_model_id = "qwen3-8b-aqua",
+        openai_api_key = "not-needed",           -- Ollama doesn't need an API key
+        openai_base_url = "http://localhost:11434/v1",
+        openai_model_id = "gemma4:12b",
 
         -- ========================================================================
-        -- Simple defaults — just works with Qwen3-8b-aqua
+        -- Simple defaults — just works with gemma4:12b
         -- ========================================================================
         disable_stream = false,                -- See responses as they're generated
         temperature = 0.7,                     -- Balanced creativity
         max_tokens = 4096,                     -- Room for a full code response
 
         -- ========================================================================
-        -- Prompt for Qwen3-8b-aqua — tells it to be a coding assistant
+        -- Prompt for gemma4:12b — tells it to be a coding assistant
         -- ========================================================================
         system_prompt = "You are a helpful AI coding assistant. " ..
                        "Write clean, correct, well-commented code. " ..
@@ -55,11 +48,11 @@ return {
         -- Optional: Custom commands for common tasks
         -- ========================================================================
         hooks = {
-          -- Before sending to AI: ensure LM Studio is running
+          -- Before sending to AI: ensure Ollama is running
           BeforeSend = function(gp)
-            local ok = pcall(vim.fn.system, { "curl", "-s", "-f", "-o", "/dev/null", "http://localhost:1234/v1/models" })
+            local ok = pcall(vim.fn.system, { "curl", "-s", "-f", "-o", "/dev/null", "http://localhost:11434/v1/models" })
             if not ok or vim.v.shell_error ~= 0 then
-              vim.notify("LM Studio may not be running. Start it first!", vim.log.levels.WARN)
+              vim.notify("Ollama may not be running. Start it first!", vim.log.levels.WARN)
             end
           end,
         },

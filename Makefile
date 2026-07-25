@@ -168,14 +168,11 @@ else
 	@echo "  ✓ done — restart WezTerm to see the new icon"
 endif
 
-# Download/configure the right Qwen2.5-Coder-7B quant for this host's GPU and wire
-# up LM Studio for pi. Standalone: a multi-GB model download shouldn't run on every
-# install. See scripts/setup-host.sh for the per-host quant reasoning (LM Studio
-# setup is now folded into setup-host.sh).
-setup-lmstudio: ## Run setup-host.sh (formerly setup-lmstudio.sh)
+# Setup host-specific configuration for gemma4:12b model.
+setup-lmstudio: ## Legacy - run setup-host.sh instead
 	@./scripts/setup-host.sh
 
-# Tune the local-LLM stack (LM Studio quant + pi model) to this machine's GPU in
+# Tune the local-LLM stack for gemma4:12b on this machine's GPU in
 # one pass, host-managed so the committed, cross-machine dotfiles stay untouched.
 # Re-run after a hardware change. (mu tunes itself — see `make setup-host` in the
 # mu repo.)
