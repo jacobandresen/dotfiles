@@ -6,12 +6,40 @@
       "baseUrl": "http://127.0.0.1:11434/v1",
       "models": [
         {
-          "_launch": true,
+          "id": "qwen2.5:7b",
+          "input": [
+            "text"
+          ],
+          "name": "qwen2.5:7b (via Ollama)"
+        },
+        {
           "id": "gemma4:12b",
           "input": [
             "text"
           ],
           "name": "Gemma 4 12B (via Ollama)"
+        },
+        {
+          "id": "gemma4:31b",
+          "input": [
+            "text"
+          ],
+          "name": "Gemma 4 31B (via Ollama)"
+        },
+        {
+          "id": "gpt-oss:20b",
+          "input": [
+            "text"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "name": "GPT-OSS 20B (via Ollama)"
         }
       ]
     }

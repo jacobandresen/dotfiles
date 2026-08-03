@@ -6,16 +6,10 @@ source "$ZSH/oh-my-zsh.sh"
 
 # PATH (most-specific user bins first)
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$PATH:$HOME/.lmstudio/bin"
+export PATH="PATH:$HOME/.opencode/bin:$PATH"
 
 # Per-host development settings
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
-
-# Per-host LLM tuning for the mu agent. The mu repo's `make setup-host` probes
-# the GPU and writes ~/.zshrc.mu (machine-local, outside this repo) with
-# MU_AGENT_MODEL / MU_NUM_CTX. Sourced if present; absent on a fresh host, where
-# mu's own defaults apply.
-[ -r "$HOME/.zshrc.mu" ] && source "$HOME/.zshrc.mu"
 
 # Aliases
 alias vim="nvim"
@@ -28,3 +22,4 @@ export VISUAL=nvim
 # Midnight Commander's F3 (View) uses $VIEWER when its internal viewer is off.
 # Kept separate from $PAGER (less) so man/git paging is unaffected.
 export VIEWER='nvim -R'
+

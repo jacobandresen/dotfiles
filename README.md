@@ -17,21 +17,14 @@ Open Neovim — lazy.nvim installs packages on first launch.
 
 Built on LazyVim. LSP, debugging, fuzzy finding, file management, database UI, AI assist via gp.nvim, text transforms, syntax highlighting, and folding.
 
-## WezTerm
-
-Apple Classic color scheme, Hack Nerd Font Mono. `make install-fonts` installs the font. `make install-wezterm-icon` sets a custom icon (Linux only).
-
 ## zsh
 
-oh-my-zsh with lambda theme and git plugin. Sets `PATH`, sources per-host configs, aliases `vim` to `nvim`, and sets `$EDITOR` to Neovim.
+oh-my-zsh with lambda theme and git plugin. Sets `PATH`, aliases `vim` to `nvim`, and sets `$EDITOR` to Neovim.
 
-## Midnight Commander
-
-`make install-mc` symlinks config. Internal editor disabled, `F4` opens Neovim.
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent using **gemma4** via Ollama. `make setup-host` auto-configures the model. Start Ollama, then run `pi`.
+[pi](https://pi.dev) is a local-first AI coding agent using **gemma4** via Ollama.  Start Ollama, then run `pi`.
 
 ## Contact
 
