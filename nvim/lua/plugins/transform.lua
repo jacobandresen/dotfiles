@@ -17,7 +17,7 @@ local transformations = {
 local function get_text(mode)
   if mode == "v" or mode == "V" or mode == "\22" then
     local start_pos = vim.fn.getpos("'<")
-    local end_pos = vim.fn.getpos(">")
+    local end_pos = vim.fn.getpos("'>")
     local start_row, start_col = start_pos[2] - 1, start_pos[3] - 1
     local end_row, end_col = end_pos[2] - 1, end_pos[3]
     local end_line = vim.api.nvim_buf_get_lines(0, end_row, end_row + 1, false)[1] or ""

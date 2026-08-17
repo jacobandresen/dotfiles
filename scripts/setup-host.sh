@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# setup-host.sh — Setup Ollama with gemma4:12b for all platforms
+# setup-host.sh — Point pi at whatever model Ollama currently has loaded
 #
-# Unified configuration: gemma4:12b is the single model used across all hosts.
-# This script ensures:
-#   - Ollama is installed and running
-#   - gemma4:12b model is pulled
-#   - pi agent is configured to use gemma4:12b via Ollama
+# No single model is pinned across hosts — GPUs differ per machine, and the
+# loaded model can change any time via `ollama run <model>`. This script:
+#   - Confirms Ollama is installed and running
+#   - Detects whichever model Ollama currently has resident in memory
+#     (falling back to the most recently pulled model if nothing is loaded)
+#   - Points pi agent's settings.json / models.json at that model
 #
-# Idempotent: safe to re-run after any change.
+# Idempotent: safe to re-run after switching models or any hardware change.
 set -euo pipefail
 
 # --- Options --------------------------------------------------------------------
@@ -19,7 +20,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $(basename "$0") [OPTIONS]"
             echo ""
-            echo "Setup Ollama with gemma4:12b model."
+            echo "Point pi agent at whatever model Ollama currently has loaded."
             echo ""
             echo "Options:"
             echo "  -h, --help     Show this help message and exit"
@@ -57,7 +58,7 @@ run_cmd() {
 }
 
 echo "============================================================================="
-echo "Host setup: gemma4:12b via Ollama (unified across all platforms)"
+echo "Host setup: point pi at whatever model Ollama has loaded"
 echo "============================================================================="
 echo ""
 
@@ -89,26 +90,44 @@ else
     echo "  ✓ Ollama server is running"
 fi
 
-# --- 2. Pull gemma4:12b model ------------------------------------------------------
+# --- 2. Detect the loaded model -----------------------------------------------
 echo ""
-echo "--- gemma4:12b model ---"
+echo "--- Detecting model ---"
 
-MODEL_NAME="gemma4:12b"
+TMP_JSON="$(mktemp)"
+trap 'rm -f "$TMP_JSON"' EXIT
 
-# Check if model is already pulled
-if ollama list 2>/dev/null | grep -q "$MODEL_NAME"; then
-    echo "  ✓ $MODEL_NAME is already pulled"
+MODEL_NAME=""
+if curl -s --max-time 2 http://localhost:11434/api/ps -o "$TMP_JSON" 2>/dev/null && [ -s "$TMP_JSON" ]; then
+    MODEL_NAME=$(python3 -c "
+import json
+with open('$TMP_JSON') as f:
+    models = json.load(f).get('models', [])
+print(models[0]['name'] if models else '')
+" 2>/dev/null || echo "")
+fi
+
+if [ -n "$MODEL_NAME" ]; then
+    echo "  ✓ $MODEL_NAME is currently loaded in Ollama"
 else
-    echo "  Pulling $MODEL_NAME..."
-    if $DRY_RUN; then
-        echo "  [DRY-RUN] Would run: ollama pull $MODEL_NAME"
-    else
-        if ! ollama pull "$MODEL_NAME"; then
-            echo "  ✗ Failed to pull $MODEL_NAME" >&2
-            exit 1
-        fi
-        echo "  ✓ $MODEL_NAME pulled successfully"
+    echo "  ⚠ nothing currently loaded — falling back to the most recently pulled model"
+    if curl -s --max-time 2 http://localhost:11434/api/tags -o "$TMP_JSON" 2>/dev/null && [ -s "$TMP_JSON" ]; then
+        MODEL_NAME=$(python3 -c "
+import json
+with open('$TMP_JSON') as f:
+    models = json.load(f).get('models', [])
+models.sort(key=lambda m: m.get('modified_at', ''), reverse=True)
+print(models[0]['name'] if models else '')
+" 2>/dev/null || echo "")
     fi
+    if [ -n "$MODEL_NAME" ]; then
+        echo "  ✓ using $MODEL_NAME (most recently pulled)"
+    fi
+fi
+
+if [ -z "$MODEL_NAME" ]; then
+    echo "  ✗ No models found. Pull one first: ollama pull <model>" >&2
+    exit 1
 fi
 
 # --- 3. Configure pi agent ---------------------------------------------------------
@@ -132,7 +151,7 @@ if [ ! -f "$PI_SETTINGS" ]; then
     fi
 fi
 
-# Set defaultModel to gemma4:12b and defaultProvider to ollama
+# Set defaultModel to the detected model and defaultProvider to ollama
 if command -v python3 >/dev/null 2>&1; then
     CURRENT_MODEL=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultModel', ''))" 2>/dev/null || echo "")
     CURRENT_PROVIDER=$(python3 -c "import json; print(json.load(open('$PI_SETTINGS')).get('defaultProvider', ''))" 2>/dev/null || echo "")
@@ -141,28 +160,28 @@ else
     CURRENT_PROVIDER=""
 fi
 
-if [ "$CURRENT_MODEL" = "gemma4:12b" ] && [ "$CURRENT_PROVIDER" = "ollama" ]; then
-    echo "  ✓ pi agent already configured: gemma4:12b via Ollama"
+if [ "$CURRENT_MODEL" = "$MODEL_NAME" ] && [ "$CURRENT_PROVIDER" = "ollama" ]; then
+    echo "  ✓ pi agent already configured: $MODEL_NAME via Ollama"
 else
     if $DRY_RUN; then
-        echo "  [DRY-RUN] Would set defaultModel=gemma4:12b, defaultProvider=ollama"
+        echo "  [DRY-RUN] Would set defaultModel=$MODEL_NAME, defaultProvider=ollama"
     else
-        python3 - "$PI_SETTINGS" <<'PYEOF'
+        python3 - "$PI_SETTINGS" "$MODEL_NAME" <<'PYEOF'
 import json, sys
-path = sys.argv[1]
+path, model_name = sys.argv[1], sys.argv[2]
 try:
     with open(path) as f:
         s = json.load(f)
 except Exception as e:
     print(f"  x Failed to read {path}: {e}", file=sys.stderr)
     sys.exit(1)
-s["defaultModel"] = "gemma4:12b"
+s["defaultModel"] = model_name
 s["defaultProvider"] = "ollama"
 try:
     with open(path, "w") as f:
         json.dump(s, f, indent=2)
         f.write("\n")
-    print("  ✓ pi agent configured: gemma4:12b via Ollama")
+    print(f"  ✓ pi agent configured: {model_name} via Ollama")
 except IOError as e:
     print(f"  x Failed to write {path}: {e}", file=sys.stderr)
     sys.exit(1)
@@ -170,7 +189,7 @@ PYEOF
     fi
 fi
 
-# --- 4. Ensure models.json has gemma4:12b for ollama provider -------------------
+# --- 4. Point models.json at the detected model for the ollama provider ---------
 echo ""
 echo "--- pi agent models.json ---"
 
@@ -178,29 +197,29 @@ PI_MODELS="$HOME/.pi/agent/models.json"
 
 if [ -f "$PI_MODELS" ]; then
     if command -v python3 >/dev/null 2>&1; then
-        HAS_MODEL=$(python3 -c "
+        HAS_MODEL=$(python3 - "$PI_MODELS" "$MODEL_NAME" <<'PYEOF' 2>/dev/null || echo "no"
 import json, sys
+path, model_name = sys.argv[1], sys.argv[2]
 try:
-    with open('$PI_MODELS') as f:
+    with open(path) as f:
         cfg = json.load(f)
-    providers = cfg.get('providers', {})
-    ollama = providers.get('ollama', {})
-    models = ollama.get('models', [])
-    for m in models:
-        if m.get('id') == 'gemma4:12b':
-            sys.exit(0)
+except Exception:
     sys.exit(1)
-except:
-    sys.exit(1)
-" 2>/dev/null || echo "no")
+providers = cfg.get('providers', {})
+ollama = providers.get('ollama', {})
+models = ollama.get('models', [])
+found = any(m.get('id') == model_name for m in models)
+sys.exit(0 if found else 1)
+PYEOF
+)
 
         if [ "$HAS_MODEL" = "no" ]; then
             if $DRY_RUN; then
-                echo "  [DRY-RUN] Would add gemma4:12b to models.json"
+                echo "  [DRY-RUN] Would set $MODEL_NAME in models.json"
             else
-                python3 - "$PI_MODELS" <<'PYEOF'
+                python3 - "$PI_MODELS" "$MODEL_NAME" <<'PYEOF'
 import json, sys
-path = sys.argv[1]
+path, model_name = sys.argv[1], sys.argv[2]
 try:
     with open(path) as f:
         cfg = json.load(f)
@@ -210,19 +229,14 @@ except Exception as e:
 
 providers = cfg.setdefault("providers", {})
 ollama = providers.setdefault("ollama", {})
-models = ollama.setdefault("models", [])
 
-for m in models:
-    m.pop("_launch", None)
-
-models = [m for m in models if m.get("id") == "gemma4:12b"]
-if not any(m.get("id") == "gemma4:12b" for m in models):
-    models.append({
-        "_launch": True,
-        "id": "gemma4:12b",
-        "input": ["text"],
-        "name": "Gemma 4 12B (via Ollama)"
-    })
+# The catalog holds exactly one model: whatever Ollama currently has loaded.
+ollama["models"] = [{
+    "_launch": True,
+    "id": model_name,
+    "input": ["text"],
+    "name": f"{model_name} (via Ollama)"
+}]
 
 ollama["api"] = "openai-completions"
 ollama["apiKey"] = "not-needed"
@@ -232,14 +246,14 @@ try:
     with open(path, "w") as f:
         json.dump(cfg, f, indent=2)
         f.write("\n")
-    print("  ✓ models.json updated with gemma4:12b for ollama")
+    print(f"  ✓ models.json updated with {model_name} for ollama")
 except IOError as e:
     print(f"  x Failed to write {path}: {e}", file=sys.stderr)
     sys.exit(1)
 PYEOF
             fi
         else
-            echo "  ✓ gemma4:12b already in models.json for ollama"
+            echo "  ✓ $MODEL_NAME already in models.json for ollama"
         fi
     fi
 else
@@ -248,5 +262,5 @@ fi
 
 echo ""
 echo "============================================================================="
-echo "Setup complete: gemma4:12b via Ollama configured for all platforms"
+echo "Setup complete: pi agent configured to use $MODEL_NAME via Ollama"
 echo "============================================================================="

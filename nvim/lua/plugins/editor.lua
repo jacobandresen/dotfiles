@@ -207,6 +207,7 @@ return {
         },
       },
     },
+  },
 
   -- ensure parsers for every language we debug/edit are installed
   {
@@ -265,6 +266,5 @@ return {
         },
       },
     },
-  },
   },
 }

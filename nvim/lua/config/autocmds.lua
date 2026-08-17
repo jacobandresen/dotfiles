@@ -30,14 +30,28 @@ vim.api.nvim_create_autocmd("LspAttach", {
 -- auto-refresh log/jsonl files every 2 seconds
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   pattern = { "*.log", "*.jsonl" },
-  callback = function()
+  callback = function(args)
     vim.opt_local.autoread = true
+    local buf = args.buf
     local timer = vim.uv.new_timer()
     timer:start(2000, 2000, vim.schedule_wrap(function()
-      if vim.api.nvim_buf_is_valid(vim.api.nvim_get_current_buf()) then
-        vim.cmd("checktime")
+      if not vim.api.nvim_buf_is_valid(buf) then
+        timer:stop()
+        timer:close()
+        return
       end
+      vim.api.nvim_buf_call(buf, function()
+        vim.cmd("checktime")
+      end)
     end))
+    vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+      buffer = buf,
+      once = true,
+      callback = function()
+        timer:stop()
+        timer:close()
+      end,
+    })
   end,
 })
 

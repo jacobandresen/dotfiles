@@ -7,11 +7,11 @@
       "models": [
         {
           "_launch": true,
-          "id": "gemma4:12b",
+          "id": "qwen3.5:9b",
           "input": [
             "text"
           ],
-          "name": "Gemma 4 12B (via Ollama)"
+          "name": "qwen3.5:9b (via Ollama)"
         }
       ]
     }

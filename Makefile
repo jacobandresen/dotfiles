@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts install-wezterm-icon setup-lmstudio setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
@@ -23,10 +23,10 @@ endif
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
 	brew install git neovim pi
-	brew install --cask wezterm lm-studio font-terminess-ttf-nerd-font
+	brew install --cask ollama font-terminess-ttf-nerd-font
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim wezterm
+	sudo pacman -Syu --needed git neovim
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 deps-ubuntu:
@@ -39,8 +39,8 @@ deps-ubuntu:
 	sudo apt-get install -y neovim
 	@echo "Installing pi..."
 	@curl -fsSL https://pi.dev/install.sh | bash
-	@echo "Install LM Studio from https://lmstudio.ai (download the Linux AppImage or .deb)"
-	@echo "Install WezTerm from https://wezfurlong.org/wezterm/install/linux.html"
+	@echo "Installing Ollama..."
+	@curl -fsSL https://ollama.com/install.sh | sh
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 deps-debian:
@@ -53,8 +53,8 @@ deps-debian:
 	sudo apt-get install -y neovim
 	@echo "Installing pi..."
 	@curl -fsSL https://pi.dev/install.sh | bash
-	@echo "Install LM Studio from https://lmstudio.ai (download the Linux AppImage or .deb)"
-	@echo "Install WezTerm from https://wezfurlong.org/wezterm/install/linux.html"
+	@echo "Installing Ollama..."
+	@curl -fsSL https://ollama.com/install.sh | sh
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 install-nvim:
@@ -139,43 +139,10 @@ else
 	fi
 endif
 
-# Replace WezTerm's app icon with the classic Happy Mac (assets/happy-mac.svg).
-# Renders a crisp master from the SVG, then installs PNGs into the per-user
-# hicolor theme, which XDG searches before /usr/share — so the packaged icon is
-# overridden without touching the WezTerm install. Linux only (macOS ships the
-# icon inside the .app bundle). Needs rsvg-convert + ImageMagick.
-ICON_NAME := org.wezfurlong.wezterm
-ICON_DIR  := $(HOME)/.local/share/icons/hicolor
-ICON_SIZES := 16 24 32 48 64 96 128 256
-
-install-wezterm-icon:
-ifeq ($(OS),Darwin)
-	@echo "  ⚠ macOS keeps the icon in WezTerm.app — skipping (Linux only)"
-else
-	@command -v rsvg-convert >/dev/null 2>&1 || { echo "  ✗ rsvg-convert not found (install librsvg)"; exit 1; }
-	@command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1 || { echo "  ✗ ImageMagick not found"; exit 1; }
-	@echo "Installing Happy Mac icon for WezTerm..."
-	@tmp=$$(mktemp -d) && \
-	rsvg-convert -w 512 -h 512 "$(CURDIR)/assets/happy-mac.svg" -o "$$tmp/master.png" && \
-	for s in $(ICON_SIZES); do \
-		dir="$(ICON_DIR)/$${s}x$${s}/apps" && mkdir -p "$$dir" && \
-		( command -v magick >/dev/null 2>&1 && magick "$$tmp/master.png" -filter Lanczos -resize $${s}x$${s} "$$dir/$(ICON_NAME).png" \
-		  || convert "$$tmp/master.png" -filter Lanczos -resize $${s}x$${s} "$$dir/$(ICON_NAME).png" ) && \
-		echo "  ✓ $${s}x$${s} -> $$dir/$(ICON_NAME).png"; \
-	done && \
-	rm -rf "$$tmp"
-	@gtk-update-icon-cache -f -t "$(ICON_DIR)" >/dev/null 2>&1 || true
-	@echo "  ✓ done — restart WezTerm to see the new icon"
-endif
-
-# Setup host-specific configuration for gemma4:12b model.
-setup-lmstudio: ## Legacy - run setup-host.sh instead
-	@./scripts/setup-host.sh
-
-# Tune the local-LLM stack for gemma4:12b on this machine's GPU in
-# one pass, host-managed so the committed, cross-machine dotfiles stay untouched.
-# Re-run after a hardware change. (mu tunes itself — see `make setup-host` in the
-# mu repo.)
+# Point pi agent at whatever model Ollama currently has loaded on this
+# machine, host-managed so the committed, cross-machine dotfiles stay
+# untouched. Re-run after switching models or a hardware change. (mu tunes
+# itself — see `make setup-host` in the mu repo.)
 setup-host:
 	@./scripts/setup-host.sh
 

@@ -6,7 +6,10 @@ source "$ZSH/oh-my-zsh.sh"
 
 # PATH (most-specific user bins first)
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$PATH:$HOME/.lmstudio/bin"
+
+ export LIBTORCH="$HOME/.local/share/langspark/libtorch-2.7.0"
+ export LD_LIBRARY_PATH="$LIBTORCH/lib:$LD_LIBRARY_PATH"
+
 
 # Per-host development settings
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
@@ -26,5 +29,5 @@ export EDITOR=nvim
 export VISUAL=nvim
 
 # Midnight Commander's F3 (View) uses $VIEWER when its internal viewer is off.
-# Kept separate from $PAGER (less) so man/git paging is unaffected.
 export VIEWER='nvim -R'
+# Kept separate from $PAGER (less) so man/git paging is unaffected.
