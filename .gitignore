@@ -7,6 +7,11 @@ pi/agent/sessions/
 # so the live file is untracked. Seeded from settings.json.template by 'make install-pi'.
 pi/agent/settings.json
 
+# Runtime/host state — contains live OAuth tokens and per-machine data, not config
+pi/agent/auth.json
+pi/agent/trust.json
+pi/agent/models-store.json
+
 # Editor
 *.swp
 *.swo
