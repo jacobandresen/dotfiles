@@ -27,7 +27,7 @@ oh-my-zsh with lambda theme and git plugin. Sets `PATH`, sources per-host config
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent that talks to Ollama. `make setup-host` points it at whatever model Ollama currently has loaded (falling back to the most recently pulled model if none is loaded). Start Ollama, load a model (`ollama run <model>`), then run `pi`.
+[pi](https://pi.dev) is a local-first AI coding agent that talks to Ollama. `make install-pi` detects the machine's RAM profile, pulls and warms up the best-fitting coding model (`qwen3-coder:30b` on ≥24GB machines, `qwen2.5-coder:14b` otherwise — see `scripts/select-coding-model.sh`), then runs `setup-host.sh` to point pi at it. Re-run `make setup-host` any time to repoint pi at whatever model Ollama currently has loaded instead.
 
 ## Ollama
 

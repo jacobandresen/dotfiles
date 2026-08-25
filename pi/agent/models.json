@@ -7,11 +7,11 @@
       "models": [
         {
           "_launch": true,
-          "id": "qwen3.5:9b",
+          "id": "qwen3-coder:30b",
           "input": [
             "text"
           ],
-          "name": "qwen3.5:9b (via Ollama)"
+          "name": "qwen3-coder:30b (via Ollama)"
         }
       ]
     }

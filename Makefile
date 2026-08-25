@@ -2,7 +2,7 @@
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-zsh install-mc install-pi install-ollama
+install: deps install-nvim install-zsh install-mc install-ollama install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -111,6 +111,23 @@ install-pi:
 	else \
 		cp $(CURDIR)/pi/agent/settings.json.template $(CURDIR)/pi/agent/settings.json; \
 		echo "  ✓ seeded pi/agent/settings.json from template (run 'make setup-host' to set the model)"; \
+	fi
+	@if command -v ollama >/dev/null 2>&1; then \
+		model=$$($(CURDIR)/scripts/select-coding-model.sh); \
+		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
+		echo "  → RAM profile: $$profile → coding model: $$model"; \
+		if ollama list | awk 'NR>1{print $$1}' | grep -qx "$$model"; then \
+			echo "  ✓ $$model already pulled"; \
+		else \
+			echo "  ↓ pulling $$model (this may take a while)..."; \
+			ollama pull "$$model"; \
+		fi; \
+		echo "  ⏳ loading $$model into memory..."; \
+		curl -s http://127.0.0.1:11434/api/generate -d "{\"model\":\"$$model\",\"prompt\":\"hi\",\"stream\":false}" >/dev/null; \
+		echo "  ✓ $$model loaded"; \
+		$(CURDIR)/scripts/setup-host.sh; \
+	else \
+		echo "  ⚠ ollama not found — skipping model selection (run 'make deps' first)"; \
 	fi
 
 install-ollama:
