@@ -116,11 +116,13 @@ install-pi:
 install-ollama:
 	@echo "Installing Ollama systemd overrides..."
 ifeq ($(OS),Linux)
-	@sudo mkdir -p /etc/systemd/system/ollama.service.d
-	@sudo cp $(CURDIR)/ollama/ollama.service.d/override.conf /etc/systemd/system/ollama.service.d/override.conf
-	@sudo systemctl daemon-reload
-	@sudo systemctl restart ollama
-	@echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed and ollama restarted"
+	@profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
+	echo "  → detected RAM profile: $$profile"; \
+	sudo mkdir -p /etc/systemd/system/ollama.service.d; \
+	sudo cp $(CURDIR)/ollama/ollama.service.d/override-$$profile.conf /etc/systemd/system/ollama.service.d/override.conf; \
+	sudo systemctl daemon-reload; \
+	sudo systemctl restart ollama; \
+	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"
 else
 	@echo "  ⚠ skipping (not Linux/systemd)"
 endif
