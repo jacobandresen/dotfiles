@@ -27,7 +27,7 @@ Built on LazyVim. LSP, debugging, fuzzy finding, file management, database UI, A
 
 ## Ollama
 
-`make install-ollama` detects total system RAM (`scripts/detect-ram-profile.sh`) and installs the matching systemd drop-in from `ollama/ollama.service.d/` to `/etc/systemd/system/ollama.service.d/override.conf`, then restarts the service. Both profiles enable iGPU/Vulkan acceleration, flash attention, and q8_0 KV cache quantization, and cap Ollama's memory with a systemd `MemoryHigh`; machines with ≥24GB RAM get the `32gb` profile (16k context, 1 loaded model, 10m keep-alive, 14G memory cap), everything else gets the more conservative `16gb` profile (8k context, 1 loaded model, 10m keep-alive, 7G memory cap).
+`make install-ollama` detects total system RAM (`scripts/detect-ram-profile.sh`) and installs the matching systemd drop-in from `ollama/ollama.service.d/` to `/etc/systemd/system/ollama.service.d/override.conf`, then restarts the service. Both profiles enable iGPU/Vulkan acceleration, flash attention, and q8_0 KV cache quantization, and cap Ollama's memory with a systemd `MemoryHigh`; machines with ≥24GB RAM get the `32gb` profile (8k context, 1 loaded model, 10m keep-alive, 10G memory cap), everything else gets the more conservative `16gb` profile (8k context, 1 loaded model, 10m keep-alive, 7G memory cap).
 
 ## Docker
 
