@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-zsh install-mc install-pi
+install: deps install-nvim install-zsh install-mc install-pi install-ollama
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -112,6 +112,18 @@ install-pi:
 		cp $(CURDIR)/pi/agent/settings.json.template $(CURDIR)/pi/agent/settings.json; \
 		echo "  ✓ seeded pi/agent/settings.json from template (run 'make setup-host' to set the model)"; \
 	fi
+
+install-ollama:
+	@echo "Installing Ollama systemd overrides..."
+ifeq ($(OS),Linux)
+	@sudo mkdir -p /etc/systemd/system/ollama.service.d
+	@sudo cp $(CURDIR)/ollama/ollama.service.d/override.conf /etc/systemd/system/ollama.service.d/override.conf
+	@sudo systemctl daemon-reload
+	@sudo systemctl restart ollama
+	@echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed and ollama restarted"
+else
+	@echo "  ⚠ skipping (not Linux/systemd)"
+endif
 
 FONT_DIR := $(HOME)/.local/share/fonts
 HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz

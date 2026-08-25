@@ -29,6 +29,10 @@ oh-my-zsh with lambda theme and git plugin. Sets `PATH`, sources per-host config
 
 [pi](https://pi.dev) is a local-first AI coding agent that talks to Ollama. `make setup-host` points it at whatever model Ollama currently has loaded (falling back to the most recently pulled model if none is loaded). Start Ollama, load a model (`ollama run <model>`), then run `pi`.
 
+## Ollama
+
+`make install-ollama` installs `ollama/ollama.service.d/override.conf` to `/etc/systemd/system/ollama.service.d/` (systemd drop-in) and restarts the service. Currently enables iGPU/Vulkan acceleration and a larger context length.
+
 ## Contact
 
 jacob.andresen@gmail.com
