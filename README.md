@@ -1,6 +1,6 @@
 # dotfiles
 
-A minimal set of dotfiles used for development: [Neovim](https://neovim.io/), zsh, Midnight Commander, and the [pi](https://pi.dev) coding agent, served via [Ollama](https://ollama.ai).
+A minimal set of dotfiles used for development: [Neovim](https://neovim.io/), Midnight Commander, and the [pi](https://pi.dev) coding agent, served via [Ollama](https://ollama.ai).
 
 ## Setup
 
@@ -16,10 +16,6 @@ Open Neovim — lazy.nvim installs packages on first launch.
 ## Neovim
 
 Built on LazyVim. LSP, debugging, fuzzy finding, file management, database UI, AI assist via CodeCompanion.nvim (switchable between Ollama and GitHub Copilot with `ga` in the chat buffer), text transforms, syntax highlighting, and folding.
-
-## zsh
-
-oh-my-zsh with lambda theme and git plugin. Sets `PATH`, sources per-host configs, aliases `vim` to `nvim`, and sets `$EDITOR` to Neovim.
 
 ## Midnight Commander
 
