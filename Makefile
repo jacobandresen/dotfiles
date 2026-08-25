@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-zsh install-mc install-ollama install-pi
+install: deps install-nvim install-zsh install-mc install-ollama install-docker install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -140,6 +140,24 @@ ifeq ($(OS),Linux)
 	sudo systemctl daemon-reload; \
 	sudo systemctl restart ollama; \
 	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"
+else
+	@echo "  ⚠ skipping (not Linux/systemd)"
+endif
+
+install-docker:
+	@echo "Installing Docker systemd overrides..."
+ifeq ($(OS),Linux)
+	@if ! command -v docker >/dev/null 2>&1 && ! systemctl list-unit-files docker.service >/dev/null 2>&1; then \
+		echo "  ⚠ Docker not found — skipping (install it first)"; \
+	else \
+		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
+		echo "  → detected RAM profile: $$profile"; \
+		sudo mkdir -p /etc/systemd/system/docker.service.d; \
+		sudo cp $(CURDIR)/docker/docker.service.d/override-$$profile.conf /etc/systemd/system/docker.service.d/override.conf; \
+		sudo systemctl daemon-reload; \
+		sudo systemctl restart docker; \
+		echo "  ✓ /etc/systemd/system/docker.service.d/override.conf installed ($$profile profile) and docker restarted"; \
+	fi
 else
 	@echo "  ⚠ skipping (not Linux/systemd)"
 endif
