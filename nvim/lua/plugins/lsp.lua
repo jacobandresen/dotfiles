@@ -15,7 +15,10 @@ return {
     "WhoIsSethDaniel/mason-tool-installer.nvim",
     dependencies = { "mason-org/mason.nvim" },
     opts = {
-      ensure_installed = { "roslyn", "netcoredbg", "codelldb", "clangd", "js-debug-adapter", "rust-analyzer" },
+      ensure_installed = {
+        "roslyn", "netcoredbg", "codelldb", "clangd", "js-debug-adapter", "rust-analyzer",
+        "helm-ls", "prettier", "black", "isort", "clang-format", "goimports", "csharpier",
+      },
       auto_update = false,
       run_on_start = true,
       integrations = {

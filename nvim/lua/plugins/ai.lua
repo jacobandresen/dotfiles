@@ -69,6 +69,7 @@ return {
                 },
               })
             end,
+            copilot = "copilot",
           },
         },
         interactions = {

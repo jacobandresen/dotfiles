@@ -141,7 +141,7 @@ return {
           rust = { "rustfmt" },
           cpp = { "clang-format" },
           c = { "clang-format" },
-          cs = { "dotnet-format" },
+          cs = { "csharpier" },
           yaml = { "prettier" },
           markdown = { "prettier" },
           html = { "prettier" },
