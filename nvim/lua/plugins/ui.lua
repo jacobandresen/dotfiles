@@ -1,4 +1,17 @@
 return {
+  -- colorscheme: solarized-osaka (Tokyonight-engine based Solarized)
+  {
+    "craftzdog/solarized-osaka.nvim",
+    lazy = false,
+    priority = 1000,
+    opts = {},
+  },
+
+  {
+    "LazyVim/LazyVim",
+    opts = { colorscheme = "solarized-osaka" },
+  },
+
   -- dashboard: TurboVim block logo (replaces LazyVim default header)
   {
     "folke/snacks.nvim",

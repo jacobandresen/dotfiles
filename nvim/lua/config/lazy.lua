@@ -20,7 +20,7 @@ require("lazy").setup({
     { import = "plugins" },
   },
   defaults = { lazy = false, version = false },
-  install = { colorscheme = { "bamboo", "tokyonight", "habamax" } },
+  install = { colorscheme = { "solarized-osaka", "bamboo", "tokyonight", "habamax" } },
   checker = { enabled = true, notify = false },
   performance = {
     rtp = {
