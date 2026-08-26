@@ -7,6 +7,13 @@
       "models": [
         {
           "_launch": true,
+          "id": "qwen3:14b",
+          "input": [
+            "text"
+          ],
+          "name": "qwen3:14b (via Ollama)"
+        },
+        {
           "id": "qwen3-coder:30b",
           "input": [
             "text"
