@@ -1,8 +1,10 @@
 #!/bin/sh
-# Detects total system RAM and prints an Ollama override profile name
-# ("16gb" or "32gb") for scripts/Makefiles to consume. Machines with
-# less than ~24GB get the conservative 16gb profile; everything else
-# gets the 32gb profile.
+# Detects total system RAM and prints an override profile name
+# ("8gb", "16gb" or "32gb") for scripts/Makefiles to consume.
+#
+#   < 12GB  -> 8gb   (very tight: base OS already eats 3-4GB)
+#   < 24GB  -> 16gb
+#   >= 24GB -> 32gb
 
 set -eu
 
@@ -16,6 +18,8 @@ total_gb=$(( total_kb / 1024 / 1024 ))
 
 if [ "$total_gb" -ge 24 ]; then
 	echo "32gb"
-else
+elif [ "$total_gb" -ge 12 ]; then
 	echo "16gb"
+else
+	echo "8gb"
 fi

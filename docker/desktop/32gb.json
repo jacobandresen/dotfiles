@@ -1,0 +1,11 @@
+{
+  "_comment": "Docker Desktop VM sizing for a 32GB machine. See 8gb.json.",
+  "memoryMiB": 8192,
+  "swapMiB": 2048,
+  "cpus": 6,
+  "diskSizeMiB": 131072,
+  "autoStart": false,
+  "openUIOnStartupDisabled": true,
+  "useVirtualizationFrameworkVirtioFS": true,
+  "useResourceSaver": true
+}

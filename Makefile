@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host deps deps-arch deps-debian deps-ubuntu deps-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host ram-profile deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
@@ -33,6 +33,18 @@ deps-macos:
 		echo "Installing pi..."; \
 		curl -fsSL https://pi.dev/install.sh | bash; \
 	fi
+	@echo "Docker Desktop is not installed by default (it reserves a multi-GB VM"
+	@echo "up front, which hurts on a small machine). Run 'make deps-docker-macos'"
+	@echo "if you want it — 'make install-docker' then sizes it for this host."
+
+# Opt-in: Docker Desktop is deliberately kept out of 'make deps' on macOS.
+deps-docker-macos:
+	@if [ -d /Applications/Docker.app ]; then \
+		echo "  ✓ Docker Desktop already installed"; \
+	else \
+		brew install --cask docker; \
+	fi
+	$(MAKE) install-docker
 
 deps-arch:
 	sudo pacman -Syu --needed git neovim
@@ -140,8 +152,11 @@ install-pi:
 	fi
 
 install-ollama:
+ifeq ($(OS),Darwin)
+	@echo "Applying Ollama env profile (launchd)..."
+	@./scripts/install-ollama-macos.sh
+else ifeq ($(OS),Linux)
 	@echo "Installing Ollama systemd overrides..."
-ifeq ($(OS),Linux)
 	@profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
 	echo "  → detected RAM profile: $$profile"; \
 	sudo mkdir -p /etc/systemd/system/ollama.service.d; \
@@ -150,12 +165,15 @@ ifeq ($(OS),Linux)
 	sudo systemctl restart ollama; \
 	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"
 else
-	@echo "  ⚠ skipping (not Linux/systemd)"
+	@echo "  ⚠ skipping Ollama tuning (unsupported OS: $(OS))"
 endif
 
 install-docker:
+ifeq ($(OS),Darwin)
+	@echo "Applying Docker Desktop resource profile..."
+	@./scripts/install-docker-macos.sh
+else ifeq ($(OS),Linux)
 	@echo "Installing Docker systemd overrides..."
-ifeq ($(OS),Linux)
 	@if ! command -v docker >/dev/null 2>&1 && ! systemctl list-unit-files docker.service >/dev/null 2>&1; then \
 		echo "  ⚠ Docker not found — skipping (install it first)"; \
 	else \
@@ -168,7 +186,7 @@ ifeq ($(OS),Linux)
 		echo "  ✓ /etc/systemd/system/docker.service.d/override.conf installed ($$profile profile) and docker restarted"; \
 	fi
 else
-	@echo "  ⚠ skipping (not Linux/systemd)"
+	@echo "  ⚠ skipping Docker tuning (unsupported OS: $(OS))"
 endif
 
 FONT_DIR := $(HOME)/.local/share/fonts
@@ -204,3 +222,16 @@ endif
 setup-host:
 	@./scripts/setup-host.sh
 
+# Print what this host's RAM detects as, and what that selects. Handy when a
+# profile-driven target does something unexpected.
+ram-profile:
+	@profile=$$(./scripts/detect-ram-profile.sh); \
+	echo "RAM profile:   $$profile"; \
+	echo "Coding model:  $$(./scripts/select-coding-model.sh)"; \
+	if [ "$(OS)" = "Darwin" ]; then \
+		echo "Ollama config: ollama/launchd/$$profile.env"; \
+		echo "Docker config: docker/desktop/$$profile.json"; \
+	else \
+		echo "Ollama config: ollama/ollama.service.d/override-$$profile.conf"; \
+		echo "Docker config: docker/docker.service.d/override-$$profile.conf"; \
+	fi

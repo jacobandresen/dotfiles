@@ -7,6 +7,9 @@
 #       ollama override profile.
 # 16gb: qwen2.5-coder:14b — strong coding model that fits comfortably
 #       within the more conservative 16gb ollama override profile.
+#  8gb: qwen2.5-coder:3b — ~2GB at q4, leaving room for the OS, a browser
+#       and an editor. 7b-class models fit on paper but push an 8GB
+#       machine into swap as soon as anything else is open.
 
 set -eu
 
@@ -15,5 +18,6 @@ PROFILE=$("$SCRIPT_DIR/detect-ram-profile.sh")
 
 case "$PROFILE" in
 	32gb) echo "qwen3-coder:30b" ;;
-	*) echo "qwen2.5-coder:14b" ;;
+	16gb) echo "qwen2.5-coder:14b" ;;
+	*) echo "qwen2.5-coder:3b" ;;
 esac
