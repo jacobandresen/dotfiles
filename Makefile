@@ -30,6 +30,13 @@ deps-macos:
 	@if command -v pi >/dev/null 2>&1; then \
 		echo "  ✓ pi already installed ($$(pi --version 2>/dev/null || echo unknown))"; \
 	else \
+		if [ -d "$(HOME)/.npm" ] && [ -n "$$(find "$(HOME)/.npm" ! -user "$$(id -un)" -print -quit 2>/dev/null)" ]; then \
+			echo "  ✗ ~/.npm contains root-owned files — the npm-based installer will fail."; \
+			echo "    Usually left behind by an earlier 'sudo npm'. Fix with:"; \
+			echo "      sudo chown -R $$(id -u):$$(id -g) \"$(HOME)/.npm\""; \
+			echo "    then re-run 'make deps'."; \
+			exit 1; \
+		fi; \
 		echo "Installing pi..."; \
 		curl -fsSL https://pi.dev/install.sh | bash; \
 	fi
@@ -133,7 +140,14 @@ install-pi:
 		cp $(CURDIR)/pi/agent/settings.json.template $(CURDIR)/pi/agent/settings.json; \
 		echo "  ✓ seeded pi/agent/settings.json from template (run 'make setup-host' to set the model)"; \
 	fi
-	@if command -v ollama >/dev/null 2>&1; then \
+	@if ! command -v ollama >/dev/null 2>&1; then \
+		echo "  ⚠ ollama not found — skipping model selection (run 'make deps' first)"; \
+	elif ! curl -sf --max-time 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then \
+		echo "  ⚠ Ollama is installed but not responding on 127.0.0.1:11434 — skipping model setup."; \
+		echo "    A fresh install needs its first-run setup completed once:"; \
+		echo "      open -a Ollama   # then click through the setup window"; \
+		echo "    Re-run 'make install-pi' afterwards."; \
+	else \
 		model=$$($(CURDIR)/scripts/select-coding-model.sh); \
 		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
 		echo "  → RAM profile: $$profile → coding model: $$model"; \
@@ -147,8 +161,6 @@ install-pi:
 		curl -s http://127.0.0.1:11434/api/generate -d "{\"model\":\"$$model\",\"prompt\":\"hi\",\"stream\":false}" >/dev/null; \
 		echo "  ✓ $$model loaded"; \
 		$(CURDIR)/scripts/setup-host.sh; \
-	else \
-		echo "  ⚠ ollama not found — skipping model selection (run 'make deps' first)"; \
 	fi
 
 install-ollama:
