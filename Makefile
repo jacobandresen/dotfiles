@@ -22,8 +22,17 @@ endif
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
-	brew install git neovim pi
+	brew install git neovim
 	brew install --cask ollama font-terminess-ttf-nerd-font
+	@# pi is not a Homebrew formula (that name is unrelated) — it ships as the
+	@# npm package @earendil-works/pi-coding-agent, which is what pi.dev's
+	@# installer pulls in. Same install path as the Linux targets.
+	@if command -v pi >/dev/null 2>&1; then \
+		echo "  ✓ pi already installed ($$(pi --version 2>/dev/null || echo unknown))"; \
+	else \
+		echo "Installing pi..."; \
+		curl -fsSL https://pi.dev/install.sh | bash; \
+	fi
 
 deps-arch:
 	sudo pacman -Syu --needed git neovim
