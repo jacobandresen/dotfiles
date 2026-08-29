@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host ram-profile deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
@@ -233,6 +233,13 @@ endif
 # itself — see `make setup-host` in the mu repo.)
 setup-host:
 	@./scripts/setup-host.sh
+
+# Ask pi for a hello world in C using this host's selected model, then
+# compile and run what it wrote. The only check that catches a model which
+# calls the tools and still produces code that does not build — see the
+# header of scripts/verify-agent-model.sh.
+verify-model:
+	@./scripts/verify-agent-model.sh
 
 # Print what this host's RAM detects as, and what that selects. Handy when a
 # profile-driven target does something unexpected.

@@ -1,13 +1,16 @@
 {
   "compaction": {
     "enabled": true,
-    "keepRecentTokens": 50000,
-    "reserveTokens": 16384
+    "keepRecentTokens": 8000,
+    "reserveTokens": 4096
   },
-  "defaultModel": "gemma4:12b",
+  "defaultModel": "qwen3:4b",
   "defaultProvider": "ollama",
-  "defaultThinkingLevel": "high",
-  "enabledModels": ["ollama/*", "github-copilot/*"],
+  "defaultThinkingLevel": "off",
+  "enabledModels": [
+    "ollama/*",
+    "github-copilot/*"
+  ],
   "enableSkillCommands": true,
   "httpIdleTimeoutMs": 0,
   "lastChangelogVersion": "0.80.0",

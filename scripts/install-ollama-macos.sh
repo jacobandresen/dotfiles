@@ -1,15 +1,48 @@
 #!/usr/bin/env bash
-# install-ollama-macos.sh — Apply the RAM-matched Ollama env profile on macOS.
+# install-ollama-macos.sh — Apply the RAM-matched Ollama profile on macOS.
 #
-# macOS has no systemd, so the systemd drop-ins in ollama/ollama.service.d/
-# don't apply here. The Ollama.app menubar server picks up variables set with
-# `launchctl setenv`, so this script reads ollama/launchd/<profile>.env and
-# exports each key that way, then restarts the app so it re-reads them.
+# macOS has no systemd, so the drop-ins in ollama/ollama.service.d/ don't
+# apply here. What replaces them is messier than it looks, because there are
+# two different Ollama servers on a Mac and they read their configuration
+# from two different places:
 #
-# `launchctl setenv` does not survive a reboot, so the same values are also
-# written to ~/.ollama/dotfiles.env and sourced from ~/.zshrc — that covers
-# `ollama serve` started by hand from a shell. Re-run after a reboot (or just
-# `make install-ollama`) to re-apply them to the menubar app.
+#   1. `ollama serve` started by hand from a shell — reads the environment,
+#      like the Linux service does. Covered by ~/.ollama/dotfiles.env, which
+#      this script writes and ~/.zshrc sources.
+#
+#   2. The Ollama.app menubar server — does NOT read the environment. It
+#      builds the environment for its child `ollama serve` itself, from its
+#      own settings store, and overwrites whatever launchd exported.
+#
+# Case 2 was silently defeating this script. Measured on Ollama 0.33.2 by
+# setting every key to a deliberately non-default value with `launchctl
+# setenv` and then reading the child server's actual environment back:
+#
+#   launchctl said                    the running server got
+#   OLLAMA_KEEP_ALIVE=7m              OLLAMA_KEEP_ALIVE=5m
+#   OLLAMA_KV_CACHE_TYPE=q4_0         OLLAMA_KV_CACHE_TYPE=q8_0
+#   OLLAMA_NUM_PARALLEL=2             OLLAMA_NUM_PARALLEL=1
+#   OLLAMA_MAX_LOADED_MODELS=3        OLLAMA_MAX_LOADED_MODELS=1
+#   OLLAMA_FLASH_ATTENTION=0          OLLAMA_FLASH_ATTENTION=1
+#
+# Not one of them got through. The profile *appeared* to work only because
+# every value in it happens to equal the app's own default — so the whole
+# launchctl mechanism was decorative on any Mac running the menubar app.
+#
+# The one key that matters most is also the one that can still be set:
+# context length lives in the app's SQLite settings store, so this script
+# writes it there. `settings.context_length = 0` means "use the built-in
+# default" (8192); writing 16384 there is what actually reaches the server,
+# confirmed by reading the llama-server command line afterwards (-c 16384).
+#
+# The rest (keep-alive, KV cache type, parallelism) have no equivalent knob
+# in the app's store. On the app they stay at the app's defaults, which is
+# survivable because those defaults already match every profile — but a
+# profile that wanted 10m or 30m keep-alive would not get it. Use a
+# shell-started `ollama serve` if you need those honoured.
+#
+# `launchctl setenv` does not survive a reboot either, so re-run after one
+# (or just `make install-ollama`).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +50,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PROFILE="$("$SCRIPT_DIR/detect-ram-profile.sh")"
 ENV_FILE="$REPO_DIR/ollama/launchd/$PROFILE.env"
+APP_DB="$HOME/Library/Application Support/Ollama/db.sqlite"
 
 if [ ! -f "$ENV_FILE" ]; then
 	echo "  ✗ no macOS Ollama profile at $ENV_FILE" >&2
@@ -30,7 +64,25 @@ if ! command -v ollama >/dev/null 2>&1 && [ ! -d /Applications/Ollama.app ]; the
 	exit 0
 fi
 
-# Apply to the running launchd session (what Ollama.app inherits).
+# Pull the values we care about out of the profile.
+CONTEXT_LENGTH=""
+while IFS= read -r line; do
+	case "$line" in ''|\#*) continue ;; esac
+	case "${line%%=*}" in OLLAMA_CONTEXT_LENGTH) CONTEXT_LENGTH="${line#*=}" ;; esac
+done < "$ENV_FILE"
+
+# Quit the app before touching its settings store: it holds the SQLite WAL
+# open and rewrites the database on exit, which would discard our write.
+APP_WAS_RUNNING=false
+if pgrep -x Ollama >/dev/null 2>&1; then
+	APP_WAS_RUNNING=true
+	echo "  ↻ quitting Ollama.app before reconfiguring..."
+	osascript -e 'quit app "Ollama"' >/dev/null 2>&1 || pkill -x Ollama || true
+	sleep 3
+fi
+
+# Apply to the running launchd session. This only reaches a shell-started
+# `ollama serve` — see the header — but it costs nothing and covers that case.
 while IFS= read -r line; do
 	case "$line" in ''|\#*) continue ;; esac
 	key="${line%%=*}"
@@ -51,15 +103,46 @@ mkdir -p "$HOME/.ollama"
 } > "$HOME/.ollama/dotfiles.env"
 echo "  ✓ wrote ~/.ollama/dotfiles.env (sourced by ~/.zshrc)"
 
-# Restart Ollama.app so the server re-reads the launchd environment.
-if pgrep -x Ollama >/dev/null 2>&1; then
-	echo "  ↻ restarting Ollama.app to pick up the new environment..."
-	osascript -e 'quit app "Ollama"' >/dev/null 2>&1 || pkill -x Ollama || true
-	sleep 2
+# The part that actually reaches the menubar app's server.
+if [ -n "$CONTEXT_LENGTH" ] && [ -f "$APP_DB" ]; then
+	if command -v sqlite3 >/dev/null 2>&1; then
+		# The store holds chat history as well as settings, so keep a copy.
+		# `.backup` rather than cp: the app runs in WAL mode, and copying
+		# db.sqlite alone would leave the -wal contents behind.
+		sqlite3 "$APP_DB" ".backup '$APP_DB.bak'" 2>/dev/null || \
+			echo "  ⚠ could not back up $APP_DB" >&2
+		CURRENT=$(sqlite3 "$APP_DB" "select context_length from settings limit 1;" 2>/dev/null || echo "")
+		if [ -z "$CURRENT" ]; then
+			# No settings row yet — the app writes one on first run. An
+			# UPDATE here would match nothing and report a false success.
+			echo "  ⚠ Ollama.app has no settings row yet (finish its first-run setup, then re-run)" >&2
+		elif [ "$CURRENT" = "$CONTEXT_LENGTH" ]; then
+			echo "  ✓ Ollama.app context length already $CONTEXT_LENGTH"
+		elif sqlite3 "$APP_DB" "update settings set context_length=$CONTEXT_LENGTH;" 2>/dev/null; then
+			echo "  ✓ Ollama.app context length $CURRENT -> $CONTEXT_LENGTH (backup at db.sqlite.bak)"
+		else
+			echo "  ⚠ could not write context length to $APP_DB — the app will use its 8192 default" >&2
+		fi
+	else
+		echo "  ⚠ sqlite3 not found — cannot set the app's context length" >&2
+	fi
+elif [ -n "$CONTEXT_LENGTH" ]; then
+	echo "  ⚠ Ollama.app settings store not found; context length applies only to a shell-started 'ollama serve'"
 fi
+
+# Restart Ollama.app so it re-reads its settings store.
 if [ -d /Applications/Ollama.app ]; then
 	open -a Ollama
 	echo "  ✓ Ollama.app running with the $PROFILE profile"
+elif $APP_WAS_RUNNING; then
+	echo "  ⚠ Ollama.app was running but is not installed at /Applications — not restarted" >&2
 else
 	echo "  ⚠ Ollama.app not installed — env applied for CLI 'ollama serve' only"
 fi
+
+cat <<'NOTE'
+
+  Note: only the context length reaches the Ollama.app server; keep-alive,
+  KV cache type and parallelism are fixed at the app's own defaults there.
+  Verify with:  ollama ps        (CONTEXT column)
+NOTE

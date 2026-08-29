@@ -4,7 +4,24 @@
 # select-coding-model.sh picks a model from RAM and memory architecture, but
 # those tiers are a prediction. This checks the prediction on real hardware.
 #
-# The number that matters is not tokens/sec, it's the PROCESSOR split from
+# This measures FIT ONLY. It deliberately does not try to judge whether a
+# model can drive pi — that question defeated two cheap proxies here:
+#
+#   `ollama show` capabilities   qwen2.5-coder advertises `tools` at every
+#                                size and never emits a call
+#   a one-tool curl probe        wrong in BOTH directions. llama3.1:8b
+#                                returns a clean tool_call and then writes C
+#                                that does not compile (false pass), while
+#                                qwen3:4b spends the probe's token budget
+#                                reasoning and returns finish_reason=length
+#                                with tool_calls=null (false fail) — on the
+#                                very model this repo ships.
+#
+# A column that is wrong in both directions is worse than no column, so it
+# was removed. scripts/verify-agent-model.sh answers that question properly,
+# by compiling and running what pi actually wrote.
+#
+# The number that matters is not tokens/sec, it is the PROCESSOR split from
 # `ollama ps`. Anything short of "100% GPU" means the model didn't fit the
 # GPU's wirable budget and Ollama spilled layers to CPU — on Apple silicon
 # that budget is ~75% of unified RAM (sysctl iogpu.wired_limit_mb, 0 =
@@ -13,9 +30,9 @@
 # what makes the machine feel broken while an agent is running.
 #
 # Usage:
-#   ./bench-model.sh                          # this host's selected model
-#   ./bench-model.sh qwen2.5-coder:7b         # a specific model
-#   ./bench-model.sh qwen2.5-coder:3b qwen2.5-coder:7b   # compare tiers
+#   ./bench-model.sh                     # this host's selected model
+#   ./bench-model.sh qwen3:8b            # a specific model
+#   ./bench-model.sh qwen3:4b qwen3:8b   # compare tiers
 #
 # Models are pulled if missing, but never removed — a comparison run can
 # leave several GB on disk. `ollama rm <model>` to reclaim it.
@@ -29,7 +46,7 @@ NUM_PREDICT=160
 
 case "${1:-}" in
 	-h|--help)
-		sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 esac
@@ -67,6 +84,7 @@ for model in "${MODELS[@]}"; do
 	# Force a cold load so load_duration means something.
 	curl -s "$API/api/generate" -d "{\"model\":\"$model\",\"keep_alive\":0}" >/dev/null 2>&1
 	sleep 3
+
 	swap_before=$(swap_used_mb)
 
 	results=""
@@ -99,9 +117,9 @@ PY
 	python3 - "$model" "$swap_before" "$swap_after" "${size:-?}" "${proc:-?}" "$results" <<'PY'
 import sys
 rows=[l.split() for l in sys.argv[6].split("\n") if l.strip()]
-if not rows:
-    print(f"{sys.argv[1]:<22}  (no samples collected)"); sys.exit(0)
 model,sb,sa,size,proc=sys.argv[1:6]
+if not rows:
+    print(f"{model:<22}  (no samples collected)"); sys.exit(0)
 gen=sum(float(r[0]) for r in rows)/len(rows)
 pro=sum(float(r[1]) for r in rows)/len(rows)
 load=max(float(r[2]) for r in rows)
@@ -111,6 +129,10 @@ print(f"{model:<22} {gen:8.1f} {pro:8.1f} {load:8.2f} {size:>8} {delta:9.0f}M  {
 PY
 done
 
+echo
+echo "This says nothing about whether the model can drive pi — run"
+echo "./verify-agent-model.sh for that. A model can bench perfectly here and"
+echo "still be useless as an agent."
 echo
 echo "PROCESSOR must read 100% GPU. Any CPU share means the model did not fit"
 echo "and layers spilled — expect roughly half the throughput and swap growth."
