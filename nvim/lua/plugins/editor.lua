@@ -125,51 +125,41 @@ return {
   { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
 
   -- formatting with conform.nvim
+  -- NOTE: LazyVim owns conform's `config` and drives format-on-save itself, so
+  -- this spec must only contribute `opts` (deep-merged into LazyVim's defaults).
+  -- Setting `config` or `format_on_save` here breaks LazyVim formatting.
   {
     "stevearc/conform.nvim",
-    event = "BufWritePre",
-    config = function()
-      require("conform").setup({
-        formatters_by_ft = {
-          lua = { "stylua" },
-          javascript = { "prettier" },
-          typescript = { "prettier" },
-          javascriptreact = { "prettier" },
-          typescriptreact = { "prettier" },
-          json = { "jq" },
-          jsonc = { "jq" },
-          rust = { "rustfmt" },
-          cpp = { "clang-format" },
-          c = { "clang-format" },
-          cs = { "csharpier" },
-          yaml = { "prettier" },
-          markdown = { "prettier" },
-          html = { "prettier" },
-          css = { "prettier" },
-          sh = { "shfmt" },
-          python = { "black", "isort" },
-          go = { "gofmt", "goimports" },
+    opts = {
+      formatters_by_ft = {
+        lua = { "stylua" },
+        javascript = { "prettier" },
+        typescript = { "prettier" },
+        javascriptreact = { "prettier" },
+        typescriptreact = { "prettier" },
+        json = { "jq" },
+        jsonc = { "jq" },
+        rust = { "rustfmt" },
+        cpp = { "clang-format" },
+        c = { "clang-format" },
+        cs = { "csharpier" },
+        yaml = { "prettier" },
+        markdown = { "prettier" },
+        html = { "prettier" },
+        css = { "prettier" },
+        sh = { "shfmt" },
+        python = { "black", "isort" },
+        go = { "gofmt", "goimports" },
+      },
+      formatters = {
+        prettier = {
+          prepend_args = { "--end-of-line", "lf" },
         },
-        format_on_save = function(bufnr)
-          local disable_filetypes = {}
-          return {
-            timeout_ms = 500,
-            lsp_fallback = not disable_filetypes[vim.bo[bufnr].filetype],
-          }
-        end,
-        formatters = {
-          -- Custom formatter for markdown with frontmatter support
-          prettier = {
-            prepend_args = function()
-              return { "--end-of-line", "lf" }
-            end,
-          },
-          stylua = {
-            prepend_args = { "--indent-type", "Spaces", "--indent-width", "2" },
-          },
+        stylua = {
+          prepend_args = { "--indent-type", "Spaces", "--indent-width", "2" },
         },
-      })
-    end,
+      },
+    },
   },
 
   -- indent guides
