@@ -23,7 +23,19 @@ Built on LazyVim. LSP, debugging, fuzzy finding, file management, database UI, A
 
 ## pi agent
 
-[pi](https://pi.dev) is a local-first AI coding agent that talks to Ollama. `make install-pi` detects the machine's RAM profile, pulls and warms up the best-fitting coding model (`qwen3-coder:30b` on ≥24GB machines, `qwen2.5-coder:14b` on 12–24GB, `qwen2.5-coder:3b` below that — see `scripts/select-coding-model.sh`), then runs `setup-host.sh` to point pi at it. Re-run `make setup-host` any time to repoint pi at whatever model Ollama currently has loaded instead.
+[pi](https://pi.dev) is a local-first AI coding agent that talks to Ollama. `make install-pi` detects the machine's RAM profile, pulls and warms up the best-fitting coding model, then runs `setup-host.sh` to point pi at it.
+
+`scripts/select-coding-model.sh` picks that model from the RAM profile *and*, on macOS, the memory architecture:
+
+| RAM | Linux (discrete GPU) | Apple silicon | Intel Mac |
+| --- | --- | --- | --- |
+| ≥24GB | `qwen3-coder:30b` | `qwen3-coder:30b` | `qwen2.5-coder:7b` |
+| 12–24GB | `qwen2.5-coder:14b` | `qwen2.5-coder:7b` | `qwen2.5-coder:3b` |
+| <12GB | `qwen2.5-coder:3b` | `qwen2.5-coder:3b` | `qwen2.5-coder:3b` |
+
+The Mac tiers are one step more conservative at the same nominal RAM because Apple silicon uses *unified* memory: the GPU allocation comes out of the same pool as the OS and everything else, and Ollama can only wire down ~75% of it (`sysctl iogpu.wired_limit_mb`). A Linux box with a 16GB discrete GPU has that VRAM *on top of* system RAM; a 16GB Mac does not, so `qwen2.5-coder:14b` (~9GB before the KV cache) leaves nothing for the rest of the machine. Intel Macs have no usable GPU path, so they're sized for latency rather than RAM.
+
+Override per-run with `DOTFILES_CODING_MODEL=<tag>`, honoured by both the selector and `scripts/setup-model.sh` (which also takes the tag as an argument). Re-run `make setup-host` any time to repoint pi at whatever model Ollama currently has loaded instead.
 
 ## Ollama
 

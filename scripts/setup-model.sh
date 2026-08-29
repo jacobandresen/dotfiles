@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# setup-model.sh — Pull and load qwen3:4b into Ollama
+# setup-model.sh — Pull and load this host's coding model into Ollama
 #
-# Ensures qwen3:4b is pulled and resident in memory so it's the model
+# Ensures the model is pulled and resident in memory so it's the one
 # setup-host.sh picks up (it points pi at whatever Ollama currently has
-# loaded). Smaller/faster than qwen3.5:9b - trades some quality for speed.
+# loaded).
+#
+# The model is no longer hardcoded: it comes from select-coding-model.sh,
+# which sizes it for this machine's RAM and, on macOS, its memory
+# architecture. A hardcoded tag was wrong on both ends — too large to load
+# on an 8GB Mac, too small to bother with on a 32GB workstation — and it
+# silently disagreed with the model `make install-pi` had already pulled.
+#
+# Override with an argument or the same env var the selector honours:
+#   ./setup-model.sh qwen2.5-coder:7b
+#   DOTFILES_CODING_MODEL=qwen2.5-coder:7b ./setup-model.sh
 #
 # Idempotent: safe to re-run; a no-op if already pulled and loaded. Note this
 # only holds if nothing else on the box is concurrently loading a different
@@ -11,7 +21,8 @@
 # before you need it if in doubt.
 set -euo pipefail
 
-MODEL_NAME="qwen3:4b"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL_NAME=""
 
 # --- Options --------------------------------------------------------------------
 DRY_RUN=false
@@ -20,9 +31,13 @@ VERBOSE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
-            echo "Usage: $(basename "$0") [OPTIONS]"
+            echo "Usage: $(basename "$0") [OPTIONS] [MODEL]"
             echo ""
-            echo "Pull and load $MODEL_NAME into Ollama."
+            echo "Pull and load this host's coding model into Ollama."
+            echo "Defaults to $("$SCRIPT_DIR/select-coding-model.sh"), from select-coding-model.sh."
+            echo ""
+            echo "Arguments:"
+            echo "  MODEL          Ollama tag to use instead of the default"
             echo ""
             echo "Options:"
             echo "  -h, --help     Show this help message and exit"
@@ -38,12 +53,21 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        *)
+        -*)
             echo "Unknown option: $1" >&2
             exit 1
             ;;
+        *)
+            MODEL_NAME="$1"
+            shift
+            ;;
     esac
 done
+
+# Fall back to the host-appropriate model when none was given explicitly.
+if [ -z "$MODEL_NAME" ]; then
+    MODEL_NAME="$("$SCRIPT_DIR/select-coding-model.sh")"
+fi
 
 echo "============================================================================="
 echo "Model setup: $MODEL_NAME via Ollama"
