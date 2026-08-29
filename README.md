@@ -35,7 +35,17 @@ Built on LazyVim. LSP, debugging, fuzzy finding, file management, database UI, A
 
 The Mac tiers are one step more conservative at the same nominal RAM because Apple silicon uses *unified* memory: the GPU allocation comes out of the same pool as the OS and everything else, and Ollama can only wire down ~75% of it (`sysctl iogpu.wired_limit_mb`). A Linux box with a 16GB discrete GPU has that VRAM *on top of* system RAM; a 16GB Mac does not, so `qwen2.5-coder:14b` (~9GB before the KV cache) leaves nothing for the rest of the machine. Intel Macs have no usable GPU path, so they're sized for latency rather than RAM.
 
-Override per-run with `DOTFILES_CODING_MODEL=<tag>`, honoured by both the selector and `scripts/setup-model.sh` (which also takes the tag as an argument). Re-run `make setup-host` any time to repoint pi at whatever model Ollama currently has loaded instead.
+Override per-run with `DOTFILES_CODING_MODEL=<tag>`, honoured by both the selector and `scripts/setup-model.sh` (which also takes the tag as an argument).
+
+Those tiers are a prediction; `scripts/bench-model.sh` checks it on real hardware. With no argument it benchmarks this host's selection, or pass tags to compare them. The column that matters is `PROCESSOR` — anything short of `100% GPU` means the model didn't fit the wirable budget and Ollama spilled layers to CPU. Measured on the 8GB M2 this was written for:
+
+```
+MODEL                   GEN_TPS PROMPT_TPS   LOAD_S     SIZE SWAP_DELTA  PROCESSOR
+qwen2.5-coder:3b           38.5    295.1     0.84    2.3GB         0M  100% GPU
+qwen2.5-coder:7b           17.5    137.8     6.46    5.2GB     +1036M  12%/88% CPU/GPU
+```
+
+The 7b is 2.2x slower and takes the machine into swap — which is why the `8gb` tier stops at 3b. Re-run `make setup-host` any time to repoint pi at whatever model Ollama currently has loaded instead.
 
 ## Ollama
 
