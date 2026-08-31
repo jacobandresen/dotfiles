@@ -1,0 +1,13 @@
+# Lazy.nvim plugin directory
+lazy/
+
+# Neovim swap, backup, and undo files
+*.swp
+*.swo
+*~
+
+# Local/machine-specific overrides
+.local/
+
+# Claude Code session files
+.claude/

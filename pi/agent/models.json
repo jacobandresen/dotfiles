@@ -1,0 +1,33 @@
+{
+  "providers": {
+    "ollama": {
+      "api": "openai-completions",
+      "apiKey": "not-needed",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "models": [
+        {
+          "_launch": true,
+          "id": "qwen3:8b",
+          "input": [
+            "text"
+          ],
+          "name": "qwen3:8b (via Ollama)"
+        },
+        {
+          "id": "qwen3:14b",
+          "input": [
+            "text"
+          ],
+          "name": "qwen3:14b (via Ollama)"
+        },
+        {
+          "id": "qwen3-coder:30b",
+          "input": [
+            "text"
+          ],
+          "name": "qwen3-coder:30b (via Ollama)"
+        }
+      ]
+    }
+  }
+}
