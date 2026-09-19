@@ -19,10 +19,11 @@ export PATH="$HOME/.local/bin:$PATH"
 # a shell-launched `ollama serve` gets the same limits as the menubar app.
 [ -r "$HOME/.ollama/dotfiles.env" ] && source "$HOME/.ollama/dotfiles.env"
 
-# Per-host LLM tuning for the mu agent. The mu repo's `make setup-host` probes
-# the GPU and writes ~/.zshrc.mu (machine-local, outside this repo) with
-# MU_AGENT_MODEL / MU_NUM_CTX. Sourced if present; absent on a fresh host, where
-# mu's own defaults apply.
+# Per-host tuning for the mu agent (~/.zshrc.mu, machine-local and outside this
+# repo). Hand-maintained — mu's old `make setup-host` generator is gone, and the
+# MU_AGENT_MODEL / MU_NUM_CTX vars it used to write are dead. mu follows
+# whichever model Ollama has loaded, so what lives there is behavioural tuning
+# (MU_REASONING_EFFORT, MU_TIMEOUT_SCALE). Absent on a fresh host.
 [ -r "$HOME/.zshrc.mu" ] && source "$HOME/.zshrc.mu"
 
 # Aliases
