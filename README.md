@@ -63,16 +63,20 @@ macOS, the memory architecture:
 
 | RAM | Linux (discrete GPU) | Apple silicon | Intel Mac |
 | --- | --- | --- | --- |
-| ≥24GB | `qwen3-coder:30b` | `qwen3-coder:30b` | `qwen3:4b` |
-| 12–24GB | `qwen3:8b` | `qwen3:8b` | `qwen3:4b` |
-| <12GB | `qwen3:4b` | `qwen3:4b` | `qwen3:4b` |
+| ≥24GB | `qwen3-coder:30b` | `qwen3.5:4b` | `qwen3:4b` |
+| 12–24GB | `qwen3:8b` | `qwen3.5:4b` | `qwen3:4b` |
+| <12GB | `qwen3:4b` | `qwen3.5:4b` | `qwen3:4b` |
 
-Mac tiers are one step more conservative at the same nominal RAM. Apple silicon
-has *unified* memory — the GPU allocation comes out of the same pool as the OS,
-and Ollama can wire down only ~75% of it (`sysctl iogpu.wired_limit_mb`). A
-Linux box with a 16GB discrete GPU has that VRAM *on top of* system RAM; a 16GB
-Mac does not. Intel Macs have no usable GPU path, so they take the smallest
-passing tag at every size — also the least painful thing to run on a CPU.
+**Apple silicon does not tier.** `qwen3.5:4b` at every size, by standing
+instruction (2026-09-19) — deliberately not the `qwen3-coder:30b` / `qwen3:8b`
+the RAM profile would otherwise pick.
+
+The tiering that remains is Linux's. Apple silicon has *unified* memory — the
+GPU allocation comes out of the same pool as the OS, and Ollama can wire down
+only ~75% of it (`sysctl iogpu.wired_limit_mb`) — so a Linux box with a 16GB
+discrete GPU has that VRAM *on top of* system RAM where a 16GB Mac does not.
+That is why the Mac column was already one step behind before it was pinned.
+Intel Macs have no usable GPU path, so they take the smallest passing tag.
 
 Override with `DOTFILES_CODING_MODEL=<tag>`, honoured by the selector and
 `scripts/setup-model.sh`. **Run `make verify-model` after any override** — a

@@ -79,23 +79,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE=$("$SCRIPT_DIR/detect-ram-profile.sh")
 
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
-	# Apple silicon, unified memory (~75% wirable by the GPU).
-	case "$PROFILE" in
-		# ~18GB at q4 for the 30B/3.3B-active MoE — fits the ~24GB
-		# wirable on a 32GB Mac, and only 3.3B params are active so it
-		# stays fast. Ollama ships a dedicated qwen3-coder tool parser.
-		# Untested here: no 32GB machine was available to run
-		# verify-agent-model.sh against it.
-		32gb) echo "qwen3-coder:30b" ;;
-		# ~6.1GB resident, inside the ~12GB wirable budget on a 16GB
-		# Mac with room for the OS and an editor. Verified to pass
-		# verify-agent-model.sh, but only on the 8GB box this was
-		# written on, where it spilled 24% to CPU — the capability is
-		# measured, the fit at 16GB is still a prediction.
-		16gb) echo "qwen3:8b" ;;
-		# 3.9GB at 16K, 100% GPU on an 8GB M2, verified end to end.
-		*) echo "qwen3:4b" ;;
-	esac
+	# Apple silicon: qwen3.5:4b at every tier, by standing instruction
+	# (2026-09-19) — no size tiering here, and deliberately not the
+	# qwen3-coder:30b / qwen3:8b the RAM profile would otherwise pick.
+	#
+	# The RAM tiering below is kept for Linux, where a discrete GPU's VRAM
+	# sits on top of system RAM and a larger tag is actually affordable.
+	echo "qwen3.5:4b"
 elif [ "$(uname -s)" = "Darwin" ]; then
 	# Intel Mac: CPU-bound at every size, so take the smallest tag that
 	# still passes — see the Intel note above.
