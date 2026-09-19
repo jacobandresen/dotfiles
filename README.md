@@ -104,7 +104,8 @@ concurrency nothing here uses.
 
 - **Linux** — systemd drop-in from `ollama/ollama.service.d/`. Enables
   iGPU/Vulkan acceleration and flash attention, caps memory with `MemoryHigh`
-  (4G / 7G / 10G).
+  (4G / 7G / 19500M — the 32gb tier has to fit qwen3-coder:30b's ~17.3G GPU
+  buffer, and a 16G `MemoryMax` OOM-killed the service mid-load).
 - **macOS** — no systemd, so `scripts/install-ollama-macos.sh` applies
   `ollama/launchd/<profile>.env` via `launchctl setenv` (what the menubar app
   inherits), restarts the app, and writes `~/.ollama/dotfiles.env` for

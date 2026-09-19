@@ -21,7 +21,12 @@ local function get_text(mode)
     local start_row, start_col = start_pos[2] - 1, start_pos[3] - 1
     local end_row, end_col = end_pos[2] - 1, end_pos[3]
     local end_line = vim.api.nvim_buf_get_lines(0, end_row, end_row + 1, false)[1] or ""
-    end_col = math.min(end_col, #end_line)
+    if mode == "V" then
+      start_col = 0
+      end_col = #end_line
+    else
+      end_col = math.min(end_col, #end_line)
+    end
     local lines = vim.api.nvim_buf_get_text(0, start_row, start_col, end_row, end_col, {})
     return table.concat(lines, "\n"), { start_row, start_col }, { end_row, end_col }
   else
@@ -91,9 +96,10 @@ local function telescope_transform(mode)
 end
 
 local function transform_picker_visual()
+  local mode = vim.fn.mode()
   local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
   vim.api.nvim_feedkeys(esc, "x", false)
-  vim.schedule(function() telescope_transform("v") end)
+  vim.schedule(function() telescope_transform(mode) end)
 end
 
 return {
