@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-docker install-fonts setup-host ram-profile deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-bonsai use-bonsai use-model install-docker install-fonts setup-host ram-profile deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
@@ -151,7 +151,8 @@ install-pi:
 		model=$$($(CURDIR)/scripts/select-coding-model.sh); \
 		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
 		echo "  → RAM profile: $$profile → coding model: $$model"; \
-		if ollama list | awk 'NR>1{print $$1}' | grep -qx "$$model"; then \
+		case "$$model" in *:*) tag="$$model" ;; *) tag="$$model:latest" ;; esac; \
+		if ollama list | awk 'NR>1{print $$1}' | grep -qx "$$tag"; then \
 			echo "  ✓ $$model already pulled"; \
 		else \
 			echo "  ↓ pulling $$model (this may take a while)..."; \
@@ -179,6 +180,23 @@ else ifeq ($(OS),Linux)
 else
 	@echo "  ⚠ skipping Ollama tuning (unsupported OS: $(OS))"
 endif
+
+# Opt-in: PrismML's Bonsai 27B, a 1-bit (3.8GB) compression of Qwen3.6-27B.
+# Deliberately not part of 'make install' — it is a 4.4GB download and, on the
+# 8gb profile, it crowds out everything else while loaded. See the script
+# header for why the default build drops the vision projector.
+install-bonsai:
+	@./scripts/install-bonsai.sh
+
+# Point pi, nvim's CodeCompanion adapter and the mu agent at one model — all
+# three resolve "whichever model Ollama currently has loaded", so this loads
+# it and re-runs setup-host.sh. 'use-model' takes MODEL=<tag>; bare
+# 'use-model' falls back to this host's selection.
+use-bonsai:
+	@./scripts/use-model.sh bonsai-27b
+
+use-model:
+	@./scripts/use-model.sh $(MODEL)
 
 install-docker:
 ifeq ($(OS),Darwin)
