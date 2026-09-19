@@ -55,11 +55,20 @@ PROMPTS=(
 
 swap_used_mb() { sysctl -n vm.swapusage 2>/dev/null | awk '{print $6}' | tr -d 'M' || echo 0; }
 
+# `ollama list` always prints a tag, so a bare name like "bonsai-27b" (as
+# `ollama create` leaves it) never matches it literally. Normalise to
+# name:latest before comparing, or locally-built models look un-pulled and
+# we try — and fail — to pull them from a registry.
+ollama_has() {
+	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
+	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
+}
+
 printf '\n%-22s %8s %8s %8s %8s %10s  %s\n' MODEL GEN_TPS PROMPT_TPS LOAD_S SIZE SWAP_DELTA PROCESSOR
 printf '%s\n' "-------------------------------------------------------------------------------------------"
 
 for model in "${MODELS[@]}"; do
-	if ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$model"; then
+	if ! ollama_has "$model"; then
 		echo "  ↓ pulling $model..." >&2
 		ollama pull "$model" >/dev/null 2>&1 || { echo "  ✗ pull failed: $model" >&2; continue; }
 	fi
@@ -90,7 +99,10 @@ PY
 	done
 
 	swap_after=$(swap_used_mb)
-	ps_line=$(ollama ps 2>/dev/null | awk -v m="$model" '$1==m{print $3$4" "$5" "$6}')
+	# `ollama ps` prints the tagged name, so match the normalised form here
+	# too — otherwise a bare name leaves SIZE and PROCESSOR as "?".
+	case "$model" in *:*) ps_name="$model" ;; *) ps_name="$model:latest" ;; esac
+	ps_line=$(ollama ps 2>/dev/null | awk -v m="$ps_name" '$1==m{print $3$4" "$5" "$6}')
 	size=$(echo "$ps_line" | awk '{print $1}')
 	proc=$(echo "$ps_line" | cut -d' ' -f2-)
 

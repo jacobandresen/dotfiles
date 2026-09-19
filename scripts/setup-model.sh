@@ -69,6 +69,15 @@ if [ -z "$MODEL_NAME" ]; then
     MODEL_NAME="$("$SCRIPT_DIR/select-coding-model.sh")"
 fi
 
+# `ollama list` always prints a tag, so a bare name like "bonsai-27b" (as
+# `ollama create` leaves it) never matches it literally. Normalise to
+# name:latest before comparing, or locally-built models look un-pulled and
+# we try — and fail — to pull them from a registry.
+ollama_has() {
+	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
+	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
+}
+
 echo "============================================================================="
 echo "Model setup: $MODEL_NAME via Ollama"
 echo "============================================================================="
@@ -106,7 +115,7 @@ fi
 echo ""
 echo "--- Pulling $MODEL_NAME ---"
 
-if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$MODEL_NAME"; then
+if ollama_has "$MODEL_NAME"; then
     echo "  ✓ $MODEL_NAME is already pulled"
 else
     if $DRY_RUN; then
