@@ -42,34 +42,58 @@ model, the Ollama tuning and the Docker limits.
 
 ### Which model
 
-`scripts/select-coding-model.sh` keys off the profile *and*, on macOS, the
-memory architecture:
+A model must clear one bar before size is considered: **pi has to write a C
+file, compile it and run it.** Three failure modes hide below that bar, and each
+looks like success in the transcript:
+
+| Model | What actually happens |
+| --- | --- |
+| `qwen2.5-coder:3b` / `:7b` | No tool call at all — a fenced JSON blob that looks like one. Nothing reaches disk, though `ollama show` advertises `tools`. |
+| `llama3.2:3b` | Passes a one-tool probe in isolation, then reverts to text mimicry under pi's real prompt and full tool set. |
+| `llama3.1:8b` | Calls tools for real and mangles the arguments — writes the literal characters `\n` into the source and drops `#include <stdio.h>`, so the C never compiles. |
+| `qwen3:4b` | Writes valid C, compiles it, runs it. |
+
+`make verify-model` (`scripts/verify-agent-model.sh`) is the check that catches
+all three: it runs pi non-interactively in a temp directory, then compiles and
+runs whatever landed on disk. It grades the artifact, not the transcript —
+the only thing separating `llama3.1:8b`'s confident failure from a working model.
+
+`scripts/select-coding-model.sh` then picks from the RAM profile *and*, on
+macOS, the memory architecture:
 
 | RAM | Linux (discrete GPU) | Apple silicon | Intel Mac |
 | --- | --- | --- | --- |
-| ≥24GB | `qwen3-coder:30b` | `qwen3-coder:30b` | `qwen2.5-coder:7b` |
-| 12–24GB | `qwen2.5-coder:14b` | `qwen2.5-coder:7b` | `qwen2.5-coder:3b` |
-| <12GB | `qwen2.5-coder:3b` | `qwen2.5-coder:3b` | `qwen2.5-coder:3b` |
+| ≥24GB | `qwen3-coder:30b` | `qwen3-coder:30b` | `qwen3:4b` |
+| 12–24GB | `qwen3:8b` | `qwen3:8b` | `qwen3:4b` |
+| <12GB | `qwen3:4b` | `qwen3:4b` | `qwen3:4b` |
 
 Mac tiers are one step more conservative at the same nominal RAM. Apple silicon
 has *unified* memory — the GPU allocation comes out of the same pool as the OS,
 and Ollama can wire down only ~75% of it (`sysctl iogpu.wired_limit_mb`). A
 Linux box with a 16GB discrete GPU has that VRAM *on top of* system RAM; a 16GB
-Mac does not. Intel Macs have no usable GPU path, so they're sized for latency.
+Mac does not. Intel Macs have no usable GPU path, so they take the smallest
+passing tag at every size — also the least painful thing to run on a CPU.
 
 Override with `DOTFILES_CODING_MODEL=<tag>`, honoured by the selector and
-`scripts/setup-model.sh`.
+`scripts/setup-model.sh`. **Run `make verify-model` after any override** — a
+model that cannot drive pi loads without complaint and then fails silently.
 
 ### Switching
 
-pi, nvim's CodeCompanion adapter and the [mu](https://github.com/jacobandresen/mu)
-agent all resolve *whichever model Ollama currently has loaded*, so one command
-moves the whole stack:
+`scripts/setup-host.sh` points pi at **this host's selected model**, not at
+whatever happens to be resident: anything that loads a model (`bench-model.sh`
+does) would otherwise silently repoint pi at it.
+
+To deliberately run a different model, `use-model.sh` loads it and passes
+`--use-loaded`, which also updates nvim's CodeCompanion adapter and the
+[mu](https://github.com/jacobandresen/mu) agent — both follow whichever model
+Ollama has loaded:
 
 ```sh
-make use-model MODEL=qwen3.5:4b   # any tag
-make use-model                    # back to this host's selection
-make use-bonsai                   # the opt-in 27B (see below)
+make use-model MODEL=qwen3:8b   # any tag
+make use-model                  # back to this host's selection
+make use-bonsai                 # the opt-in 27B (see below)
+make setup-host                 # re-assert the selector's pick
 ```
 
 ### Tuning
@@ -97,21 +121,29 @@ budget is tight (macOS holds 3–4GB), so that profile drops keep-alive to 5m.
 
 ### Benchmarks
 
-The tiers are a prediction; `scripts/bench-model.sh` checks it. The column that
-matters is `PROCESSOR` — anything short of `100% GPU` means the model didn't fit
-the wirable budget and Ollama spilled layers to CPU. Measured on the 8GB M2 this
-was written for:
+`verify-model` answers *can it drive pi*; `scripts/bench-model.sh` answers
+*does it fit*. The column that matters is `PROCESSOR` — anything short of
+`100% GPU` means the model spilled layers to CPU. Measured on the 8GB M2 this
+was written for, at the 16K context this repo configures:
 
 ```
 MODEL               GEN_TPS  PROMPT_TPS    SIZE   SWAP_DELTA  PROCESSOR
-qwen2.5-coder:3b       38.5       295.1   2.3GB          0M   100% GPU
+qwen3:4b               29.0       160.7   3.9GB          0M   100% GPU
+llama3.1:8b            16.2        64.8   6.3GB       +816M   28%/72% CPU/GPU
 qwen2.5-coder:7b       17.5       137.8   5.2GB      +1036M   12%/88% CPU/GPU
 bonsai-27b              7.5        17.8   4.2GB       +919M   100% GPU
 ```
 
-The 7b is 2.2x slower and takes the machine into swap — which is why the `8gb`
-tier stops at 3b. (`GEN_TPS` varies with machine load; these are idle-machine
-runs and the best case for each.)
+The 4b is better on every axis than the 8b — 1.8x generation, 2.5x prompt, a
+second to load instead of seven, no swap — *and* it is the one that can actually
+drive the agent. That is why the 8gb tier stops there.
+
+`bench-model.sh` deliberately measures fit and nothing else. It once carried a
+`TOOLS` column probing for native tool calls; it was removed for being wrong in
+*both* directions — `llama3.1:8b` returned a clean tool call then failed to
+produce compilable C, while `qwen3:4b` spent the probe's token budget reasoning
+and came back `finish_reason=length, tool_calls=null`, declaring the shipping
+model unusable. Use `make verify-model` for that question.
 
 ## Bonsai 27B — measured verdict
 
@@ -141,8 +173,8 @@ Throughput is also worse than the benchmark implies — 7.5 tok/s on short
 prompts, ~1.5 tok/s on the ~5k-token prompts real agent turns use, where
 prefill dominates.
 
-**Verdict:** keep it for a deliberate one-off hard question; `qwen2.5-coder:3b`
-for interactive work, `qwen3.5:4b` for agent runs.
+**Verdict:** keep it for a deliberate one-off hard question; `qwen3:4b` for
+interactive work (the tier's verified pick), `qwen3.5:4b` for agent runs.
 
 Three things the setup must get right for it to work at all:
 

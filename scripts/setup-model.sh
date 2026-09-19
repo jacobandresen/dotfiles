@@ -6,14 +6,22 @@
 # loaded).
 #
 # The model is no longer hardcoded: it comes from select-coding-model.sh,
-# which sizes it for this machine's RAM and, on macOS, its memory
-# architecture. A hardcoded tag was wrong on both ends — too large to load
-# on an 8GB Mac, too small to bother with on a 32GB workstation — and it
-# silently disagreed with the model `make install-pi` had already pulled.
+# which requires a model verified to drive pi end to end and then sizes it
+# for this machine's RAM and, on macOS, its memory architecture. A hardcoded
+# tag was wrong on both ends — too large to load on an 8GB Mac, too small to
+# bother with on a 32GB workstation — and it silently disagreed with the
+# model `make install-pi` had already pulled.
 #
 # Override with an argument or the same env var the selector honours:
-#   ./setup-model.sh qwen2.5-coder:7b
-#   DOTFILES_CODING_MODEL=qwen2.5-coder:7b ./setup-model.sh
+#   ./setup-model.sh qwen3:8b
+#   DOTFILES_CODING_MODEL=qwen3:8b ./setup-model.sh
+#
+# If you override, run scripts/verify-agent-model.sh on the tag first — it
+# is the only check that catches all three failure modes. A model that
+# cannot drive pi loads fine here and then fails *silently*: it either
+# prints its tool calls as chat text (qwen2.5-coder, at every size) or calls
+# the tools with mangled arguments and writes C that does not compile
+# (llama3.1:8b). Both look like success in the transcript.
 #
 # Idempotent: safe to re-run; a no-op if already pulled and loaded. Note this
 # only holds if nothing else on the box is concurrently loading a different

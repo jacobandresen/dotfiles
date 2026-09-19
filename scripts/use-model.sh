@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # use-model.sh — point the whole local stack at one model.
 #
-# pi, nvim's CodeCompanion adapter and the mu agent all resolve the same way:
-# "whichever model Ollama currently has loaded" (`/api/ps`), falling back to
-# whatever is pulled. So switching the stack is two steps — load the model,
-# then re-run setup-host.sh to rewrite pi's settings.json/models.json — and
-# this does both.
+# nvim's CodeCompanion adapter and the mu agent both follow whichever model
+# Ollama currently has loaded (`/api/ps`). pi does not: setup-host.sh points it
+# at this host's *selected* model, so that merely benchmarking a model can't
+# silently repoint the agent at one that fails verify-agent-model.sh. Switching
+# the stack is therefore: load the model, then setup-host.sh --use-loaded to
+# tell pi this one was deliberate.
 #
 #   ./use-model.sh              # this host's selected model (see select-coding-model.sh)
 #   ./use-model.sh bonsai-27b   # the 1-bit 27B build from install-bonsai.sh
@@ -70,4 +71,6 @@ PY
 echo "  ✓ $MODEL loaded"
 
 echo ""
-"$SCRIPT_DIR/setup-host.sh"
+# --use-loaded: we just loaded this model deliberately, so pi should follow
+# it rather than the selector's pick (setup-host.sh defaults to the selector).
+"$SCRIPT_DIR/setup-host.sh" --use-loaded
