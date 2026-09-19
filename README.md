@@ -63,13 +63,25 @@ macOS, the memory architecture:
 
 | RAM | Linux (discrete GPU) | Apple silicon | Intel Mac |
 | --- | --- | --- | --- |
-| ≥24GB | `qwen3-coder:30b` | `qwen3.5:4b` | `qwen3:4b` |
-| 12–24GB | `qwen3:8b` | `qwen3.5:4b` | `qwen3:4b` |
-| <12GB | `qwen3:4b` | `qwen3.5:4b` | `qwen3:4b` |
+| ≥24GB | `qwen3-coder:30b` | `qwen3:4b` | `qwen3:4b` |
+| 12–24GB | `qwen3:8b` | `qwen3:4b` | `qwen3:4b` |
+| <12GB | `qwen3:4b` | `qwen3:4b` | `qwen3:4b` |
 
-**Apple silicon does not tier.** `qwen3.5:4b` at every size, by standing
-instruction (2026-09-19) — deliberately not the `qwen3-coder:30b` / `qwen3:8b`
-the RAM profile would otherwise pick.
+**Apple silicon does not tier** — one tag at every size, deliberately not the
+`qwen3-coder:30b` / `qwen3:8b` the RAM profile would pick.
+
+`qwen3:4b` over `qwen3.5:4b`, decided by measurement (2026-09-19). Both pass
+`verify-model`, so capability did not separate them — fit did:
+
+```
+MODEL          GEN_TPS  PROMPT_TPS  LOAD_S    SIZE    SWAP  PROCESSOR
+qwen3:4b          28.8       166.2    3.09   3.9GB    -16M  100% GPU
+qwen3.5:4b        22.1        82.5    9.47   4.0GB   +438M  21%/79% CPU/GPU
+```
+
+The 100MB the 3.5 adds is enough to miss the wirable budget: it spills 21% of
+its layers to CPU and pulls in swap, halving the prompt rate and tripling load
+time. Same reason the 7b was rejected before it.
 
 The tiering that remains is Linux's. Apple silicon has *unified* memory — the
 GPU allocation comes out of the same pool as the OS, and Ollama can wire down

@@ -79,13 +79,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE=$("$SCRIPT_DIR/detect-ram-profile.sh")
 
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
-	# Apple silicon: qwen3.5:4b at every tier, by standing instruction
-	# (2026-09-19) — no size tiering here, and deliberately not the
-	# qwen3-coder:30b / qwen3:8b the RAM profile would otherwise pick.
+	# Apple silicon: one tag at every tier, no size tiering — deliberately
+	# not the qwen3-coder:30b / qwen3:8b the RAM profile would pick.
 	#
-	# The RAM tiering below is kept for Linux, where a discrete GPU's VRAM
-	# sits on top of system RAM and a larger tag is actually affordable.
-	echo "qwen3.5:4b"
+	# qwen3:4b over qwen3.5:4b, decided by measurement 2026-09-19. Both pass
+	# verify-agent-model.sh, so capability did not separate them; fit did.
+	# On this 8GB M2, idle, same 16K context:
+	#
+	#            GEN_TPS  PROMPT_TPS  LOAD_S  SIZE   SWAP   PROCESSOR
+	#   qwen3:4b    28.8       166.2    3.09  3.9GB   -16M  100% GPU
+	#   qwen3.5:4b  22.1        82.5    9.47  4.0GB  +438M  21%/79% CPU/GPU
+	#
+	# The 100MB the 3.5 adds is enough to miss the wirable budget: it spills
+	# 21% of its layers to CPU and pulls in swap, which halves the prompt
+	# rate and triples load time. Same reason the 7b was rejected before it.
+	echo "qwen3:4b"
 elif [ "$(uname -s)" = "Darwin" ]; then
 	# Intel Mac: CPU-bound at every size, so take the smallest tag that
 	# still passes — see the Intel note above.
