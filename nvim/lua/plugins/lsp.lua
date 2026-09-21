@@ -16,8 +16,19 @@ return {
     dependencies = { "mason-org/mason.nvim" },
     opts = {
       ensure_installed = {
-        "roslyn", "netcoredbg", "codelldb", "clangd", "js-debug-adapter", "rust-analyzer",
-        "helm-ls", "prettier", "black", "isort", "clang-format", "goimports", "csharpier",
+        "roslyn",
+        "netcoredbg",
+        "codelldb",
+        "clangd",
+        "js-debug-adapter",
+        "rust-analyzer",
+        "helm-ls",
+        "prettier",
+        "black",
+        "isort",
+        "clang-format",
+        "goimports",
+        "csharpier",
       },
       auto_update = false,
       run_on_start = true,
@@ -130,7 +141,9 @@ return {
     init = function()
       vim.api.nvim_create_autocmd("FileType", {
         pattern = "rust",
-        callback = function() vim.bo.makeprg = "cargo" end,
+        callback = function()
+          vim.bo.makeprg = "cargo"
+        end,
       })
     end,
     config = function()

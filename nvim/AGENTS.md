@@ -11,9 +11,6 @@ at `localhost:11434` and auto-detects **whichever model is currently loaded** â€
 it pins nothing. `make use-model MODEL=<tag>` in the repo root switches it, pi
 and the mu agent together; `ga` in the chat buffer swaps to GitHub Copilot.
 
-On this 8GB machine the loaded model is a 3â€“4B one (see the repo README for why
-the tier stops there), so treat it as a fast pattern-stamper, not a reasoner.
-
 Offload to Ollama when the task is repetitive or mechanical **and the output is
 verifiable by inspection**:
 
