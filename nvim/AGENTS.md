@@ -9,13 +9,13 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 The UI imitates the Borland Turbo Pascal 7.0 IDE: `colors/turbopascal.lua`
 (EGA palette) and `lua/turbo/` (menu bar in the tabline, hint line in the
 statusline, window title frames in the winbar, About dialog). lualine and
-bufferline are disabled for it. Menu entries live in `lua/turbo/menus.lua`:
-TP7 entry names, but only those with a working Neovim equivalent (no greyed-out
-placeholders). Tools that TP never had (Docker, AI, Database) are Tools transfer
-items, one cascading submenu (►) each; every item there shows its `<leader>`
-shortcut, and every such shortcut exists as a keymap. Menu actions called in the
-wrong context should explain themselves with a notification, not a raw Vim
-error. The matching Midnight Commander skin is `../mc/skins/turbopascal.ini`.
+bufferline are disabled for it. Menu entries live in `lua/turbo/menus.lua`,
+grouped by task (≡, File, Edit, Search, Code, Run, Debug, AI, Tools, Window,
+Help) with cascading submenus (►, one level deep); the Turbo Vision look and
+TP's F-keys stay, TP7's menu names don't have to. Only entries with a working
+Neovim equivalent (no greyed-out placeholders); every key shown in a menu
+exists as a keymap; an action used in the wrong context explains itself with a
+notification, not a raw Vim error. The matching Midnight Commander skin is `../mc/skins/turbopascal.ini`.
 
 ## Ollama
 

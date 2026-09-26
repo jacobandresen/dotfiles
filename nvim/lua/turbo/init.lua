@@ -1,7 +1,7 @@
 -- Turbo Vim: Neovim dressed as the Borland Turbo Pascal 7.0 IDE.
 --   colors/turbopascal.lua  EGA palette
 --   turbo/menubar.lua       menu bar + drop-downs
---   turbo/menus.lua         the TP7 menu tree
+--   turbo/menus.lua         the menu tree
 --   turbo/chrome.lua        hint line, window frames, About dialog
 -- Debugger F-keys (F4, F7, F8, Ctrl+F2, Ctrl+F9, ...) live in plugins/dap.lua.
 local M = {}
@@ -59,8 +59,12 @@ function M.keymaps()
   -- named one, Alt+F10 / right click the local menu
   map({ "n", "x", "i" }, "<F10>", menubar.open_last, { desc = "Menu" })
   map({ "n", "x" }, "<M-Space>", function() menubar.open(1) end, { desc = "≡ Menu" })
-  for _, key in ipairs({ "f", "e", "s", "r", "c", "d", "t", "o", "w", "h" }) do
-    map({ "n", "x" }, "<M-" .. key .. ">", function() menubar.open_key(key) end, { desc = "Menu" })
+  for _, menu in ipairs(menus.menus) do
+    local key = menu.title:match("~(.)~")
+    if key then
+      key = key:lower()
+      map({ "n", "x" }, "<M-" .. key .. ">", function() menubar.open_key(key) end, { desc = "Menu" })
+    end
   end
   map({ "n", "x" }, "<M-F10>", M.local_menu, { desc = "Local Menu" })
   map("n", "<RightMouse>", "<LeftMouse><cmd>lua require('turbo').local_menu()<cr>", { desc = "Local Menu" })

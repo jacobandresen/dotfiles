@@ -1,7 +1,7 @@
--- The Turbo Pascal 7.0 menu tree, limited to the TP entries that have a
--- working Neovim equivalent. Docker and AI are Tools transfer items (TP7
--- listed extra programs there); anything else TP never had (databases,
--- git) is a <leader> keymap only (which-key).
+-- The menu tree, grouped by task (File, Edit, Search, Code, Run, Debug, AI,
+-- Tools, Window, Help) with cascading submenus; Turbo Vision look and TP's
+-- F-keys, but not TP7's menu names. Every item that shows a key has that key
+-- as a keymap too.
 local chrome = require("turbo.chrome")
 
 local function cmd(c)
@@ -142,50 +142,110 @@ M.db = {
   { label = "Last query ~i~nfo", key = "Space D i", hint = "Show timing and details of the last query", action = cmd("DBUILastQueryInfo") },
 }
 
+-- git pickers outside a repository fail with a raw command dump; say it plainly
+local function git(fn)
+  return function()
+    if not vim.fs.root(0, ".git") and not vim.fs.root(vim.fn.getcwd(), ".git") then
+      return vim.notify("Not a git repository", vim.log.levels.WARN)
+    end
+    fn()
+  end
+end
+
+M.git = {
+  { label = "~L~azygit", key = "Space g g", hint = "Git UI in a terminal window", action = function() Snacks.lazygit() end },
+  { label = "L~o~g", key = "Space g l", hint = "Commits of this repository", action = git(function() Snacks.picker.git_log({ cwd = LazyVim.root.git() }) end) },
+  { label = "~D~iff", hint = "Changed hunks in the working tree", action = git(function() Snacks.picker.git_diff() end) },
+  { label = "~B~lame line", key = "Space g b", hint = "Commits that changed the line under the cursor",
+    action = git(function() Snacks.picker.git_log_line() end) },
+}
+
+-- Edit > Transform: one item per util/transform.lua transformation
+local function transforms()
+  local items, used = {}, {}
+  for i, t in ipairs(require("util.transform").transformations) do
+    if i > 1 and t.name:match("^%S+") ~= require("util.transform").transformations[i - 1].name:match("^%S+") then
+      table.insert(items, "-")
+    end
+    -- hotkey: the first letter of the name no earlier item uses
+    local hot = t.name
+    for pos = 1, #t.name do
+      local ch = t.name:sub(pos, pos):lower()
+      if ch:match("%a") and not used[ch] then
+        used[ch] = true
+        hot = t.name:sub(1, pos - 1) .. "~" .. t.name:sub(pos, pos) .. "~" .. t.name:sub(pos + 1)
+        break
+      end
+    end
+    table.insert(items, {
+      label = hot,
+      hint = ("%s the block (or whole file)"):format(t.name),
+      action = function(ctx) require("util.transform").run(t.name, ctx.visual) end,
+    })
+  end
+  return items
+end
+
+-- File > Recent: the last files (TP listed them in File), then sessions
+local function recent()
+  local items = {}
+  for _, f in ipairs(vim.v.oldfiles) do
+    if #items == 9 then
+      break
+    end
+    if vim.fn.filereadable(f) == 1 and not f:match("^/tmp/") then
+      local dir = vim.fn.fnamemodify(f, ":~:.:h")
+      table.insert(items, {
+        label = ("~%d~ %s"):format(#items + 1, vim.fn.fnamemodify(f, ":t")),
+        key = #dir > 24 and vim.fn.pathshorten(dir, 3) or dir,
+        hint = "Reopen " .. vim.fn.fnamemodify(f, ":~"),
+        action = function() vim.cmd.edit(vim.fn.fnameescape(f)) end,
+      })
+    end
+  end
+  if #items > 0 then
+    table.insert(items, "-")
+  end
+  table.insert(items, { label = "~S~essions...", key = "Space q S", hint = "Restore a saved session",
+    action = function() require("persistence").select() end })
+  return items
+end
+
+-- menus are grouped by task; the look (frames, hotkeys, hints, F-keys) is Turbo Vision's
 M.menus = {
   {
     title = "≡",
     items = {
+      { label = "~S~ettings", hint = "Editor options, config files, colour scheme", items = {
+        { label = "~E~ditor options...", hint = "Browse and change editor options", action = telescope("vim_options") },
+        { label = "~C~onfig files...", key = "Space f c", hint = "Browse the Turbo Vim config directory",
+          action = pick("files", { cwd = vim.fn.stdpath("config") }) },
+        { label = "Colour ~s~cheme...", hint = "Try another colour scheme (Turbo Pascal is `turbopascal`)",
+          action = telescope("colorscheme", { enable_preview = true }) },
+      } },
+      { label = "~P~lugins", key = "Space l", hint = "Install, update and inspect plugins (:Lazy)", action = cmd("Lazy") },
+      { label = "~L~anguage tools", key = "Space c m", hint = "Language servers, debuggers and formatters (:Mason)", action = cmd("Mason") },
+      "-",
       { label = "~R~epaint desktop", hint = "Redraw the screen", action = cmd("mode") },
     },
   },
   {
     title = "~F~ile",
-    items = function()
-      local items = {
-        { label = "~N~ew", hint = "Create a new empty buffer", action = cmd("enew") },
-        { label = "~O~pen...", key = "F3", hint = "Find and open a file", action = pick("files") },
-        { label = "~S~ave", key = "F2", hint = "Save the file in the active window", action = cmd("write") },
-        { label = "Save ~a~s...", hint = "Save the file under a new name",
-          action = input("Save as: ", function() return vim.fn.expand("%") end, "file", function(v) vim.cmd.saveas(v) end) },
-        { label = "Save a~l~l", hint = "Save all modified files", action = cmd("wall") },
-        "-",
-        { label = "E~x~it", key = "Alt+X", hint = "Quit Turbo Vim", action = cmd("confirm qall") },
-      }
-      -- TP listed recently opened files at the bottom of the File menu
-      local recent = {}
-      for _, f in ipairs(vim.v.oldfiles) do
-        if #recent == 3 then
-          break
-        end
-        if vim.fn.filereadable(f) == 1 and not f:match("^/tmp/") then
-          table.insert(recent, f)
-        end
-      end
-      if #recent > 0 then
-        table.insert(items, "-")
-        for i, f in ipairs(recent) do
-          local dir = vim.fn.fnamemodify(f, ":~:.:h")
-          table.insert(items, {
-            label = ("~%d~ %s"):format(i, vim.fn.fnamemodify(f, ":t")),
-            key = #dir > 24 and vim.fn.pathshorten(dir, 3) or dir,
-            hint = "Reopen " .. vim.fn.fnamemodify(f, ":~"),
-            action = function() vim.cmd.edit(vim.fn.fnameescape(f)) end,
-          })
-        end
-      end
-      return items
-    end,
+    items = {
+      { label = "~N~ew", hint = "Create a new empty buffer", action = cmd("enew") },
+      { label = "~O~pen...", key = "F3", hint = "Find and open a file", action = pick("files") },
+      { label = "~R~ecent", hint = "Recently opened files and saved sessions", items = recent },
+      "-",
+      { label = "~S~ave", key = "F2", hint = "Save the file in the active window", action = cmd("write") },
+      { label = "Save ~a~s...", hint = "Save the file under a new name",
+        action = input("Save as: ", function() return vim.fn.expand("%") end, "file", function(v) vim.cmd.saveas(v) end) },
+      { label = "Save a~l~l", hint = "Save all modified files", action = cmd("wall") },
+      "-",
+      { label = "~C~lose", key = "Alt+F3", hint = "Close the active file", action = function() Snacks.bufdelete() end },
+      { label = "Clos~e~ all", hint = "Close all files", action = function() Snacks.bufdelete.all() end },
+      "-",
+      { label = "E~x~it", key = "Alt+X", hint = "Quit Turbo Vim", action = cmd("confirm qall") },
+    },
   },
   {
     title = "~E~dit",
@@ -198,13 +258,24 @@ M.menus = {
       { label = "~P~aste", key = "Shift+Ins", hint = "Insert the clipboard at the cursor", action = edit('"+p', '"+P') },
       { label = "C~l~ear", key = "Ctrl+Del", hint = "Delete the block (or line) without copying it", action = edit('"_d', '"_dd') },
       "-",
-      { label = "~S~how clipboard", hint = "Browse the registers", action = telescope("registers") },
+      { label = "Clip~b~oard history...", hint = "Browse the registers", action = telescope("registers") },
+      "-",
+      { label = "~F~ormat file", key = "Space c f", hint = "Format with the file type's formatter (conform)",
+        action = function() LazyVim.format({ force = true }) end },
+      { label = "Tr~a~nsform", key = "Space c t", hint = "JSON, URL, HTML and Base64 on the block (or whole file)", items = transforms },
     },
   },
   {
     title = "~S~earch",
     items = {
       { label = "~F~ind...", key = "/", hint = "Search forward in this file", action = feed("/") },
+      { label = "Find ~a~gain", key = "n", hint = "Repeat the last search",
+        action = function()
+          if vim.fn.getreg("/") == "" then
+            return vim.notify("No previous search")
+          end
+          pcall(vim.cmd, "normal! n")
+        end },
       { label = "~R~eplace...", key = "Space s r", hint = "Search and replace (grug-far)",
         action = function(ctx)
           local grug = require("grug-far")
@@ -214,96 +285,92 @@ M.menus = {
             grug.open({ prefills = { search = vim.fn.expand("<cword>") } })
           end
         end },
-      { label = "~S~earch again", key = "n", hint = "Repeat the last search",
-        action = function()
-          if vim.fn.getreg("/") == "" then
-            return vim.notify("No previous search")
-          end
-          pcall(vim.cmd, "normal! n")
-        end },
-      "-",
-      { label = "~G~o to line number...", hint = "Jump to a line in this file",
+      { label = "~G~o to line...", hint = "Jump to a line in this file",
         action = input("Line number: ", nil, nil, function(v) vim.cmd(tostring(tonumber(v) or 1)) end) },
-      { label = "Show ~l~ast compiler error", hint = "Jump to the current compiler message", action = qf("cc") },
-      { label = "Find ~e~rror...", key = "Space s d", hint = "List the diagnostics in this file", action = telescope("diagnostics", { bufnr = 0 }) },
-      { label = "Find ~p~rocedure...", key = "Space s s", hint = "Jump to a symbol in this file", action = telescope("lsp_document_symbols") },
       "-",
-      { label = "Glo~b~als", key = "Space s S", hint = "Symbols across the workspace", action = telescope("lsp_dynamic_workspace_symbols") },
-      { label = "S~y~mbol...", key = "g r", hint = "Find references to the symbol under the cursor", action = telescope("lsp_references") },
+      { label = "Find in f~i~les...", key = "Shift+F2", hint = "Search the project with ripgrep", action = pick("live_grep") },
+    },
+  },
+  {
+    title = "~C~ode",
+    items = {
+      { label = "Go to ~d~efinition", key = "g d", hint = "Jump to where the symbol under the cursor is defined",
+        action = telescope("lsp_definitions") },
+      { label = "~R~eferences", key = "g r", hint = "Every use of the symbol under the cursor", action = telescope("lsp_references") },
+      { label = "~S~ymbols in file...", key = "Space s s", hint = "Jump to a function, type... in this file",
+        action = telescope("lsp_document_symbols") },
+      { label = "Symbols in ~w~orkspace...", key = "Space s S", hint = "Search symbols across the project",
+        action = telescope("lsp_dynamic_workspace_symbols") },
+      "-",
+      { label = "Re~n~ame...", key = "Space c r", hint = "Rename the symbol under the cursor everywhere", action = function() vim.lsp.buf.rename() end },
+      { label = "Code ~a~ction...", key = "Space c a", hint = "Quick fixes and refactorings at the cursor",
+        action = function() vim.lsp.buf.code_action() end },
+      { label = "~F~ix all", key = "Space c F", hint = "Apply the quick fix of every diagnostic in this file",
+        action = function() require("util.lsp").fix_all() end },
+      "-",
+      { label = "~P~roblems", hint = "Diagnostics and compiler messages", items = {
+        { label = "~A~ll files...", key = "Space s d", hint = "Diagnostics in every open file", action = telescope("diagnostics") },
+        { label = "~T~his file...", key = "Space s D", hint = "Diagnostics in this file", action = telescope("diagnostics", { bufnr = 0 }) },
+        "-",
+        { label = "~C~ompiler messages", hint = "The quickfix list, e.g. from Make", action = cmd("copen") },
+        { label = "~N~ext message", key = "Alt+F8", hint = "Next compiler message", action = qf("cnext") },
+        { label = "~P~revious message", key = "Alt+F7", hint = "Previous compiler message", action = qf("cprevious") },
+      } },
+      "-",
+      { label = "~L~anguage servers...", key = "Space c l", hint = "Language servers attached to this file",
+        action = function() Snacks.picker.lsp_config() end },
     },
   },
   {
     title = "~R~un",
     items = {
-      { label = "~R~un", key = "Ctrl+F9", hint = "Start or continue debugging", action = dap("continue") },
-      { label = "~S~tep over", key = "F8", hint = "Execute the next line, stepping over calls", action = dap("step_over") },
-      { label = "~T~race into", key = "F7", hint = "Execute the next line, stepping into calls", action = dap("step_into") },
-      { label = "~G~o to cursor", key = "F4", hint = "Run until the cursor line", action = dap("run_to_cursor") },
-      { label = "~P~rogram reset", key = "Ctrl+F2", hint = "Stop the debug session", action = dap("terminate") },
-    },
-  },
-  {
-    title = "~C~ompile",
-    items = {
       { label = "~M~ake", key = "F9", hint = "Save all and run :make (Rust: cargo build)", action = M.make },
+      "-",
+      { label = "~S~tart / continue", key = "Ctrl+F9", hint = "Start or continue debugging", action = dap("continue") },
+      { label = "Step ~o~ver", key = "F8", hint = "Execute the next line, stepping over calls", action = dap("step_over") },
+      { label = "Step ~i~nto", key = "F7", hint = "Execute the next line, stepping into calls", action = dap("step_into") },
+      { label = "Run to ~c~ursor", key = "F4", hint = "Run until the cursor line", action = dap("run_to_cursor") },
+      { label = "S~t~op", key = "Ctrl+F2", hint = "Stop the debug session", action = dap("terminate") },
     },
   },
   {
     title = "~D~ebug",
     items = {
-      { label = "~B~reakpoints...", hint = "List all breakpoints",
-        action = function() require("dap").list_breakpoints() vim.cmd("copen") end },
-      { label = "~C~all stack", key = "Ctrl+F3", hint = "Show the call stack", action = dapui_float("stacks") },
-      { label = "~W~atch", hint = "Show the watches", action = dapui_float("watches") },
-      { label = "~O~utput", hint = "Show the program output", action = dapui_float("console") },
-      { label = "~U~ser screen", key = "Alt+F5", hint = "Toggle the debugger panels", action = function() dapui().toggle() end },
-      "-",
-      { label = "~E~valuate/modify...", key = "Ctrl+F4", hint = "Evaluate the expression under the cursor",
-        action = function() dapui().eval(nil, { enter = true }) end },
+      { label = "~B~reakpoints", hint = "Set, clear and list breakpoints", items = {
+        { label = "~T~oggle", key = "Ctrl+F8", hint = "Set or clear a breakpoint on this line", action = dap("toggle_breakpoint") },
+        { label = "~C~onditional...", hint = "Add a conditional breakpoint on this line",
+          action = input("Condition: ", nil, nil, function(v) require("dap").set_breakpoint(v) end) },
+        { label = "~L~ist all", hint = "All breakpoints, in the quickfix list",
+          action = function() require("dap").list_breakpoints() vim.cmd("copen") end },
+      } },
+      { label = "~W~atches", hint = "Show the watches", action = dapui_float("watches") },
       { label = "~A~dd watch...", key = "Ctrl+F7", hint = "Watch an expression",
         action = input("Add watch: ", function() return vim.fn.expand("<cword>") end, nil, function(v) dapui().elements.watches.add(v) end) },
-      { label = "Add brea~k~point...", hint = "Add a conditional breakpoint on this line",
-        action = input("Condition: ", nil, nil, function(v) require("dap").set_breakpoint(v) end) },
+      { label = "~C~all stack", key = "Ctrl+F3", hint = "Show the call stack", action = dapui_float("stacks") },
+      { label = "~O~utput", hint = "Show the program output", action = dapui_float("console") },
+      { label = "Debugger ~p~anels", key = "Alt+F5", hint = "Show or hide the debugger panels", action = function() dapui().toggle() end },
+      "-",
+      { label = "~E~valuate...", key = "Ctrl+F4", hint = "Evaluate the expression under the cursor",
+        action = function() dapui().eval(nil, { enter = true }) end },
     },
   },
+  { title = "~A~I", items = M.ai },
   {
     title = "~T~ools",
     items = {
-      { label = "~M~essages", hint = "Open the quickfix list", action = cmd("copen") },
-      { label = "Go to ~n~ext", key = "Alt+F8", hint = "Next compiler message", action = qf("cnext") },
-      { label = "Go to ~p~revious", key = "Alt+F7", hint = "Previous compiler message", action = qf("cprevious") },
-      "-",
-      { label = "~G~rep", key = "Shift+F2", hint = "Search the project with ripgrep", action = pick("live_grep") },
-      -- transfer items (TP's Options > Tools), as cascading submenus
-      "-",
+      { label = "~G~it", hint = "Lazygit, log, diff and blame", items = M.git },
       { label = "~D~ocker", hint = "Docker explorer, logs and Lazydocker", items = M.docker },
-      { label = "~A~I", hint = "CodeCompanion chat and inline edits, Minuet ghost text", items = M.ai },
       { label = "Data~b~ase", hint = "Dadbod database UI and queries", items = M.db },
-    },
-  },
-  {
-    title = "~O~ptions",
-    items = {
-      { label = "~C~ompiler...", hint = "Language servers attached to this file", action = function() Snacks.picker.lsp_config() end },
-      { label = "~D~irectories...", key = "Space f c", hint = "Browse the Turbo Vim config directory",
-        action = pick("files", { cwd = vim.fn.stdpath("config") }) },
-      { label = "~T~ools...", hint = "Language servers, debuggers and formatters (:Mason)", action = cmd("Mason") },
-      { label = "~E~nvironment...", hint = "Browse and change editor options", action = telescope("vim_options") },
-      "-",
-      { label = "~O~pen...", key = "Space q S", hint = "Restore a saved session", action = function() require("persistence").select() end },
     },
   },
   {
     title = "~W~indow",
     items = {
       { label = "~T~ile", key = "Ctrl+W =", hint = "Make all windows the same size", action = cmd("wincmd =") },
-      { label = "Cl~o~se all", hint = "Close all files", action = function() Snacks.bufdelete.all() end },
-      "-",
       { label = "~Z~oom", key = "F5", hint = "Maximise the active window", action = function() Snacks.zen.zoom() end },
+      "-",
       { label = "~N~ext", key = "F6", hint = "Go to the next window", action = cmd("wincmd w") },
       { label = "~P~revious", key = "Shift+F6", hint = "Go to the previous window", action = cmd("wincmd W") },
-      { label = "~C~lose", key = "Alt+F3", hint = "Close the active file", action = function() Snacks.bufdelete() end },
-      "-",
       { label = "~L~ist...", key = "Alt+0", hint = "Pick an open file", action = telescope("buffers", { sort_mru = true }) },
     },
   },
@@ -314,15 +381,14 @@ M.menus = {
       { label = "~I~ndex", key = "Shift+F1", hint = "Search all help topics", action = telescope("help_tags") },
       { label = "~T~opic search", key = "Ctrl+F1", hint = "Help for the word under the cursor",
         action = function() pcall(vim.cmd.help, vim.fn.expand("<cword>")) end },
-      { label = "~U~sing help", hint = "How to use the help", action = cmd("help help") },
-      { label = "~E~rror messages", hint = "Neovim error messages", action = cmd("help error-messages") },
+      { label = "~K~eyboard shortcuts...", key = "Space s k", hint = "Search every key mapping", action = telescope("keymaps") },
       "-",
       { label = "~A~bout...", hint = "Show version and copyright information", action = chrome.about },
     },
   },
 }
 
--- TP's edit-window local menu (Alt+F10 / right click)
+-- the edit window's local menu (Alt+F10 / right click)
 M.local_menu = {
   { label = "~V~iew / Edit markdown", key = "Space u m", hint = "Switch between the rendered view and the source",
     when = function() return vim.bo.filetype == "markdown" end,

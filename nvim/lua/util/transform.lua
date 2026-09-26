@@ -4,7 +4,7 @@ local M = {}
 
 local py = [[python3 -c "import sys,%s;print(%s(sys.stdin.read()%s),end='')"]]
 
-local transformations = {
+M.transformations = {
   { name = "JSON Prettify", cmd = "jq ." },
   { name = "JSON Minify", cmd = "jq -c ." },
   { name = "JSON Escape", cmd = "jq -Rs ." },
@@ -63,7 +63,7 @@ function M.pick()
     -- leave visual mode so the '< and '> marks are set
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", false)
   end
-  vim.ui.select(transformations, {
+  vim.ui.select(M.transformations, {
     prompt = "Transform",
     format_item = function(t) return t.name end,
   }, function(choice)
@@ -71,6 +71,16 @@ function M.pick()
       apply(choice.cmd, mode)
     end
   end)
+end
+
+-- one transformation by name, on the selection when `visual`, else the
+-- whole buffer (for the Edit > Transform menu, which has left Visual mode)
+function M.run(name, visual)
+  for _, t in ipairs(M.transformations) do
+    if t.name == name then
+      return apply(t.cmd, visual and "v" or "n")
+    end
+  end
 end
 
 return M
