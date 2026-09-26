@@ -10,29 +10,24 @@ installed automatically by `lazy.nvim` (plugins) or
 - **git** — plugin management, gitsigns, telescope
 - **ripgrep** (`rg`) — `Telescope live_grep` / `grep_string`
 - **make** + a C compiler (`gcc`/`cc`) — builds `telescope-fzf-native.nvim`
-- **A Nerd Font** — statusline/dashboard/oil icons (e.g. `Terminess Nerd Font`,
-  set in `lua/config/options.lua`)
+- **A Nerd Font** — statusline/dashboard/explorer icons (e.g. `Terminess Nerd
+  Font`, set in `lua/config/options.lua`)
+- **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
+  opens it for containers/images/compose stacks. Installed by `make deps`.
 
 ## AI (`lua/plugins/ai.lua`)
 
 - **curl** — queries the local Ollama API
 - **[Ollama](https://ollama.com)** running at `localhost:11434` with at least
-  one model pulled, for the `ollama` CodeCompanion adapter and for Minuet's
-  inline ghost-text suggestions (`milanglacier/minuet-ai.nvim`, `<A-A>` to
-  accept, auto-triggered while typing in code filetypes)
+  one model pulled — powers the `ollama` CodeCompanion adapter and Minuet's
+  inline ghost-text suggestions (`<A-A>` to accept)
 - **GitHub Copilot** subscription — run `:Copilot auth` once to authenticate;
   used by the `copilot` CodeCompanion adapter
 
 ## SDL game dev (`lua/plugins/lsp.lua`)
 
-- **pkg-config** — `<leader>rr` (in a `c`/`cpp` buffer) detects the SDL
-  major version and any companion libs (`*_image`, `*_ttf`, `*_mixer`) from
-  the current file's `#include`s, then compiles and runs it via `cc`/`c++`
-  and `pkg-config --cflags/--libs`. Meant for quick single-file experiments;
-  real projects should use their own build system instead.
-- clangd is given a fallback `-I` flag for SDL2's classic `#include <SDL.h>`
-  style (SDL3's `#include <SDL3/SDL.h>` already resolves without one) - only
-  applies to files with no `compile_commands.json`.
+- **pkg-config** — used by `<leader>rr` to build and run the current SDL
+  C/C++ file
 
 ## Text transforms (`lua/plugins/transform.lua`)
 
@@ -53,9 +48,12 @@ Not managed by Mason; install via the language's own tooling:
 ## Mason-managed (auto-installed, see `lua/plugins/lsp.lua`)
 
 LSP servers, DAP adapters, and formatters: `roslyn`, `netcoredbg`, `codelldb`,
-`clangd`, `js-debug-adapter`, `rust-analyzer`, `helm-ls`, `prettier`, `black`,
-`isort`, `clang-format`, `goimports`, `csharpier`, plus `stylua` and `shfmt`
-(installed manually/via `:Mason` if missing).
+`clangd`, `js-debug-adapter`, `rust-analyzer`, `helm-ls`, `docker-language-server`,
+`prettier`, `black`, `isort`, `clang-format`, `goimports`, `csharpier`, plus
+`stylua` and `shfmt` (installed manually/via `:Mason` if missing).
+
+`docker-language-server` needs the `yaml.docker-compose` filetype to attach
+to compose files (mapped in `lua/config/autocmds.lua`).
 
 ## Optional
 

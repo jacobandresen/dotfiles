@@ -6,9 +6,10 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ## Ollama
 
-CodeCompanion's `ollama` adapter (`lua/plugins/ai.lua`) talks to a local Ollama
-at `localhost:11434` and auto-detects **whichever model is currently loaded** —
-it pins nothing. `make use-model MODEL=<tag>` in the repo root switches it, pi
+CodeCompanion's `ollama` adapter and Minuet's inline suggestions
+(`lua/plugins/ai.lua`, sharing `lua/util/ollama.lua`) talk to a local Ollama at
+`localhost:11434` and auto-detect **whichever model is currently loaded** —
+neither pins one. `make use-model MODEL=<tag>` in the repo root switches it, pi
 and the mu agent together; `ga` in the chat buffer swaps to GitHub Copilot.
 
 Offload to Ollama when the task is repetitive or mechanical **and the output is

@@ -59,6 +59,20 @@ return {
     end,
   },
 
+  -- sign-column wand: shows when a quickfix is available at the cursor,
+  -- matching what <leader>cF (autocmds.lua) applies in bulk
+  {
+    "kosayoda/nvim-lightbulb",
+    event = "LspAttach",
+    config = function()
+      require("nvim-lightbulb").setup({
+        autocmd = { enabled = true },
+        action_kinds = { "quickfix" },
+        sign = { text = "🪄" },
+      })
+    end,
+  },
+
   -- markdown rendering
   {
     "MeanderingProgrammer/render-markdown.nvim",

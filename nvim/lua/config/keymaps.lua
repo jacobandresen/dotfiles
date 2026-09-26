@@ -19,24 +19,13 @@ map("n", "Y", "^y$")
 map("n", "<C-d>", "<C-d>zzzv")
 map("n", "<C-u>", "<C-u>zzzv")
 
--- file explorer (oil)
-map("n", "<leader>e", "<CMD>Oil<CR>", { desc = "Open Oil" })
-
--- telescope: only what LazyVim's own <leader>f/<leader>s/<leader>g groups
--- don't already cover. Everything else here used to shadow or duplicate an
--- existing LazyVim default (e.g. <leader>fc was "Find Config File", <leader>ft
--- was "Terminal" - now under <leader>sw and <leader>uC respectively):
---   grep            -> <leader>sg or <leader>/
---   grep word       -> <leader>sw
---   buffers         -> <leader>fb (already better: MRU-sorted)
---   help tags       -> <leader>sh
---   jumplist        -> <leader>sj
---   colorschemes    -> <leader>uC
---   git commits     -> <leader>gc (telescope extra)
---   git status      -> <leader>gs (telescope extra)
---   git branches    -> use Lazygit (<leader>gg) instead
+-- telescope: only deviations from LazyVim's own <leader>f/s/g defaults;
+-- everything else (grep, buffers, help, jumplist, git, etc.) is already covered.
 map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find files (incl. ignored)" })
 map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer lines (exact match)" })
+
+-- lazydocker, same pattern as LazyVim's own <leader>gg (Lazygit)
+map("n", "<leader>gd", function() require("snacks").terminal.open("lazydocker") end, { desc = "Lazydocker" })
 
 -- window resizing
 map("n", "<C-Up>",    "<cmd>resize +2<CR>", { desc = "Increase window height" })

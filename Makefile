@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama install-bonsai use-bonsai use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
@@ -22,7 +22,7 @@ endif
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
-	brew install git neovim
+	brew install git neovim lazydocker
 	brew install --cask ollama font-terminess-ttf-nerd-font
 	@# pi is not a Homebrew formula (that name is unrelated) — it ships as the
 	@# npm package @earendil-works/pi-coding-agent, which is what pi.dev's
@@ -54,9 +54,11 @@ deps-docker-macos:
 	$(MAKE) install-docker
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim
+	sudo pacman -Syu --needed git neovim lazydocker
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
+# lazydocker isn't in apt; the binary release install script puts it in
+# ~/.local/bin, which .zshrc already puts on PATH.
 deps-ubuntu:
 	sudo apt-get update
 	sudo apt-get install -y git curl python3
@@ -69,6 +71,8 @@ deps-ubuntu:
 	@curl -fsSL https://pi.dev/install.sh | bash
 	@echo "Installing Ollama..."
 	@curl -fsSL https://ollama.com/install.sh | sh
+	@echo "Installing lazydocker..."
+	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 deps-debian:
@@ -83,6 +87,8 @@ deps-debian:
 	@curl -fsSL https://pi.dev/install.sh | bash
 	@echo "Installing Ollama..."
 	@curl -fsSL https://ollama.com/install.sh | sh
+	@echo "Installing lazydocker..."
+	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 install-nvim:
@@ -170,31 +176,25 @@ ifeq ($(OS),Darwin)
 	@./scripts/install-ollama-macos.sh
 else ifeq ($(OS),Linux)
 	@echo "Installing Ollama systemd overrides..."
-	@profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
+	@set -e; \
+	profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
 	echo "  → detected RAM profile: $$profile"; \
 	sudo mkdir -p /etc/systemd/system/ollama.service.d; \
 	sudo cp $(CURDIR)/ollama/ollama.service.d/override-$$profile.conf /etc/systemd/system/ollama.service.d/override.conf; \
+	sed -e "s|__USER__|$$(id -un)|" -e "s|__REPO_DIR__|$(CURDIR)|" \
+		$(CURDIR)/ollama/ollama-warm-model.service | sudo tee /etc/systemd/system/ollama-warm-model.service >/dev/null; \
 	sudo systemctl daemon-reload; \
 	sudo systemctl restart ollama; \
-	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"
+	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"; \
+	echo "  ✓ ollama-warm-model.service installed - loads $$($(CURDIR)/scripts/select-coding-model.sh) whenever ollama (re)starts"
 else
 	@echo "  ⚠ skipping Ollama tuning (unsupported OS: $(OS))"
 endif
-
-# Opt-in: PrismML's Bonsai 27B, a 1-bit (3.8GB) compression of Qwen3.6-27B.
-# Deliberately not part of 'make install' — it is a 4.4GB download and, on the
-# 8gb profile, it crowds out everything else while loaded. See the script
-# header for why the default build drops the vision projector.
-install-bonsai:
-	@./scripts/install-bonsai.sh
 
 # Point pi, nvim's CodeCompanion adapter and the mu agent at one model — all
 # three resolve "whichever model Ollama currently has loaded", so this loads
 # it and re-runs setup-host.sh. 'use-model' takes MODEL=<tag>; bare
 # 'use-model' falls back to this host's selection.
-use-bonsai:
-	@./scripts/use-model.sh bonsai-27b
-
 use-model:
 	@./scripts/use-model.sh $(MODEL)
 

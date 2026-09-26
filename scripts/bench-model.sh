@@ -72,7 +72,7 @@ PROMPTS=(
 
 swap_used_mb() { sysctl -n vm.swapusage 2>/dev/null | awk '{print $6}' | tr -d 'M' || echo 0; }
 
-# `ollama list` always prints a tag, so a bare name like "bonsai-27b" (as
+# `ollama list` always prints a tag, so a bare name like "my-model" (as
 # `ollama create` leaves it) never matches it literally. Normalise to
 # name:latest before comparing, or locally-built models look un-pulled and
 # we try — and fail — to pull them from a registry.

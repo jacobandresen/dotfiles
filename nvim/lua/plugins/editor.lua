@@ -1,38 +1,6 @@
 return {
-  -- file explorer
-  {
-    "stevearc/oil.nvim",
-    lazy = false,
-    dependencies = { { "nvim-mini/mini.icons", opts = {} } },
-    config = function()
-      require("oil").setup({
-        view_options = {
-          show_hidden = true,
-          is_hidden_file = function() return false end,
-          is_always_hidden = function() return false end,
-        },
-        keymaps = {
-          ["gy"] = {
-            callback = function()
-              local oil = require("oil")
-              local entry = oil.get_cursor_entry()
-              local dir = oil.get_current_dir()
-              if entry and dir then
-                local path = dir .. entry.name
-                vim.fn.setreg("+", path)
-                vim.notify("Copied: " .. path)
-              end
-            end,
-            desc = "Copy absolute path",
-          },
-        },
-        use_default_keymaps = true,
-        skip_confirm_for_simple_edits = false,
-      })
-    end,
-  },
-
-  -- disable neo-tree since we use oil
+  -- disable neo-tree: use the Snacks explorer instead (enabled via the
+  -- snacks_explorer extra in lazyvim.json, <leader>e)
   { "nvim-neo-tree/neo-tree.nvim", enabled = false },
 
   -- tmux/nvim split navigation
@@ -190,7 +158,6 @@ return {
           "mason",
           "notify",
           "toggleterm",
-          "oil",
           "TelescopePrompt",
           "TelescopeResults",
         },

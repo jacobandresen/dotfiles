@@ -1,6 +1,5 @@
--- classic `#include <SDL.h>` style needs an explicit -I into SDL2's include
--- dir; SDL3's `#include <SDL3/SDL.h>` already resolves via the default
--- include path. Only matters for ad-hoc files with no compile_commands.json.
+-- classic `#include <SDL.h>` needs an explicit -I into SDL2's headers; SDL3
+-- resolves via the default path. Only matters with no compile_commands.json.
 local function clangd_fallback_flags()
   local extra = {}
   for _, dir in ipairs({ "/usr/include/SDL2", "/usr/local/include/SDL2", "/opt/homebrew/include/SDL2" }) do
@@ -13,10 +12,8 @@ local function clangd_fallback_flags()
 end
 
 -- SDL build & run: <leader>rr compiles the current C/C++ file against
--- whichever SDL major version (and companion libs) its #include lines
--- reference, then runs the resulting binary in a terminal split. Meant for
--- quick single-file experiments; real projects should use their own build
--- system and compile_commands.json instead.
+-- whichever SDL version it #includes, then runs the binary in a terminal.
+-- For quick experiments; real projects should use their own build system.
 local function sdl_run()
   local bufnr = vim.api.nvim_get_current_buf()
   local file = vim.api.nvim_buf_get_name(bufnr)
@@ -110,6 +107,7 @@ return {
         "clang-format",
         "goimports",
         "csharpier",
+        "docker-language-server",
       },
       auto_update = false,
       run_on_start = true,
@@ -128,7 +126,10 @@ return {
     opts = {
       servers = {
         clangd = {
-          cmd = { "clangd", "--offset-encoding=utf-16" },
+          -- header-insertion=iwyu is already clangd's default; pinned here
+          -- so it's documented. Only fires on completion accept, not for an
+          -- identifier already typed - clangd has no code action for that.
+          cmd = { "clangd", "--offset-encoding=utf-16", "--header-insertion=iwyu" },
           init_options = {
             fallbackFlags = clangd_fallback_flags(),
           },
@@ -140,6 +141,9 @@ return {
             },
           },
         },
+        -- Dockerfile, docker-compose.yml/compose.yaml (see the
+        -- "yaml.docker-compose" filetype in autocmds.lua) and Bake files.
+        docker_language_server = {},
       },
     },
   },

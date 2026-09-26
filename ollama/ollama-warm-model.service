@@ -1,0 +1,15 @@
+[Unit]
+# Pulled in by Wants= on ollama.service's own drop-in, so this fires on
+# every (re)start, not just at enable time - After=/Requires= alone won't.
+Description=Load the dotfiles-selected coding model into Ollama
+After=ollama.service
+Requires=ollama.service
+PartOf=ollama.service
+
+[Service]
+Type=oneshot
+User=__USER__
+# use-model.sh pulls the model if missing and loads it - a first pull needs
+# more than systemd's default 90s start timeout.
+TimeoutStartSec=1800
+ExecStart=__REPO_DIR__/scripts/use-model.sh

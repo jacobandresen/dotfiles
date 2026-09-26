@@ -13,7 +13,6 @@
   ],
   "enableSkillCommands": true,
   "httpIdleTimeoutMs": 0,
-  "lastChangelogVersion": "0.80.0",
   "packages": [
     "npm:@ollama/pi-web-search"
   ],

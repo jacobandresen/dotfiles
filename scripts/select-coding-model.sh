@@ -93,6 +93,12 @@ if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
 	# The 100MB the 3.5 adds is enough to miss the wirable budget: it spills
 	# 21% of its layers to CPU and pulls in swap, which halves the prompt
 	# rate and triples load time. Same reason the 7b was rejected before it.
+	#
+	# CAUTION (2026-09-26): on Linux, this exact qwen3:4b tag was found to
+	# ignore Ollama's `think:false` entirely, breaking CodeCompanion's
+	# inline edit in nvim (see the Linux 16gb note below). Not re-verified
+	# on Apple silicon - if inline edits fail here too, try qwen3.5:4b
+	# despite the swap cost above, or DOTFILES_CODING_MODEL=qwen3.5:4b.
 	echo "qwen3:4b"
 elif [ "$(uname -s)" = "Darwin" ]; then
 	# Intel Mac: CPU-bound at every size, so take the smallest tag that
@@ -103,9 +109,28 @@ else
 	# system RAM, so the same nominal RAM tier can carry a larger model.
 	case "$PROFILE" in
 		32gb) echo "qwen3-coder:30b" ;;
-		16gb) echo "qwen3:8b" ;;
-		# Was qwen2.5-coder:3b, then llama3.1:8b. Both failed
-		# verify-agent-model.sh for different reasons.
-		*) echo "qwen3:4b" ;;
+		# 16gb and below: qwen3.5:4b, not qwen3:4b - decided 2026-09-26.
+		# qwen3:4b ignores Ollama's `think:false` outright (confirmed via
+		# /api/chat: reasons at length regardless, hits num_predict before
+		# ever emitting an answer), which broke CodeCompanion's inline edit
+		# in nvim - it needs strict, complete JSON back and got truncated
+		# chain-of-thought instead. qwen3.5:4b honors `think:false` (clean,
+		# `done_reason: stop`) and still passes verify-agent-model.sh.
+		# Same num_ctx=2048/num_predict=512/no-thinking, warm requests:
+		#
+		#              TOK/S  DONE
+		#   qwen3:4b       -  length (never finishes; unusable here)
+		#   qwen3.5:4b  60-69  stop
+		#
+		# OLLAMA_MAX_LOADED_MODELS=1 means pi/mu/nvim share one resident
+		# model. Override with `make use-model MODEL=<tag>` or
+		# DOTFILES_CODING_MODEL.
+		#
+		# qwen3:4b is still used on the macOS tiers below for fit reasons
+		# (see that note) - unverified there, but likely the same bug.
+		#
+		# Below this tier: qwen2.5-coder:3b, then llama3.1:8b both failed
+		# verify-agent-model.sh.
+		*) echo "qwen3.5:4b" ;;
 	esac
 fi

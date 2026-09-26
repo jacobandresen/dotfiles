@@ -9,7 +9,7 @@
 # tell pi this one was deliberate.
 #
 #   ./use-model.sh              # this host's selected model (see select-coding-model.sh)
-#   ./use-model.sh bonsai-27b   # the 1-bit 27B build from install-bonsai.sh
+#   ./use-model.sh qwen3:8b     # a specific tag
 #
 # Loads with a long keep-alive so the model stays resident across a work
 # session; the profile's own OLLAMA_KEEP_ALIVE takes over once it expires.
@@ -46,10 +46,6 @@ echo "  ✓ Ollama responding at $API"
 
 if ollama_has "$MODEL"; then
 	echo "  ✓ $MODEL is present"
-elif [ "$MODEL" = "bonsai-27b" ]; then
-	# Bonsai isn't a registry pull — it's built locally from the HF weights.
-	echo "  → $MODEL not built yet; running install-bonsai.sh"
-	"$SCRIPT_DIR/install-bonsai.sh"
 else
 	echo "  ↓ pulling $MODEL..."
 	ollama pull "$MODEL"

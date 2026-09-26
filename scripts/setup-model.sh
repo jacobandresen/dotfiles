@@ -77,7 +77,7 @@ if [ -z "$MODEL_NAME" ]; then
     MODEL_NAME="$("$SCRIPT_DIR/select-coding-model.sh")"
 fi
 
-# `ollama list` always prints a tag, so a bare name like "bonsai-27b" (as
+# `ollama list` always prints a tag, so a bare name like "my-model" (as
 # `ollama create` leaves it) never matches it literally. Normalise to
 # name:latest before comparing, or locally-built models look un-pulled and
 # we try — and fail — to pull them from a registry.

@@ -38,6 +38,26 @@ return {
                 },
               })
             end,
+            -- <leader>ai: small context, capped output, no thinking, kept
+            -- resident longer. Chat keeps the unrestricted "ollama" adapter.
+            ollama_fast = function()
+              return require("codecompanion.adapters").extend("ollama", {
+                schema = {
+                  model = { default = ollama_model() },
+                  num_ctx = { default = 2048 },
+                  think = { default = false },
+                  keep_alive = { default = "30m" },
+                  num_predict = {
+                    order = 13,
+                    mapping = "parameters.options",
+                    type = "number",
+                    optional = true,
+                    default = 512,
+                    desc = "Cap response length for fast inline edits.",
+                  },
+                },
+              })
+            end,
             copilot = "copilot",
           },
         },
@@ -47,10 +67,8 @@ return {
             -- narrower, sidebar-like panel, closer to VS Code's Copilot Chat
             window = { width = 0.35 },
             keymaps = {
-              -- Copilot Chat's "+" attach-context button: one key, fuzzy list
-              -- of every context type (#buffer, #selection, #diagnostics...)
-              -- and slash command (/file, /symbols...) instead of memorising
-              -- the `#`/`/` syntax.
+              -- Copilot Chat's "+" attach-context button: fuzzy list of
+              -- every context type and slash command, no # / syntax to recall.
               add_context = {
                 modes = { n = "<C-g>", i = "<C-g>" },
                 callback = function(chat) require("codecompanion.interactions.chat.action_palette").launch(chat) end,
@@ -59,18 +77,127 @@ return {
               },
             },
           },
-          inline = { adapter = "ollama" },
+          inline = { adapter = "ollama_fast" },
         },
+        -- <leader>aa -> "New SDL3 Example": asks what to demonstrate, writes
+        -- a complete single-file SDL3 program using the callback-based app
+        -- model (SDL_AppInit/AppIterate/AppEvent/AppQuit - SDL3's replacement
+        -- for a hand-written main loop), into a fresh .c file. <leader>rr
+        -- (lsp.lua) then builds and runs it - it already detects "sdl3" from
+        -- the #include lines this prompt is told to use.
+        --
+        -- The exact callback signatures are spelled out below rather than
+        -- left to the model's memory: SDL3's callback model is a newer API
+        -- a small/older-trained model is prone to getting wrong or blending
+        -- with the classic SDL2 main-loop style.
+        prompt_library = {
+          ["New SDL3 Example"] = {
+            interaction = "inline",
+            description = "Generate a minimal, runnable SDL3 example",
+            opts = {
+              alias = "sdl3",
+              placement = "new",
+              user_prompt = true,
+              pre_hook = function()
+                local bufnr = vim.api.nvim_create_buf(true, false)
+                vim.api.nvim_buf_set_name(bufnr, vim.fn.tempname() .. ".c")
+                vim.api.nvim_set_current_buf(bufnr)
+                vim.bo[bufnr].filetype = "c"
+                return bufnr
+              end,
+            },
+            prompts = {
+              {
+                role = "system",
+                content = [[Write a minimal, complete, compilable SDL3 example in C.
+
+Use SDL3's callback-based application model, not a hand-written main/while
+loop. Follow this exact skeleton:
+
+#define SDL_MAIN_USE_CALLBACKS
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
+
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv);
+SDL_AppResult SDL_AppIterate(void *appstate);
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event);
+void SDL_AppQuit(void *appstate, SDL_AppResult result);
+
+Rules:
+- SDL_AppInit does one-time setup (e.g. SDL_CreateWindowAndRenderer) and
+  returns SDL_APP_CONTINUE, or SDL_APP_FAILURE if setup failed.
+- Allocate any state (window, renderer, etc.) in SDL_AppInit and store it via
+  *appstate; every other callback receives it back as appstate, cast it back.
+  Do not use global variables for state.
+- SDL_AppEvent returns SDL_APP_SUCCESS when event->type == SDL_EVENT_QUIT,
+  otherwise SDL_APP_CONTINUE.
+- SDL_AppIterate renders one frame and returns SDL_APP_CONTINUE.
+- SDL_AppQuit frees whatever was allocated in SDL_AppInit.
+- Use only APIs that exist in SDL3. Do not use SDL2 names (SDL_CreateWindow's
+  SDL2 signature, SDL_Init returning int, SDL_QUIT instead of
+  SDL_EVENT_QUIT, etc).
+- Return only the C source code. No explanation, no markdown fences.]],
+              },
+            },
+          },
+        },
+      })
+
+      -- <leader>ai edits silently in the background with no streaming
+      -- buffer to watch (unlike chat) - show a fidget spinner instead.
+      -- One inline edit can fire more than one underlying HTTP request
+      -- (e.g. a placement/classification pass before the content one), so
+      -- track an in-flight count rather than pairing by request id - and
+      -- auto-clear after 60s so a missed/failed finish can't wedge it open.
+      local inline_count = 0
+      local inline_handle = nil
+      local inline_timer = nil
+      local function inline_stop()
+        inline_count = 0
+        if inline_timer then
+          inline_timer:stop()
+          inline_timer:close()
+          inline_timer = nil
+        end
+        if inline_handle then
+          inline_handle:finish()
+          inline_handle = nil
+        end
+      end
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "CodeCompanionInlineStarted",
+        callback = function()
+          inline_count = inline_count + 1
+          if not inline_handle then
+            inline_handle = require("fidget.progress").handle.create({
+              title = "Inline edit",
+              message = "Thinking...",
+              lsp_client = { name = "CodeCompanion" },
+            })
+            inline_timer = vim.uv.new_timer()
+            inline_timer:start(60000, 0, vim.schedule_wrap(inline_stop))
+          end
+        end,
+      })
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "CodeCompanionRequestFinished",
+        callback = function(args)
+          if inline_count == 0 or args.data.interaction ~= "inline" then
+            return
+          end
+          inline_count = inline_count - 1
+          if inline_count == 0 then
+            inline_stop()
+          end
+        end,
       })
     end,
   },
 
   {
-    -- Copilot-style ghost-text suggestions, powered by the local Ollama model.
-    -- Uses the chat-completions endpoint (not FIM) so it works with whichever
-    -- general instruct model happens to be loaded, not just FIM-trained
-    -- coder models - see the "openai_compatible" vs "openai_fim_compatible"
-    -- trade-off in the plugin's README.
+    -- Copilot-style ghost-text via local Ollama. Chat-completions (not FIM)
+    -- so it works with any loaded model, not just FIM-trained coder models -
+    -- see openai_compatible vs openai_fim_compatible in the plugin's README.
     "milanglacier/minuet-ai.nvim",
     event = "InsertEnter",
     config = function()

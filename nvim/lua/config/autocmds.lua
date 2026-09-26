@@ -1,6 +1,21 @@
 -- treat .jsonl as json
 vim.filetype.add({ extension = { jsonl = "json" } })
 
+-- docker-compose.yml/compose.yaml as their own filetype (Neovim defaults to
+-- plain "yaml") so docker_language_server (lsp.lua) attaches.
+vim.filetype.add({
+  filename = {
+    ["docker-compose.yml"] = "yaml.docker-compose",
+    ["docker-compose.yaml"] = "yaml.docker-compose",
+    ["compose.yml"] = "yaml.docker-compose",
+    ["compose.yaml"] = "yaml.docker-compose",
+  },
+  pattern = {
+    [".*/docker%-compose%.[%w.-]+%.ya?ml"] = "yaml.docker-compose",
+    [".*/compose%.[%w.-]+%.ya?ml"] = "yaml.docker-compose",
+  },
+})
+
 -- silently update plugins on startup (no notification, no UI window)
 vim.api.nvim_create_autocmd("User", {
   pattern = "VeryLazy",
@@ -55,10 +70,9 @@ vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   end,
 })
 
--- autofix every quickfix-able diagnostic in the buffer, bottom-to-top so an
--- applied edit can't shift the position of a diagnostic not yet processed.
--- Best-effort: takes the first quickfix action offered for each diagnostic
--- rather than prompting, since prompting per-diagnostic defeats the point.
+-- autofix every quickfix-able diagnostic, bottom-to-top so an applied edit
+-- can't shift a not-yet-processed one. Best-effort: takes the first action
+-- offered per diagnostic rather than prompting.
 local function fix_all_diagnostics()
   local bufnr = vim.api.nvim_get_current_buf()
   local clients = vim.lsp.get_clients({ bufnr = bufnr, method = "textDocument/codeAction" })
