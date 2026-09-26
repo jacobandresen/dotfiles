@@ -3,22 +3,17 @@ return {
   -- snacks_explorer extra in lazyvim.json, <leader>e)
   { "nvim-neo-tree/neo-tree.nvim", enabled = false },
 
-  -- tmux/nvim split navigation
+  -- tmux/nvim split navigation. Mapped via `keys` so LazyVim's own
+  -- <C-h/j/k/l> window maps step aside (they'd otherwise override these).
   {
     "alexghergh/nvim-tmux-navigation",
-    config = function()
-      require("nvim-tmux-navigation").setup({
-        disable_when_zoomed = true,
-        keybindings = {
-          left = "<C-h>",
-          down = "<C-j>",
-          up = "<C-k>",
-          right = "<C-l>",
-          last_active = "<C-b>",
-          next = "<C-n>",
-        },
-      })
-    end,
+    opts = { disable_when_zoomed = true },
+    keys = {
+      { "<C-h>", "<cmd>NvimTmuxNavigateLeft<cr>", desc = "Go to Left Window/Pane" },
+      { "<C-j>", "<cmd>NvimTmuxNavigateDown<cr>", desc = "Go to Lower Window/Pane" },
+      { "<C-k>", "<cmd>NvimTmuxNavigateUp<cr>", desc = "Go to Upper Window/Pane" },
+      { "<C-l>", "<cmd>NvimTmuxNavigateRight<cr>", desc = "Go to Right Window/Pane" },
+    },
   },
 
   -- folding
@@ -63,37 +58,49 @@ return {
         close_fold_kinds_for_ft = { default = { "imports", "comments" } },
       })
 
-      vim.keymap.set("n", "zR", ufo.openAllFolds)
-      vim.keymap.set("n", "zM", ufo.closeAllFolds)
-      vim.keymap.set("n", "zr", ufo.openFoldsExceptKinds)
-      vim.keymap.set("n", "zm", ufo.closeFoldsWith)
-      vim.keymap.set("n", "K", function()
-        local winid = ufo.peekFoldedLinesUnderCursor()
-        if not winid then
-          vim.lsp.buf.hover()
-        end
-      end)
+      vim.keymap.set("n", "zR", ufo.openAllFolds, { desc = "Open All Folds" })
+      vim.keymap.set("n", "zM", ufo.closeAllFolds, { desc = "Close All Folds" })
+      vim.keymap.set("n", "zr", ufo.openFoldsExceptKinds, { desc = "Open Folds (except imports/comments)" })
+      vim.keymap.set("n", "zm", ufo.closeFoldsWith, { desc = "Close Folds With Level" })
     end,
   },
 
-  -- telescope config
+  -- K peeks a closed fold, otherwise hovers. Must go through LazyVim's LSP
+  -- keys: a plain keymap would be shadowed by its buffer-local K on attach.
+  {
+    "neovim/nvim-lspconfig",
+    opts = {
+      servers = {
+        ["*"] = {
+          keys = {
+            {
+              "K",
+              function()
+                if not require("ufo").peekFoldedLinesUnderCursor() then
+                  vim.lsp.buf.hover()
+                end
+              end,
+              desc = "Peek Fold / Hover",
+            },
+          },
+        },
+      },
+    },
+  },
+
+  -- telescope: `opts` merges into the telescope extra's config (which also
+  -- builds and loads fzf-native); a `config` here would discard its mappings
   {
     "nvim-telescope/telescope.nvim",
-    dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope-fzf-native.nvim" },
-    config = function()
-      require("telescope").setup({
-        defaults = {
-          layout_strategy = "vertical",
-          layout_config = { height = 0.95, width = 0.99 },
-          file_ignore_patterns = { "node_modules/", ".git/", "%.lock" },
-          hidden = true,
-        },
-      })
-      require("telescope").load_extension("fzf")
-    end,
+    opts = {
+      defaults = {
+        layout_strategy = "vertical",
+        layout_config = { height = 0.95, width = 0.99 },
+        file_ignore_patterns = { "node_modules/", "%.git/", "%.lock" },
+        borderchars = { "═", "║", "═", "║", "╔", "╗", "╝", "╚" }, -- Turbo Vision frames
+      },
+    },
   },
-
-  { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
 
   -- formatting with conform.nvim
   -- NOTE: LazyVim owns conform's `config` and drives format-on-save itself, so
@@ -102,8 +109,8 @@ return {
   {
     "stevearc/conform.nvim",
     opts = {
+      -- lua (stylua) and sh (shfmt) are already set by LazyVim
       formatters_by_ft = {
-        lua = { "stylua" },
         javascript = { "prettier" },
         typescript = { "prettier" },
         javascriptreact = { "prettier" },
@@ -118,9 +125,8 @@ return {
         markdown = { "prettier" },
         html = { "prettier" },
         css = { "prettier" },
-        sh = { "shfmt" },
         python = { "black", "isort" },
-        go = { "gofmt", "goimports" },
+        go = { "goimports" }, -- goimports also does gofmt's formatting
       },
       formatters = {
         prettier = {
@@ -133,40 +139,10 @@ return {
     },
   },
 
-  -- indent guides
+  -- indent guides come from snacks.indent (LazyVim default); no scope line
   {
-    "lukas-reineke/indent-blankline.nvim",
-    main = "ibl",
-    event = "BufReadPre",
-    opts = {
-      indent = {
-        char = "│",
-        tab_char = "│",
-      },
-      scope = {
-        enabled = false,
-      },
-      exclude = {
-        filetypes = {
-          "lspinfo",
-          "packer",
-          "checkhealth",
-          "help",
-          "man",
-          "dashboard",
-          "lazy",
-          "mason",
-          "notify",
-          "toggleterm",
-          "TelescopePrompt",
-          "TelescopeResults",
-        },
-        buftypes = {
-          "terminal",
-          "nofile",
-        },
-      },
-    },
+    "folke/snacks.nvim",
+    opts = { indent = { scope = { enabled = false } } },
   },
 
   -- ensure parsers for every language we debug/edit are installed
@@ -181,14 +157,6 @@ return {
   },
 
   -- database support
-  { "tpope/vim-dadbod", lazy = true },
-
-  {
-    "kristijanhusak/vim-dadbod-completion",
-    dependencies = { "tpope/vim-dadbod" },
-    lazy = true,
-  },
-
   {
     "kristijanhusak/vim-dadbod-ui",
     dependencies = {

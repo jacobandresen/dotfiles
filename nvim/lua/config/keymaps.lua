@@ -1,43 +1,38 @@
+-- Only additions/deviations; LazyVim already provides window resize
+-- (<C-arrows>), line moving (<A-j>/<A-k>), and tabs (<leader><tab>...).
 local map = vim.keymap.set
 
 -- delete single character without copying into register
 map("n", "x", '"_x')
 
--- move lines in visual mode (using Alt+J/K to avoid conflict with join)
-map("v", "<M-j>", ":m '>+1<CR>gv=gv", { desc = "Move line down" })
-map("v", "<M-k>", ":m '<-2<CR>gv=gv", { desc = "Move line up" })
-
--- repeat paste in visual mode
+-- paste over a selection without losing the register, so it can be repeated
 map("x", "p", "P")
 
--- center screen on jumps / searches (zzzv opens folds too)
-map("n", "gd", "gdzzzv")
-map("n", "<C-o>", "<C-o>zzzv")
-map("n", "n", "nzzzv")
-map("n", "N", "Nzzzv")
+-- yank to end of line, starting at the first non-blank
 map("n", "Y", "^y$")
+
+-- center screen on jumps/searches (zv opens folds). n/N keep LazyVim's
+-- "n always searches forward" behaviour.
+map("n", "n", "'Nn'[v:searchforward].'zzzv'", { expr = true, desc = "Next Search Result" })
+map("n", "N", "'nN'[v:searchforward].'zzzv'", { expr = true, desc = "Prev Search Result" })
+map("n", "<C-o>", "<C-o>zzzv")
 map("n", "<C-d>", "<C-d>zzzv")
 map("n", "<C-u>", "<C-u>zzzv")
 
--- telescope: only deviations from LazyVim's own <leader>f/s/g defaults;
--- everything else (grep, buffers, help, jumplist, git, etc.) is already covered.
-map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find files (incl. ignored)" })
-map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer lines (exact match)" })
+-- telescope: only deviations from LazyVim's own <leader>f/s defaults
+map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find Files (incl. ignored)" })
+map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer Lines (exact)" })
 
 -- lazydocker, same pattern as LazyVim's own <leader>gg (Lazygit)
-map("n", "<leader>gd", function() require("snacks").terminal.open("lazydocker") end, { desc = "Lazydocker" })
+map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { desc = "Lazydocker" })
 
--- window resizing
-map("n", "<C-Up>",    "<cmd>resize +2<CR>", { desc = "Increase window height" })
-map("n", "<C-Down>",  "<cmd>resize -2<CR>", { desc = "Decrease window height" })
-map("n", "<C-Left>",  "<cmd>vertical resize -2<CR>", { desc = "Decrease window width" })
-map("n", "<C-Right>", "<cmd>vertical resize +2<CR>", { desc = "Increase window width" })
+-- LSP restart next to LazyVim's <leader>cl (Lsp Info)
+map("n", "<leader>cL", "<cmd>lsp restart<cr>", { desc = "Restart LSP" })
 
--- tab navigation
-map("n", "<leader>tn", "<cmd>tabnew<CR>", { desc = "New tab" })
-map("n", "<leader>tk", "<cmd>tabnext<CR>", { desc = "Next tab" })
-map("n", "<leader>tj", "<cmd>tabprevious<CR>", { desc = "Previous tab" })
-map("n", "<leader>tc", "<cmd>tabclose<CR>", { desc = "Close tab" })
+-- text transforms (JSON/URL/HTML/Base64) on the selection or whole buffer
+local transform = require("util.transform")
+map("n", "<leader>ct", transform.pick, { desc = "Transform Buffer" })
+map("x", "<leader>ct", transform.pick, { desc = "Transform Selection" })
 
--- misc
-map("n", "<leader>rs", ":LspRestart<CR>", { desc = "Restart LSP" })
+-- Turbo Pascal 7.0 keys: F10/Alt+letter menus, F2 save, F3 open, F9 make...
+require("turbo").keymaps()

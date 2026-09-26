@@ -1,17 +1,19 @@
 # Dependencies
 
 External tools this config expects on `$PATH`. Anything not listed here is
-installed automatically by `lazy.nvim` (plugins) or
-`mason-tool-installer` (LSP servers, DAP adapters, formatters).
+installed automatically by `lazy.nvim` (plugins) or Mason (LSP servers, DAP
+adapters, formatters).
 
 ## Core
 
-- **Neovim** >= 0.10
+- **Neovim** >= 0.12 (`vim.lsp.config`, `:lsp restart`)
 - **git** — plugin management, gitsigns, telescope
 - **ripgrep** (`rg`) — `Telescope live_grep` / `grep_string`
 - **make** + a C compiler (`gcc`/`cc`) — builds `telescope-fzf-native.nvim`
 - **A Nerd Font** — statusline/dashboard/explorer icons (e.g. `Terminess Nerd
   Font`, set in `lua/config/options.lua`)
+- **A truecolor terminal** (`COLORTERM=truecolor`) — the Turbo Pascal EGA
+  colours in Neovim and the `turbopascal` Midnight Commander skin
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
 
@@ -29,7 +31,11 @@ installed automatically by `lazy.nvim` (plugins) or
 - **pkg-config** — used by `<leader>rr` to build and run the current SDL
   C/C++ file
 
-## Text transforms (`lua/plugins/transform.lua`)
+## Debugging (`lua/plugins/dap.lua`)
+
+- **node** — runs Mason's `js-debug-adapter` for JS/TS debugging
+
+## Text transforms (`lua/util/transform.lua`, `<leader>ct`)
 
 - **jq** — JSON prettify/minify/escape/unescape
 - **python3** — URL/HTML encode/decode
@@ -47,13 +53,19 @@ Not managed by Mason; install via the language's own tooling:
 
 ## Mason-managed (auto-installed, see `lua/plugins/lsp.lua`)
 
-LSP servers, DAP adapters, and formatters: `roslyn`, `netcoredbg`, `codelldb`,
-`clangd`, `js-debug-adapter`, `rust-analyzer`, `helm-ls`, `docker-language-server`,
-`prettier`, `black`, `isort`, `clang-format`, `goimports`, `csharpier`, plus
-`stylua` and `shfmt` (installed manually/via `:Mason` if missing).
+LSP servers configured under `nvim-lspconfig` (`clangd`, `helm-ls`,
+`docker-language-server`, `roslyn-language-server` for C#) are installed by
+LazyVim. The rest are listed in the `mason.nvim` spec: `rust-analyzer` (run by
+rustaceanvim), `netcoredbg`, `codelldb`, `js-debug-adapter`, `prettier`,
+`black`, `isort`, `clang-format`, `goimports`, `csharpier`, plus LazyVim's own
+`stylua` and `shfmt`.
+
+Other servers you install through `:Mason` start automatically, except
+`rust_analyzer`, `omnisharp` and `csharp_ls`, which are disabled so they don't
+duplicate rustaceanvim and Roslyn.
 
 `docker-language-server` needs the `yaml.docker-compose` filetype to attach
-to compose files (mapped in `lua/config/autocmds.lua`).
+to compose files (mapped in `lua/config/options.lua`).
 
 ## Optional
 

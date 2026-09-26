@@ -66,53 +66,34 @@ local function sdl_run()
   vim.list_extend(cmd, pc_flags("--libs"))
 
   local shell_cmd = table.concat(vim.tbl_map(vim.fn.shellescape, cmd), " ") .. " && " .. vim.fn.shellescape(out)
-  require("snacks").terminal.open(shell_cmd, { win = { position = "bottom" } })
+  -- auto_close = false keeps compiler errors and program output on screen
+  require("snacks").terminal.open(shell_cmd, { auto_close = false, win = { position = "bottom" } })
 end
 
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "c", "cpp" },
   callback = function(args)
-    vim.keymap.set("n", "<leader>rr", sdl_run, { buffer = args.buf, desc = "SDL: Build & Run" })
+    vim.keymap.set("n", "<leader>rr", sdl_run, { buffer = args.buf, desc = "SDL Build & Run" })
   end,
 })
 
 return {
-  -- mason: add roslyn registry
+  -- mason: non-LSP tools. LSP servers listed under nvim-lspconfig below are
+  -- installed automatically by LazyVim.
   {
     "mason-org/mason.nvim",
     opts = {
-      registries = {
-        "github:mason-org/mason-registry",
-        "github:Crashdummyy/mason-registry",
-      },
-    },
-  },
-
-  -- ensure tools are installed
-  {
-    "WhoIsSethDaniel/mason-tool-installer.nvim",
-    dependencies = { "mason-org/mason.nvim" },
-    opts = {
       ensure_installed = {
-        "roslyn",
+        "rust-analyzer", -- started by rustaceanvim, not lspconfig
         "netcoredbg",
         "codelldb",
-        "clangd",
         "js-debug-adapter",
-        "rust-analyzer",
-        "helm-ls",
         "prettier",
         "black",
         "isort",
         "clang-format",
         "goimports",
         "csharpier",
-        "docker-language-server",
-      },
-      auto_update = false,
-      run_on_start = true,
-      integrations = {
-        ["mason-lspconfig"] = false,
       },
     },
   },
@@ -120,10 +101,10 @@ return {
   -- helm syntax
   { "towolf/vim-helm", ft = "helm" },
 
-  -- helm LSP config
   {
     "neovim/nvim-lspconfig",
     opts = {
+      diagnostics = { virtual_text = false },
       servers = {
         clangd = {
           -- header-insertion=iwyu is already clangd's default; pinned here
@@ -142,98 +123,56 @@ return {
           },
         },
         -- Dockerfile, docker-compose.yml/compose.yaml (see the
-        -- "yaml.docker-compose" filetype in autocmds.lua) and Bake files.
+        -- "yaml.docker-compose" filetype in options.lua) and Bake files.
         docker_language_server = {},
-      },
-    },
-  },
-
-  -- C# via Roslyn LSP
-  {
-    "seblj/roslyn.nvim",
-    ft = "cs",
-    opts = {
-      silent = true,
-      config = {
-        on_attach = function(client, bufnr)
-          -- keep client aware of semantic token capability
-          client.server_capabilities = vim.tbl_deep_extend("force", client.server_capabilities, {
-            semanticTokensProvider = { full = true },
-          })
-
-          -- roslyn only supports range semantic tokens; patch full→range requests
-          local original_request = client.request
-          client.request = function(method, params, handler, ctx, config)
-            if method == "textDocument/semanticTokens/full" then
-              local target_bufnr = vim.uri_to_bufnr(params.textDocument.uri)
-              if not vim.api.nvim_buf_is_loaded(target_bufnr) then
-                vim.notify("[LSP] Buffer not loaded: " .. params.textDocument.uri, vim.log.levels.WARN)
-                return original_request(method, params, handler, ctx, config)
-              end
-              local line_count = vim.api.nvim_buf_line_count(target_bufnr)
-              local last_line = vim.api.nvim_buf_get_lines(target_bufnr, line_count - 1, line_count, true)[1] or ""
-              local new_params = {
-                textDocument = params.textDocument,
-                range = {
-                  start = { line = 0, character = 0 },
-                  ["end"] = { line = line_count - 1, character = #last_line },
-                },
-              }
-              return original_request("textDocument/semanticTokens/range", new_params, handler, ctx, config)
-            end
-            return original_request(method, params, handler, ctx, config)
-          end
-        end,
-        settings = {
-          ["csharp|inlay_hints"] = {
-            csharp_enable_inlay_hints_for_implicit_object_creation = true,
-            csharp_enable_inlay_hints_for_implicit_variable_types = true,
-            csharp_enable_inlay_hints_for_lambda_parameter_types = true,
-            csharp_enable_inlay_hints_for_types = true,
-            dotnet_enable_inlay_hints_for_indexer_parameters = true,
-            dotnet_enable_inlay_hints_for_literal_parameters = true,
-            dotnet_enable_inlay_hints_for_object_creation_parameters = true,
-            dotnet_enable_inlay_hints_for_other_parameters = true,
-            dotnet_enable_inlay_hints_for_parameters = true,
-            dotnet_suppress_inlay_hints_for_parameters_that_differ_only_by_suffix = true,
-            dotnet_suppress_inlay_hints_for_parameters_that_match_argument_name = true,
-            dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = true,
-          },
-          ["csharp|code_lens"] = {
-            dotnet_enable_references_code_lens = true,
-            dotnet_enable_tests_code_lens = true,
-          },
-          ["csharp|completion"] = {
-            dotnet_show_completion_items_from_unimported_namespaces = true,
-            dotnet_show_name_completion_suggestions = true,
-          },
-          ["csharp|background_analysis"] = {
-            background_analysis_dotnet_compiler_diagnostics_scope = "fullSolution",
-          },
-          ["csharp|symbol_search"] = {
-            dotnet_search_reference_assemblies = true,
+        -- C#: Roslyn (mason package roslyn-language-server)
+        roslyn_ls = {
+          settings = {
+            ["csharp|inlay_hints"] = {
+              csharp_enable_inlay_hints_for_implicit_object_creation = true,
+              csharp_enable_inlay_hints_for_implicit_variable_types = true,
+              csharp_enable_inlay_hints_for_lambda_parameter_types = true,
+              csharp_enable_inlay_hints_for_types = true,
+              dotnet_enable_inlay_hints_for_indexer_parameters = true,
+              dotnet_enable_inlay_hints_for_literal_parameters = true,
+              dotnet_enable_inlay_hints_for_object_creation_parameters = true,
+              dotnet_enable_inlay_hints_for_other_parameters = true,
+              dotnet_enable_inlay_hints_for_parameters = true,
+              dotnet_suppress_inlay_hints_for_parameters_that_differ_only_by_suffix = true,
+              dotnet_suppress_inlay_hints_for_parameters_that_match_argument_name = true,
+              dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = true,
+            },
+            ["csharp|code_lens"] = {
+              dotnet_enable_references_code_lens = true,
+              dotnet_enable_tests_code_lens = true,
+            },
+            ["csharp|completion"] = {
+              dotnet_show_completion_items_from_unimported_namespaces = true,
+              dotnet_show_name_completion_suggestions = true,
+            },
+            ["csharp|background_analysis"] = {
+              background_analysis_dotnet_compiler_diagnostics_scope = "fullSolution",
+            },
+            ["csharp|symbol_search"] = {
+              dotnet_search_reference_assemblies = true,
+            },
           },
         },
+        -- Mason-installed servers that LazyVim would otherwise auto-start next
+        -- to the ones above (rustaceanvim runs rust-analyzer itself), which
+        -- would duplicate every diagnostic
+        rust_analyzer = { enabled = false },
+        omnisharp = { enabled = false },
+        csharp_ls = { enabled = false },
       },
     },
   },
+
 
   -- rustaceanvim: Rust LSP, inlay hints, macro expansion, codelldb DAP
   {
     "mrcjkb/rustaceanvim",
-    version = "^5",
-    ft = { "rust" },
-    keys = {
-      { "<leader>rb", "<cmd>make build<cr>", ft = "rust", desc = "Cargo build" },
-    },
-    init = function()
-      vim.api.nvim_create_autocmd("FileType", {
-        pattern = "rust",
-        callback = function()
-          vim.bo.makeprg = "cargo"
-        end,
-      })
-    end,
+    ft = { "rust" }, -- build with F9 / Compile > Make (turbo/menus.lua)
     config = function()
       vim.g.rustaceanvim = {
         server = {

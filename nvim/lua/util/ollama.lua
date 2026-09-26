@@ -23,14 +23,14 @@ function M.current_model()
     return loaded[1].name
   end
 
-  -- nothing loaded right now (idle unload, fresh server, ...) - fall back to
-  -- the most recently pulled model rather than guessing a hardcoded name
+  -- nothing loaded right now (Ollama unloads idle models, so this is the
+  -- normal state) - use the most recently pulled model; Ollama loads it on
+  -- the first request
   local available = models_from("http://localhost:11434/api/tags")
   if available then
     table.sort(available, function(a, b)
       return a.modified_at > b.modified_at
     end)
-    vim.notify("Ollama: no model currently loaded, defaulting to " .. available[1].name, vim.log.levels.WARN)
     return available[1].name
   end
 

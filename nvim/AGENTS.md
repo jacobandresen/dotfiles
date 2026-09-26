@@ -4,6 +4,16 @@ Only edit files inside this directory. Do not touch files inside plugin library 
 
 External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 
+## Turbo Vim look
+
+The UI imitates the Borland Turbo Pascal 7.0 IDE: `colors/turbopascal.lua`
+(EGA palette) and `lua/turbo/` (menu bar in the tabline, hint line in the
+statusline, window title frames in the winbar, About dialog). lualine and
+bufferline are disabled for it. Menu entries live in `lua/turbo/menus.lua`:
+TP7 entry names, but only those with a working Neovim equivalent (no greyed-out
+placeholders); new commands go in the AI menu or as Tools transfer items. The matching Midnight
+Commander skin is `../mc/skins/turbopascal.ini`.
+
 ## Ollama
 
 CodeCompanion's `ollama` adapter and Minuet's inline suggestions

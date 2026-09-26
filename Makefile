@@ -129,6 +129,9 @@ install-mc:
 		ln -s $(CURDIR)/mc/ini $(HOME)/.config/mc/ini; \
 		echo "  ✓ ~/.config/mc/ini -> $(CURDIR)/mc/ini"; \
 	fi
+	@mkdir -p $(HOME)/.local/share/mc/skins
+	@ln -sfn $(CURDIR)/mc/skins/turbopascal.ini $(HOME)/.local/share/mc/skins/turbopascal.ini
+	@echo "  ✓ ~/.local/share/mc/skins/turbopascal.ini -> $(CURDIR)/mc/skins/turbopascal.ini"
 
 install-pi:
 	@echo "Installing pi agent config..."

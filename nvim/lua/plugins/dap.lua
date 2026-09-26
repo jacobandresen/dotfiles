@@ -1,19 +1,49 @@
-return {
-  { "mfussenegger/nvim-dap", lazy = true },
-  { "nvim-neotest/nvim-nio", lazy = true },
+-- Adapters/configurations for C, C++ and Rust (codelldb) and JS/TS
+-- (js-debug) live here; C# is handled by nvim-dap-cs below.
+local mason = vim.fn.stdpath("data") .. "/mason"
 
+local function lldb_launch(name, dir)
+  return {
+    name = name,
+    type = "codelldb",
+    request = "launch",
+    program = function()
+      return vim.fn.input("Executable: ", vim.fn.getcwd() .. dir, "file")
+    end,
+    cwd = "${workspaceFolder}",
+    stopOnEntry = false,
+  }
+end
+
+local lldb_attach = {
+  name = "Attach to process",
+  type = "codelldb",
+  request = "attach",
+  pid = function() return require("dap.utils").pick_process() end,
+  cwd = "${workspaceFolder}",
+}
+
+return {
   {
-    "rcarriga/nvim-dap-ui",
-    dependencies = { "mfussenegger/nvim-dap", "nvim-neotest/nvim-nio" },
-    keys = {
-      -- Run/step/stop: function keys only (leader+d is reserved for
-      -- breakpoints and UI below, so there's one way to do each, not two)
-      { "<F5>",  function() require("dap").continue() end,               desc = "Continue" },
-      { "<F4>",  function() require("dap").terminate() end,             desc = "Stop" },
-      { "<F9>",  function() require("dap").restart() end,               desc = "Restart" },
-      { "<F10>", function() require("dap").step_over() end,             desc = "Step Over" },
-      { "<F11>", function() require("dap").step_into() end,             desc = "Step Into" },
-      { "<F12>", function() require("dap").step_out() end,              desc = "Step Out" },
+    "mfussenegger/nvim-dap",
+    dependencies = {
+      { "rcarriga/nvim-dap-ui", dependencies = { "nvim-neotest/nvim-nio" } },
+    },
+    -- fkeys: also bind the F13-F60 names some terminals send (turbo/init.lua)
+    keys = require("turbo").fkey_specs({
+      -- Turbo Pascal 7.0 layout (Run and Debug menus, lua/turbo/menus.lua),
+      -- plus Delphi's Shift+F8 for step out, which TP lacked
+      { "<C-F9>", function() require("dap").continue() end,              desc = "Run" },
+      { "<F8>",   function() require("dap").step_over() end,             desc = "Step Over" },
+      { "<F7>",   function() require("dap").step_into() end,             desc = "Trace Into" },
+      { "<S-F8>", function() require("dap").step_out() end,              desc = "Step Out" },
+      { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Go to Cursor" },
+      { "<C-F2>", function() require("dap").terminate() end,             desc = "Program Reset" },
+      { "<C-F8>", function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
+      { "<C-F3>", function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
+      { "<C-F4>", function() require("dapui").eval(nil, { enter = true }) end, desc = "Evaluate/Modify", mode = { "n", "v" } },
+      { "<C-F7>", function() require("dapui").elements.watches.add(vim.fn.expand("<cword>")) end, desc = "Add Watch" },
+      { "<M-F5>", function() require("dapui").toggle() end,              desc = "User Screen" },
 
       -- Breakpoints
       { "<leader>db",  function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },
@@ -21,11 +51,12 @@ return {
       { "<leader>dl",  function() require("dap").set_breakpoint(nil, nil, vim.fn.input("Log: ")) end, desc = "Logpoint" },
       { "<leader>dC",  function() require("dap").clear_breakpoints() end, desc = "Clear Breakpoints" },
 
-      -- UI
-      { "<leader>du",  function() require("dapui").toggle() end,        desc = "Toggle UI" },
+      -- Session / UI
+      { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
+      { "<leader>du",  function() require("dapui").toggle() end,         desc = "Toggle UI" },
       { "<leader>de",  function() require("dapui").eval() end,           desc = "Eval", mode = { "n", "v" } },
       { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
-    },
+    }),
     config = function()
       local dap, dapui = require("dap"), require("dapui")
       dapui.setup({
@@ -65,89 +96,41 @@ return {
           mappings = { close = { "q", "<Esc>" } },
         },
       })
+      -- TP marks breakpoint lines red and the execution point with a cyan bar
+      vim.fn.sign_define("DapBreakpoint", { text = "●", texthl = "DiagnosticError", linehl = "DapBreakpointLine" })
+      vim.fn.sign_define("DapBreakpointCondition", { text = "◆", texthl = "DiagnosticError", linehl = "DapBreakpointLine" })
+      vim.fn.sign_define("DapLogPoint", { text = "◉", texthl = "DiagnosticInfo" })
+      vim.fn.sign_define("DapStopped", { text = "▶", texthl = "DiagnosticHint", linehl = "DapStoppedLine" })
+
       dap.listeners.after.event_initialized["dapui_config"] = function() dapui.open() end
       dap.listeners.before.event_terminated["dapui_config"] = function() dapui.close() end
       dap.listeners.before.event_exited["dapui_config"] = function() dapui.close() end
 
-      local codelldb = vim.fn.stdpath("data") .. "/mason/bin/codelldb"
       dap.adapters.codelldb = {
         type = "server",
         port = "${port}",
-        executable = { command = codelldb, args = { "--port", "${port}" } },
+        executable = { command = mason .. "/bin/codelldb", args = { "--port", "${port}" } },
       }
-
-      dap.configurations.c = {
-        {
-          name = "Launch",
-          type = "codelldb",
-          request = "launch",
-          program = function()
-            return vim.fn.input("Executable: ", vim.fn.getcwd() .. "/", "file")
-          end,
-          cwd = "${workspaceFolder}",
-          stopOnEntry = false,
-        },
-        {
-          name = "Attach to process",
-          type = "codelldb",
-          request = "attach",
-          pid = function() return require("dap.utils").pick_process() end,
-          cwd = "${workspaceFolder}",
-        },
-      }
+      dap.configurations.c = { lldb_launch("Launch", "/"), lldb_attach }
       dap.configurations.cpp = dap.configurations.c
-    end,
-  },
-
-  {
-    "mfussenegger/nvim-dap",
-    ft = { "rust" },
-    config = function()
-      local dap = require("dap")
-
       dap.configurations.rust = {
-        {
-          name = "Launch binary",
-          type = "codelldb",
-          request = "launch",
-          program = function()
-            return vim.fn.input("Executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
-          end,
-          cwd = "${workspaceFolder}",
-          stopOnEntry = false,
-        },
-        {
-          name = "Launch binary (release)",
-          type = "codelldb",
-          request = "launch",
-          program = function()
-            return vim.fn.input("Executable: ", vim.fn.getcwd() .. "/target/release/", "file")
-          end,
-          cwd = "${workspaceFolder}",
-          stopOnEntry = false,
-        },
-        {
-          name = "Attach to process",
-          type = "codelldb",
-          request = "attach",
-          pid = function() return require("dap.utils").pick_process() end,
-          cwd = "${workspaceFolder}",
-        },
+        lldb_launch("Launch binary", "/target/debug/"),
+        lldb_launch("Launch binary (release)", "/target/release/"),
+        lldb_attach,
       }
-    end,
-  },
 
-  {
-    "mxsdev/nvim-dap-vscode-js",
-    dependencies = { "mfussenegger/nvim-dap" },
-    ft = { "javascript", "typescript", "javascriptreact", "typescriptreact" },
-    config = function()
-      require("dap-vscode-js").setup({
-        debugger_path = vim.fn.stdpath("data") .. "/mason/packages/js-debug-adapter",
-        adapters = { "pwa-node", "pwa-chrome" },
-      })
-
-      local dap = require("dap")
+      -- js-debug's DAP server, as installed by Mason
+      for _, adapter in ipairs({ "pwa-node", "pwa-chrome" }) do
+        dap.adapters[adapter] = {
+          type = "server",
+          host = "localhost",
+          port = "${port}",
+          executable = {
+            command = "node",
+            args = { mason .. "/packages/js-debug-adapter/js-debug/src/dapDebugServer.js", "${port}" },
+          },
+        }
+      end
       local js_config = {
         {
           name = "Launch file",
@@ -162,7 +145,7 @@ return {
           name = "Attach",
           type = "pwa-node",
           request = "attach",
-          processId = require("dap.utils").pick_process,
+          processId = function() return require("dap.utils").pick_process() end,
           cwd = "${workspaceFolder}",
           sourceMaps = true,
         },
@@ -177,7 +160,6 @@ return {
           sourceMaps = true,
         },
       }
-
       for _, lang in ipairs({ "javascript", "typescript", "javascriptreact", "typescriptreact" }) do
         dap.configurations[lang] = js_config
       end
@@ -208,7 +190,7 @@ return {
           },
         },
         netcoredbg = {
-          path = vim.fn.stdpath("data") .. "/mason/bin/netcoredbg",
+          path = mason .. "/bin/netcoredbg",
         },
       })
     end,

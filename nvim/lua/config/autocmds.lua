@@ -1,53 +1,20 @@
--- treat .jsonl as json
-vim.filetype.add({ extension = { jsonl = "json" } })
-
--- docker-compose.yml/compose.yaml as their own filetype (Neovim defaults to
--- plain "yaml") so docker_language_server (lsp.lua) attaches.
-vim.filetype.add({
-  filename = {
-    ["docker-compose.yml"] = "yaml.docker-compose",
-    ["docker-compose.yaml"] = "yaml.docker-compose",
-    ["compose.yml"] = "yaml.docker-compose",
-    ["compose.yaml"] = "yaml.docker-compose",
-  },
-  pattern = {
-    [".*/docker%-compose%.[%w.-]+%.ya?ml"] = "yaml.docker-compose",
-    [".*/compose%.[%w.-]+%.ya?ml"] = "yaml.docker-compose",
-  },
-})
-
--- silently update plugins on startup (no notification, no UI window)
-vim.api.nvim_create_autocmd("User", {
-  pattern = "VeryLazy",
-  callback = function()
-    require("lazy").update({ show = false, wait = false })
-  end,
-})
-
--- use jq as formatprg for json files
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = { "json" },
-  callback = function()
-    vim.api.nvim_set_option_value("formatprg", "jq", { scope = "local" })
-  end,
-})
-
--- enable inlay hints on LSP attach
-vim.api.nvim_create_autocmd("LspAttach", {
-  callback = function(args)
-    local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if client and client:supports_method("textDocument/inlayHint") then
-      vim.lsp.inlay_hint.enable(true, { bufnr = args.buf })
-    end
-  end,
-})
+-- silently update plugins on startup (no notification, no UI window).
+-- LazyVim sources this file at VeryLazy (or earlier when opening a file), so
+-- a nested VeryLazy autocmd wouldn't reliably fire - just defer the call.
+vim.schedule(function()
+  require("lazy").update({ show = false, wait = false })
+end)
 
 -- auto-refresh log/jsonl files every 2 seconds
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   pattern = { "*.log", "*.jsonl" },
   callback = function(args)
-    vim.opt_local.autoread = true
     local buf = args.buf
+    if vim.b[buf].log_refresh then
+      return -- already polling (e.g. after :e)
+    end
+    vim.b[buf].log_refresh = true
+    vim.opt_local.autoread = true
     local timer = vim.uv.new_timer()
     timer:start(2000, 2000, vim.schedule_wrap(function()
       if not vim.api.nvim_buf_is_valid(buf) then
@@ -122,17 +89,13 @@ local function fix_all_diagnostics()
   vim.notify(("Autofix: %d fixed, %d left"):format(fixed, skipped), vim.log.levels.INFO)
 end
 
--- LSP keymaps (supplement LazyVim defaults)
--- Type def, references, implementations, code action, and rename use LazyVim's
--- defaults: gy, gr, gI, <leader>ca, <leader>cr. Diagnostics use LazyVim's
--- <leader>sd/<leader>xd. Only the autofix extra lives here.
+-- <leader>cF next to LazyVim's <leader>ca (code action), only where LSP
+-- offers code actions
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)
-    local buf = args.buf
     local client = vim.lsp.get_client_by_id(args.data.client_id)
-
     if client and client:supports_method("textDocument/codeAction") then
-      vim.keymap.set("n", "<leader>cF", fix_all_diagnostics, { buffer = buf, desc = "Fix All Diagnostics" })
+      vim.keymap.set("n", "<leader>cF", fix_all_diagnostics, { buffer = args.buf, desc = "Fix All Diagnostics" })
     end
   end,
 })
