@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-zsh install-mc install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-zsh install-mc install-ollama install-docker install-pi
+install: deps install-nvim install-zsh install-mc install-kitty install-ollama install-docker install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -132,6 +132,20 @@ install-mc:
 	@mkdir -p $(HOME)/.local/share/mc/skins
 	@ln -sfn $(CURDIR)/mc/skins/turbopascal.ini $(HOME)/.local/share/mc/skins/turbopascal.ini
 	@echo "  ✓ ~/.local/share/mc/skins/turbopascal.ini -> $(CURDIR)/mc/skins/turbopascal.ini"
+
+install-kitty:
+	@echo "Installing kitty config..."
+	@if [ -L $(HOME)/.config/kitty ]; then \
+		echo "  ✓ ~/.config/kitty already symlinked"; \
+	elif [ -e $(HOME)/.config/kitty ]; then \
+		mv $(HOME)/.config/kitty $(HOME)/.config/kitty.bak; \
+		ln -s $(CURDIR)/kitty $(HOME)/.config/kitty; \
+		echo "  ✓ backed up old ~/.config/kitty -> kitty.bak, linked repo copy"; \
+	else \
+		mkdir -p $(HOME)/.config; \
+		ln -s $(CURDIR)/kitty $(HOME)/.config/kitty; \
+		echo "  ✓ ~/.config/kitty -> $(CURDIR)/kitty"; \
+	fi
 
 install-pi:
 	@echo "Installing pi agent config..."

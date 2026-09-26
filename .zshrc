@@ -4,6 +4,13 @@ zstyle ':omz:update' mode disabled # disable automatic updates
 plugins=(git)
 source "$ZSH/oh-my-zsh.sh"
 
+# In kitty (kitty/kitty.conf: MS-DOS text screen) use a DOS prompt, e.g.
+# C:\HOME\JACOB> - KITTY_WINDOW_ID is inherited by tmux inside kitty too.
+if [ -n "$KITTY_WINDOW_ID" ]; then
+  PROMPT='C:${(U)PWD//\//\\}>'
+  RPROMPT=''
+fi
+
 # PATH (most-specific user bins first)
 export PATH="$HOME/.local/bin:$PATH"
 

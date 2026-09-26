@@ -91,9 +91,11 @@ function M.about()
     "",
     ("Neovim %d.%d.%d + LazyVim"):format(v.major, v.minor, v.patch),
     "",
+    "Jacob Andresen <jacob.andresen@gmail.com>",
+    "",
     "",
   }
-  local width = 44
+  local width = 48
   local inner = width - 2
   local tl = math.floor((inner - 7) / 2)
   local lines = { "╔═[■]" .. ("═"):rep(tl - 4) .. " About " .. ("═"):rep(inner - 7 - tl) .. "╗" }

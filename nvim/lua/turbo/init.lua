@@ -51,10 +51,10 @@ function M.keymaps()
   local menus = require("turbo.menus")
 
   -- menus: F10 reopens the last one, Alt+Space the ≡ menu, Alt+letter a
-  -- named one (Alt+A is the AI menu), Alt+F10 / right click the local menu
+  -- named one (Alt+A is the AI menu, Alt+B the DB menu), Alt+F10 / right click the local menu
   map({ "n", "x", "i" }, "<F10>", menubar.open_last, { desc = "Menu" })
   map({ "n", "x" }, "<M-Space>", function() menubar.open(1) end, { desc = "≡ Menu" })
-  for _, key in ipairs({ "f", "e", "s", "r", "c", "d", "t", "o", "w", "a", "h" }) do
+  for _, key in ipairs({ "f", "e", "s", "r", "c", "d", "t", "o", "w", "a", "b", "h" }) do
     map({ "n", "x" }, "<M-" .. key .. ">", function() menubar.open_key(key) end, { desc = "Menu" })
   end
   map({ "n", "x" }, "<M-F10>", M.local_menu, { desc = "Local Menu" })

@@ -163,7 +163,7 @@ return {
       "tpope/vim-dadbod",
       "kristijanhusak/vim-dadbod-completion",
     },
-    cmd = { "DBUI", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer" },
+    cmd = { "DBUI", "DBUIToggle", "DBUIAddConnection", "DBUIFindBuffer", "DBUIRenameBuffer", "DBUILastQueryInfo" },
     keys = {
       { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
       { "<leader>Da", "<cmd>DBUIAddConnection<cr>", desc = "DB Add Connection" },

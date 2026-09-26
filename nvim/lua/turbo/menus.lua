@@ -69,15 +69,12 @@ local function edit(visual_keys, line_keys)
   end
 end
 
--- :make with the filetype's makeprg (Rust: cargo build); Build cleans first.
--- Errors open the Messages (quickfix) window, success says so.
-local function make(clean)
+-- :make with the filetype's makeprg (Rust: cargo build). Errors open the
+-- Messages (quickfix) window, success says so.
+local function make()
   return function()
     vim.cmd("silent! wall")
     local target = vim.bo.makeprg:match("^cargo") and "build" or ""
-    if clean then
-      vim.cmd("silent make clean")
-    end
     vim.cmd("silent make " .. target)
     local errors = #vim.tbl_filter(function(e) return e.valid == 1 end, vim.fn.getqflist())
     if vim.v.shell_error ~= 0 or errors > 0 then
@@ -95,7 +92,7 @@ end
 
 local M = {}
 
-M.make = make(false)
+M.make = make()
 M.qf = qf
 
 -- lazydocker in the same window style as lazygit (title, Alt+X to close)
@@ -173,7 +170,6 @@ M.menus = {
             grug.open({ prefills = { search = vim.fn.expand("<cword>") } })
           end
         end },
-      { label = "~S~earch again", hint = "Repeat the last search", action = feed("n") },
       "-",
       { label = "~G~o to line number...", hint = "Jump to a line in this file",
         action = input("Line number: ", nil, nil, function(v) vim.cmd(tostring(tonumber(v) or 1)) end) },
@@ -181,11 +177,8 @@ M.menus = {
       { label = "Find ~e~rror...", hint = "List the diagnostics in this file", action = telescope("diagnostics", { bufnr = 0 }) },
       { label = "Find ~p~rocedure...", hint = "Jump to a symbol in this file", action = telescope("lsp_document_symbols") },
       "-",
-      { label = "~O~bjects", hint = "Types and classes in this file",
-        action = telescope("lsp_document_symbols", { symbols = { "class", "struct", "interface", "enum" } }) },
       { label = "Glo~b~als", hint = "Symbols across the workspace", action = telescope("lsp_dynamic_workspace_symbols") },
       { label = "S~y~mbol...", hint = "Find references to the symbol under the cursor", action = telescope("lsp_references") },
-      { label = "Pre~v~ious browser", key = "Ctrl+O", hint = "Jump back", action = feed("<C-o>") },
     },
   },
   {
@@ -202,7 +195,6 @@ M.menus = {
     title = "~C~ompile",
     items = {
       { label = "~M~ake", key = "F9", hint = "Save all and run :make (Rust: cargo build)", action = M.make },
-      { label = "~B~uild", hint = "Clean, then make", action = make(true) },
     },
   },
   {
@@ -246,7 +238,6 @@ M.menus = {
       { label = "~E~nvironment...", hint = "Browse and change editor options", action = telescope("vim_options") },
       "-",
       { label = "~O~pen...", hint = "Restore a saved session", action = function() require("persistence").select() end },
-      { label = "~S~ave", hint = "Save the session for this directory", action = function() require("persistence").save() vim.notify("Session saved") end },
     },
   },
   {
@@ -270,8 +261,6 @@ M.menus = {
         { label = "~C~hat window", key = "Space a c", hint = "Show or hide the CodeCompanion chat", action = function() cc().toggle() end },
         { label = "~N~ew chat (Ollama)", key = "Space a n", hint = "Start a chat with the loaded Ollama model",
           action = function() cc().chat({ params = { adapter = "ollama" } }) end },
-        { label = "New chat (Co~p~ilot)", hint = "Start a chat with GitHub Copilot",
-          action = function() cc().chat({ params = { adapter = "copilot" } }) end },
         { label = "~A~dd to chat", key = "Space a p", hint = "Send the block (or line) to the chat",
           action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanionChat Add") end },
         "-",
@@ -279,8 +268,6 @@ M.menus = {
           action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanion") end },
         { label = "Ac~t~ion palette...", key = "Space a a", hint = "Explain, fix, write tests...",
           action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanionActions") end },
-        { label = "New SDL~3~ example...", hint = "Generate a runnable SDL3 program (Space r r builds it)",
-          action = function() cc().prompt("sdl3") end },
         "-",
         { label = "~S~aved chats...", hint = "Restore a saved chat session", action = function() cc().sessions() end },
         { label = "~E~dited files", hint = "Files the AI changed, in the quickfix list", action = function() cc().changes() end },
@@ -299,13 +286,31 @@ M.menus = {
     end,
   },
   {
+    title = "D~B~",
+    items = {
+      { label = "~T~oggle database UI", key = "Space D u", hint = "Show or hide the Dadbod connections drawer", action = cmd("DBUIToggle") },
+      { label = "~A~dd connection...", key = "Space D a", hint = "Add a database connection URL", action = cmd("DBUIAddConnection") },
+      { label = "~F~ind buffer", key = "Space D f", hint = "Show this query buffer in the drawer", action = cmd("DBUIFindBuffer") },
+      "-",
+      { label = "~E~xecute query", hint = "Run the block (or whole buffer) against the buffer's database",
+        action = function(ctx)
+          if not (vim.b.db or vim.g.db) then
+            return vim.notify("No database for this buffer - open a query from the DB UI (Space D u)", vim.log.levels.WARN)
+          end
+          require("lazy").load({ plugins = { "vim-dadbod-ui" } })
+          vim.cmd((ctx.visual and "'<,'>" or "%") .. "DB")
+        end },
+      { label = "~R~ename buffer...", hint = "Rename the current query buffer", action = cmd("DBUIRenameBuffer") },
+      { label = "Last query ~i~nfo", hint = "Show timing and details of the last query", action = cmd("DBUILastQueryInfo") },
+    },
+  },
+  {
     title = "~H~elp",
     items = {
       { label = "~C~ontents", key = "F1", hint = "Open the Neovim manual", action = cmd("help") },
       { label = "~I~ndex", key = "Shift+F1", hint = "Search all help topics", action = telescope("help_tags") },
       { label = "~T~opic search", key = "Ctrl+F1", hint = "Help for the word under the cursor",
         action = function() pcall(vim.cmd.help, vim.fn.expand("<cword>")) end },
-      { label = "~P~revious topic", key = "Alt+F1", hint = "Go back in the help (Ctrl+T)", action = feed("<C-t>") },
       { label = "~U~sing help", hint = "How to use the help", action = cmd("help help") },
       { label = "~E~rror messages", hint = "Neovim error messages", action = cmd("help error-messages") },
       "-",

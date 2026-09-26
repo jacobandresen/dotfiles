@@ -78,7 +78,6 @@ return {
             line("   ██    ██    ██ ██████  ██████  ██    ██ ██    ██ ██ ██ ████ ██"),
             line("   ██    ██    ██ ██   ██ ██   ██ ██    ██  ██  ██  ██ ██  ██  ██"),
             line("   ██     ██████  ██   ██ ██████   ██████    ████   ██ ██      ██"),
-            { "\nA tribute to Borland Turbo Pascal 7.0\n", hl = "SnacksDashboardFooter", align = "center" },
           },
         },
         { section = "keys", gap = 1, padding = 1 },
