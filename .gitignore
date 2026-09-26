@@ -12,6 +12,10 @@ pi/agent/auth.json
 pi/agent/trust.json
 pi/agent/models-store.json
 
+# pi auto-vendors helper binaries here if missing from PATH — install them
+# properly instead (e.g. `fd` via the system package manager)
+pi/agent/bin/
+
 # Editor
 *.swp
 *.swo
