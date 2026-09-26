@@ -99,3 +99,23 @@ vim.api.nvim_create_autocmd("LspAttach", {
     end
   end,
 })
+
+-- only one sidebar explorer at a time: opening the file explorer closes the
+-- Docker explorer (util/compose) and the other way round
+local sidebar_rivals = { explorer = "compose", compose = "explorer" }
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("turbo_one_explorer", { clear = true }),
+  pattern = "snacks_picker_list",
+  callback = function(ev)
+    vim.schedule(function()
+      for _, picker in ipairs(Snacks.picker.get()) do
+        local rival = sidebar_rivals[picker.opts.source]
+        if rival and picker.list.win.buf == ev.buf then
+          for _, other in ipairs(Snacks.picker.get({ source = rival })) do
+            other:close()
+          end
+        end
+      end
+    end)
+  end,
+})

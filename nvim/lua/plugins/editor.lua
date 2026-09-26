@@ -167,7 +167,12 @@ return {
     keys = {
       { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
       { "<leader>Da", "<cmd>DBUIAddConnection<cr>", desc = "DB Add Connection" },
-      { "<leader>Df", "<cmd>DBUIFindBuffer<cr>",    desc = "DB Find Buffer" },
+      { "<leader>Df", function() require("util.db").in_query("DBUIFindBuffer")() end, desc = "DB Find Buffer" },
+      { "<leader>Dr", function() require("util.db").in_query("DBUIRenameBuffer")() end, desc = "DB Rename Buffer" },
+      { "<leader>Di", "<cmd>DBUILastQueryInfo<cr>", desc = "DB Last Query Info" },
+      -- the selection, or the whole buffer, against the buffer's database
+      { "<leader>De", function() require("util.db").execute("%") end, desc = "DB Execute Query" },
+      { "<leader>De", function() require("util.db").execute("'<,'>") end, mode = "x", desc = "DB Execute Selection" },
     },
     init = function()
       vim.g.db_ui_use_nerd_fonts = 1

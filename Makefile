@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos
 
 OS := $(shell uname -s)
 
@@ -54,7 +54,7 @@ deps-docker-macos:
 	$(MAKE) install-docker
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim lazydocker
+	sudo pacman -Syu --needed git neovim lazydocker docker-compose
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 # lazydocker isn't in apt; the binary release install script puts it in
@@ -73,6 +73,7 @@ deps-ubuntu:
 	@curl -fsSL https://ollama.com/install.sh | sh
 	@echo "Installing lazydocker..."
 	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
+	@$(MAKE) --no-print-directory deps-compose
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
 
 deps-debian:
@@ -89,7 +90,22 @@ deps-debian:
 	@curl -fsSL https://ollama.com/install.sh | sh
 	@echo "Installing lazydocker..."
 	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
+	@$(MAKE) --no-print-directory deps-compose
 	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
+
+# the docker compose plugin (the nvim Docker explorer's up/down), per user
+# in ~/.docker/cli-plugins so it needs no sudo and works with any docker
+deps-compose:
+	@if docker compose version >/dev/null 2>&1; then \
+		echo "  ✓ docker compose already installed"; \
+	else \
+		echo "Installing the docker compose plugin..."; \
+		mkdir -p $(HOME)/.docker/cli-plugins; \
+		curl -fsSL -o $(HOME)/.docker/cli-plugins/docker-compose \
+			https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$$(uname -m); \
+		chmod +x $(HOME)/.docker/cli-plugins/docker-compose; \
+		docker compose version; \
+	fi
 
 install-nvim:
 	@echo "Installing nvim config..."

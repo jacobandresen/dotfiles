@@ -39,32 +39,38 @@ return {
 
       -- explorer as a Turbo Vision window: one double frame with a centred
       -- title, a TP input line and no Nerd Font icons (colours: SnacksPicker*
-      -- in colors/turbopascal.lua)
+      -- in colors/turbopascal.lua). The Docker Compose explorer
+      -- (util/compose/) uses the same window.
+      local sidebar = {
+        prompt = "> ",
+        icons = {
+          files = { enabled = false },
+          tree = { vertical = "│ ", middle = "├─", last = "└─" },
+        },
+        layout = {
+          preview = false,
+          layout = {
+            backdrop = false,
+            width = 34,
+            min_width = 34,
+            height = 0,
+            position = "left",
+            box = "vertical",
+            border = "double",
+            title = " {title} {flags}",
+            title_pos = "center",
+            { win = "input", height = 1, border = "bottom" },
+            { win = "list", border = "none" },
+          },
+        },
+      }
       opts.picker = vim.tbl_deep_extend("force", opts.picker or {}, {
         sources = {
-          explorer = {
-            prompt = "> ",
-            icons = {
-              files = { enabled = false },
-              tree = { vertical = "│ ", middle = "├─", last = "└─" },
-            },
-            layout = {
-              preview = false,
-              layout = {
-                backdrop = false,
-                width = 34,
-                min_width = 34,
-                height = 0,
-                position = "left",
-                box = "vertical",
-                border = "double",
-                title = " {title} {flags}",
-                title_pos = "center",
-                { win = "input", height = 1, border = "bottom" },
-                { win = "list", border = "none" },
-              },
-            },
-          },
+          explorer = sidebar,
+          -- a bit wider than the file explorer: CPU, sizes and counts on the right
+          compose = vim.tbl_deep_extend("force", sidebar, require("util.compose").source, {
+            layout = { layout = { width = 44, min_width = 44 } },
+          }),
         },
       })
 
@@ -106,11 +112,21 @@ return {
     },
   },
 
-  -- markdown rendering
+  -- markdown rendering, only in View mode (util/mdview.lua): Edit shows the
+  -- source, View renders every line including the cursor's
   {
     "MeanderingProgrammer/render-markdown.nvim",
     ft = { "markdown" },
-    opts = {},
+    init = function()
+      require("util.mdview").setup()
+    end,
+    keys = {
+      { "<leader>um", function() require("util.mdview").toggle() end, ft = "markdown", desc = "Markdown View/Edit" },
+    },
+    opts = {
+      enabled = false,
+      anti_conceal = { enabled = false },
+    },
   },
 
   -- LSP progress spinner (also used by ai.lua's inline-edit spinner).

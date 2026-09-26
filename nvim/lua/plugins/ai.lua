@@ -26,6 +26,20 @@ return {
       -- Explain/fix/tests/etc. live in the action palette (ships built in,
       -- no custom hooks needed the way gp.nvim required for GpExplain).
       { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
+      { "<leader>as", function() require("codecompanion").sessions() end, desc = "Saved AI chats" },
+      { "<leader>ae", function() require("codecompanion").changes() end, desc = "Files the AI edited (quickfix)" },
+      -- same as `ga` inside the chat buffer, from anywhere
+      {
+        "<leader>aA",
+        function()
+          local chat = require("codecompanion").last_chat()
+          if not chat then
+            return vim.notify("No chat open", vim.log.levels.WARN)
+          end
+          require("codecompanion.interactions.chat.keymaps.change_adapter").callback(chat)
+        end,
+        desc = "Change AI chat adapter",
+      },
     },
     config = function()
       require("codecompanion").setup({
@@ -138,6 +152,9 @@ return {
     -- see openai_compatible vs openai_fim_compatible in the plugin's README.
     "milanglacier/minuet-ai.nvim",
     event = "InsertEnter",
+    keys = {
+      { "<leader>ag", "<cmd>Minuet virtualtext toggle<cr>", desc = "Toggle AI ghost text" },
+    },
     config = function()
       require("minuet").setup({
         provider = "openai_compatible",

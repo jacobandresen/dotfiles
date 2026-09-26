@@ -16,6 +16,11 @@ adapters, formatters).
   colours in Neovim and the `turbopascal` Midnight Commander skin
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
+- **docker** — the Docker explorer (`<leader>gC`, Tools > Docker compose:
+  containers by compose project/service, images, volumes, networks; `?` in
+  it lists the keys) and Docker logs (`<leader>gO`). The **docker compose**
+  plugin (`make deps-compose`, per user) is needed for up/down, services
+  without a container yet and service logs; the rest only needs the CLI.
 
 ## AI (`lua/plugins/ai.lua`)
 

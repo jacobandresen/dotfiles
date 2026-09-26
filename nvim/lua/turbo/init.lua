@@ -1,7 +1,7 @@
 -- Turbo Vim: Neovim dressed as the Borland Turbo Pascal 7.0 IDE.
 --   colors/turbopascal.lua  EGA palette
 --   turbo/menubar.lua       menu bar + drop-downs
---   turbo/menus.lua         the TP7 menu tree (+ AI menu)
+--   turbo/menus.lua         the TP7 menu tree
 --   turbo/chrome.lua        hint line, window frames, About dialog
 -- Debugger F-keys (F4, F7, F8, Ctrl+F2, Ctrl+F9, ...) live in plugins/dap.lua.
 local M = {}
@@ -36,8 +36,13 @@ function M.fkey_specs(specs)
   return out
 end
 
+-- items with a `when` function only show when it returns true
 function M.local_menu()
-  require("turbo.menubar").popup(require("turbo.menus").local_menu)
+  local items = vim.tbl_filter(function(item)
+    return type(item) ~= "table" or not item.when or item.when()
+  end, require("turbo.menus").local_menu)
+  items = vim.tbl_map(function(item) return type(item) == "table" and item[1] == "-" and "-" or item end, items)
+  require("turbo.menubar").popup(items)
 end
 
 -- TP key bindings; called from keymaps.lua
@@ -51,10 +56,10 @@ function M.keymaps()
   local menus = require("turbo.menus")
 
   -- menus: F10 reopens the last one, Alt+Space the ≡ menu, Alt+letter a
-  -- named one (Alt+A is the AI menu, Alt+B the DB menu), Alt+F10 / right click the local menu
+  -- named one, Alt+F10 / right click the local menu
   map({ "n", "x", "i" }, "<F10>", menubar.open_last, { desc = "Menu" })
   map({ "n", "x" }, "<M-Space>", function() menubar.open(1) end, { desc = "≡ Menu" })
-  for _, key in ipairs({ "f", "e", "s", "r", "c", "d", "t", "o", "w", "a", "b", "h" }) do
+  for _, key in ipairs({ "f", "e", "s", "r", "c", "d", "t", "o", "w", "h" }) do
     map({ "n", "x" }, "<M-" .. key .. ">", function() menubar.open_key(key) end, { desc = "Menu" })
   end
   map({ "n", "x" }, "<M-F10>", M.local_menu, { desc = "Local Menu" })

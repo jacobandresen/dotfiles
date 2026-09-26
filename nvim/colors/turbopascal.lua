@@ -270,6 +270,12 @@ local groups = {
   SnacksPickerGitStatusUntracked = { fg = c.lightgray },
   SnacksPickerGitStatusIgnored = { fg = c.cyan },
   SnacksPickerTotals = { fg = c.lightgray },
+  -- Docker explorer: container states, the "running" filter flag
+  SnacksPickerDockerRunning = { fg = c.lightgreen },
+  SnacksPickerDockerPaused = { fg = c.lightcyan },
+  SnacksPickerDockerExited = { fg = c.lightgray },
+  SnacksPickerDockerDead = { fg = c.lightred, bold = true },
+  SnacksPickerToggleOnlyRunning = { fg = c.black, bg = c.lightgreen },
   SnacksDashboardNormal = { link = "Normal" },
   SnacksDashboardHeader = { fg = c.yellow, bold = true },
   SnacksDashboardFooter = { fg = c.lightgray },

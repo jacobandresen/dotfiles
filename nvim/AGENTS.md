@@ -11,8 +11,11 @@ The UI imitates the Borland Turbo Pascal 7.0 IDE: `colors/turbopascal.lua`
 statusline, window title frames in the winbar, About dialog). lualine and
 bufferline are disabled for it. Menu entries live in `lua/turbo/menus.lua`:
 TP7 entry names, but only those with a working Neovim equivalent (no greyed-out
-placeholders); new commands go in the AI menu or as Tools transfer items. The matching Midnight
-Commander skin is `../mc/skins/turbopascal.ini`.
+placeholders). Tools that TP never had (Docker, AI, Database) are Tools transfer
+items, one cascading submenu (►) each; every item there shows its `<leader>`
+shortcut, and every such shortcut exists as a keymap. Menu actions called in the
+wrong context should explain themselves with a notification, not a raw Vim
+error. The matching Midnight Commander skin is `../mc/skins/turbopascal.ini`.
 
 ## Ollama
 

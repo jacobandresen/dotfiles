@@ -31,6 +31,9 @@ function M.statusline()
     table.insert(parts, "Recording @" .. reg .. " │ ")
   end
   local mode = modes[api.nvim_get_mode().mode:sub(1, 1)]
+  if vim.b.md_view and mode == nil then
+    mode = "View"
+  end
   if mode then
     table.insert(parts, mode .. " │ ")
   end
@@ -46,8 +49,9 @@ local function framed(win)
   if api.nvim_win_get_config(win).relative ~= "" then
     return false
   end
-  local bt = vim.bo[api.nvim_win_get_buf(win)].buftype
-  return bt == "" or bt == "help"
+  local buf = api.nvim_win_get_buf(win)
+  local bt = vim.bo[buf].buftype
+  return bt == "" or bt == "help" or vim.b[buf].turbo_title ~= nil
 end
 
 function M.winbar()
@@ -57,14 +61,22 @@ function M.winbar()
   local line = active and "═" or "─"
   local buf = api.nvim_win_get_buf(win)
   local name = api.nvim_buf_get_name(buf)
-  name = name == "" and "NONAME00" or vim.fn.fnamemodify(name, ":~:.")
+  -- non-file buffers (e.g. docker logs) can set their own title
+  name = vim.b[buf].turbo_title or (name == "" and "NONAME00" or vim.fn.fnamemodify(name, ":~:."))
   local title = " " .. name .. " "
   local nr = " " .. api.nvim_win_get_number(win) .. " "
   local left = active and "═[%#TurboFrameIcon#■%#WinBar#]" or "──────"
   local right = active and (nr .. "═[%#TurboFrameIcon#↕%#WinBar#]═") or (nr .. "──────")
+  -- markdown: an Edit/View switch before the window number (util/mdview.lua)
+  if vim.bo[buf].filetype == "markdown" and width > 40 then
+    local switch, w = require("util.mdview").switch(win, buf)
+    right = switch .. line .. right
+    width = width - w - 1
+  end
   local free = width - 6 - 7 - #nr - vim.fn.strdisplaywidth(title)
   if free < 2 then
-    title = " " .. vim.fn.fnamemodify(name, ":t") .. " "
+    local short = vim.b[buf].turbo_title and vim.b[buf].turbo_title:gsub("%s.*[%s/]", " ")
+    title = " " .. (short or vim.fn.fnamemodify(name, ":t")) .. " "
     free = math.max(2, width - 6 - 7 - #nr - vim.fn.strdisplaywidth(title))
   end
   local l = math.floor(free / 2)

@@ -6,16 +6,19 @@
 -- key (shortcut text shown on the right), hint (status line text),
 -- action (function(ctx)). A bare "-" is a separator. ctx.visual is true when
 -- the menu was opened from Visual mode; the selection is then in '< and '>.
+-- An item with `items` (a list, or a function returning one) instead of an
+-- action is a TP cascading submenu: shown with ►, opened to the right.
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("turbo_menu")
 local api = vim.api
 
 M.menus = {} -- { { title = "~F~ile", items = {...} or function() } }
-local open_level -- the open drop-down, if any
+local stack = {} -- open drop-downs: the menu, then any submenus (last = focused)
 local ctx = { visual = false, win = nil }
 local active_menu = nil -- index into M.menus while its drop-down is open
 local last_menu = 2 -- F10 reopens the last used menu (default File)
+local last_sel = {} -- menu index -> item last highlighted there
 
 -- "Save ~a~s" -> "Save as", "a", 5 (0-based char index of the hotkey)
 local function parse(label)
@@ -92,15 +95,22 @@ local function render(level)
   vim.cmd.redrawtabline()
 end
 
-function M.close()
-  local level = open_level
-  open_level, active_menu = nil, nil
-  if level then
-    for _, w in ipairs({ level.win, level.shadow }) do
-      if api.nvim_win_is_valid(w) then
-        api.nvim_win_close(w, true)
-      end
+local function close_wins(level)
+  for _, w in ipairs({ level.win, level.shadow }) do
+    if api.nvim_win_is_valid(w) then
+      api.nvim_win_close(w, true)
     end
+  end
+end
+
+function M.close()
+  local levels = stack
+  if active_menu and levels[1] then
+    last_sel[active_menu] = levels[1].sel
+  end
+  stack, active_menu = {}, nil
+  for _, level in ipairs(levels) do
+    close_wins(level)
   end
   if ctx.win and api.nvim_win_is_valid(ctx.win) then
     api.nvim_set_current_win(ctx.win)
@@ -109,9 +119,21 @@ function M.close()
   vim.cmd.redrawstatus()
 end
 
+-- back from a submenu to its parent
+local function close_sub()
+  if #stack < 2 then
+    return M.close()
+  end
+  close_wins(table.remove(stack))
+  local parent = stack[#stack]
+  api.nvim_set_current_win(parent.win)
+  render(parent)
+end
+
 -- status line hint for the highlighted item
 function M.hint()
-  local item = open_level and open_level.items[open_level.sel]
+  local level = stack[#stack]
+  local item = level and level.items[level.sel]
   return item and item ~= "-" and item.hint or nil
 end
 
@@ -128,9 +150,19 @@ local function move(level, dir)
   render(level)
 end
 
+local open_dropdown
+
 local function activate(level, i)
   local item = level.items[i or level.sel]
   if not item or item == "-" then
+    return
+  end
+  if item.items then
+    level.sel = i or level.sel
+    render(level)
+    local items = type(item.items) == "function" and item.items() or item.items
+    -- TP opens a submenu beside its item, overlapping the parent's right edge
+    open_dropdown(items, level.row + level.sel, level.col + level.width - 3)
     return
   end
   local context = vim.deepcopy(ctx)
@@ -138,8 +170,17 @@ local function activate(level, i)
   vim.schedule(function() item.action(context) end)
 end
 
--- Left/Right move along the menu bar (not for the local menu)
+-- Left/Right move along the menu bar (not for the local menu); in a submenu
+-- Left goes back to the parent, Right opens the submenu under the bar
 local function switch(dir)
+  local level = stack[#stack]
+  if dir < 0 and #stack > 1 then
+    return close_sub()
+  end
+  local item = level and level.items[level.sel]
+  if dir > 0 and item and item ~= "-" and item.items then
+    return activate(level)
+  end
   if active_menu then
     M.open((active_menu - 1 + dir) % #M.menus + 1, { keep_ctx = true })
   end
@@ -161,9 +202,19 @@ local function on_key(level, key)
   end
 end
 
-local function on_mouse(level)
+local function on_mouse()
   local pos = vim.fn.getmousepos()
-  if pos.winid == level.win then
+  -- a click in a parent menu closes the submenus above it
+  for idx = #stack, 1, -1 do
+    if stack[idx].win == pos.winid then
+      while #stack > idx do
+        close_sub()
+      end
+      break
+    end
+  end
+  local level = stack[#stack]
+  if level and pos.winid == level.win then
     local i = pos.line - 1
     if level.items[i] and level.items[i] ~= "-" then
       level.sel = i
@@ -182,13 +233,13 @@ local function on_mouse(level)
   M.close()
 end
 
-local function open_dropdown(items, row, col)
+function open_dropdown(items, row, col, sel)
   local labels, keys = {}, {}
   local wl, wk = 0, 0
   for i, item in ipairs(items) do
     if item ~= "-" then
       labels[i] = parse(item.label)
-      keys[i] = item.key or ""
+      keys[i] = item.items and "►" or item.key or ""
       wl = math.max(wl, vim.fn.strdisplaywidth(labels[i]))
       wk = math.max(wk, vim.fn.strdisplaywidth(keys[i]))
     end
@@ -227,9 +278,14 @@ local function open_dropdown(items, row, col)
   })
   vim.wo[win].winhighlight = "Normal:TurboMenu"
 
-  local level = { items = items, buf = buf, win = win, shadow = shadow, sel = 0 }
-  open_level = level
-  move(level, 1)
+  local level = { items = items, buf = buf, win = win, shadow = shadow, sel = 0, row = row, col = col, width = width }
+  table.insert(stack, level)
+  if sel and items[sel] and items[sel] ~= "-" then
+    level.sel = sel
+    render(level)
+  else
+    move(level, 1)
+  end
 
   local function map(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true })
@@ -240,11 +296,11 @@ local function open_dropdown(items, row, col)
   map("<End>", function() level.sel = #items + 1 move(level, -1) end)
   map("<CR>", function() activate(level) end)
   map("<Space>", function() activate(level) end)
-  map("<Esc>", M.close)
+  map("<Esc>", close_sub) -- one level back, closing the menu from the top level
   map("<F10>", M.close)
   map("<Left>", function() switch(-1) end)
   map("<Right>", function() switch(1) end)
-  map("<LeftMouse>", function() on_mouse(level) end)
+  map("<LeftMouse>", on_mouse)
   for b = ("a"):byte(), ("z"):byte() do
     local ch = string.char(b)
     map(ch, function() on_key(level, ch) end)
@@ -254,12 +310,17 @@ local function open_dropdown(items, row, col)
     map(tostring(d), function() on_key(level, tostring(d)) end)
   end
 
-  -- clicking or jumping elsewhere closes the menu
+  -- clicking or jumping elsewhere closes the menu (moving between the
+  -- menu and its submenus doesn't)
   api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
     callback = function()
       vim.schedule(function()
-        if open_level == level and api.nvim_get_current_win() ~= level.win then
+        if not vim.tbl_contains(stack, level) then
+          return
+        end
+        local cur = api.nvim_get_current_win()
+        if not vim.iter(stack):any(function(l) return l.win == cur end) then
           M.close()
         end
       end)
@@ -288,7 +349,7 @@ function M.open(idx, opts)
   active_menu, last_menu = idx, idx
   vim.cmd.redrawtabline()
   local items = M.menus[idx].items
-  open_dropdown(type(items) == "function" and items() or items, 1, title_cols[idx] or 1)
+  open_dropdown(type(items) == "function" and items() or items, 1, title_cols[idx] or 1, last_sel[idx])
 end
 
 -- context ("local") menu at the cursor, like TP's Alt+F10 / right click

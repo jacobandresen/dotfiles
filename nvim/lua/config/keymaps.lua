@@ -23,8 +23,10 @@ map("n", "<C-u>", "<C-u>zzzv")
 map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find Files (incl. ignored)" })
 map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer Lines (exact)" })
 
--- lazydocker, same pattern as LazyVim's own <leader>gg (Lazygit)
+-- lazydocker and the Docker Compose explorer, next to LazyVim's <leader>gg (Lazygit)
 map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { desc = "Lazydocker" })
+map("n", "<leader>gC", function() require("util.compose").open() end, { desc = "Docker Explorer" })
+map("n", "<leader>gO", function() require("util.compose.logs").pick() end, { desc = "Docker Logs" })
 
 -- LSP restart next to LazyVim's <leader>cl (Lsp Info)
 map("n", "<leader>cL", "<cmd>lsp restart<cr>", { desc = "Restart LSP" })
