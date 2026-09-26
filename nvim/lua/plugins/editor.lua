@@ -88,6 +88,9 @@ return {
       end
 
       ufo.setup({
+        provider_selector = function(_, _, _)
+          return { "treesitter", "indent" }
+        end,
         fold_virt_text_handler = fold_handler,
         close_fold_kinds_for_ft = { default = { "imports", "comments" } },
       })

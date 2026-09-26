@@ -6,7 +6,6 @@ opt.number = true
 opt.tabstop = 2
 opt.shiftwidth = 2
 opt.expandtab = true
-opt.autoindent = true
 
 opt.wrap = false
 
@@ -19,7 +18,6 @@ opt.termguicolors = true
 opt.background = "dark"
 opt.signcolumn = "yes"
 
-opt.backspace = "indent,eol,start"
 opt.clipboard:append("unnamedplus")
 
 opt.splitright = true
@@ -29,7 +27,6 @@ opt.splitbelow = true
 opt.foldcolumn = "0"
 opt.foldlevel = 99
 opt.foldlevelstart = 99
-opt.foldenable = true
 
 opt.iskeyword:append("-")
 

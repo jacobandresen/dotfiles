@@ -6,21 +6,14 @@ return {
     "rcarriga/nvim-dap-ui",
     dependencies = { "mfussenegger/nvim-dap", "nvim-neotest/nvim-nio" },
     keys = {
-      -- Function keys (fast access)
+      -- Run/step/stop: function keys only (leader+d is reserved for
+      -- breakpoints and UI below, so there's one way to do each, not two)
       { "<F5>",  function() require("dap").continue() end,               desc = "Continue" },
       { "<F4>",  function() require("dap").terminate() end,             desc = "Stop" },
       { "<F9>",  function() require("dap").restart() end,               desc = "Restart" },
       { "<F10>", function() require("dap").step_over() end,             desc = "Step Over" },
       { "<F11>", function() require("dap").step_into() end,             desc = "Step Into" },
       { "<F12>", function() require("dap").step_out() end,              desc = "Step Out" },
-
-      -- Leader + d for discoverability
-      { "<leader>dc", function() require("dap").continue() end,         desc = "Continue" },
-      { "<leader>ds",  function() require("dap").step_over() end,        desc = "Step Over" },
-      { "<leader>di",  function() require("dap").step_into() end,        desc = "Step Into" },
-      { "<leader>do",  function() require("dap").step_out() end,         desc = "Step Out" },
-      { "<leader>dt",  function() require("dap").terminate() end,        desc = "Terminate" },
-      { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
 
       -- Breakpoints
       { "<leader>db",  function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },

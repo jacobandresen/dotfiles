@@ -22,20 +22,21 @@ map("n", "<C-u>", "<C-u>zzzv")
 -- file explorer (oil)
 map("n", "<leader>e", "<CMD>Oil<CR>", { desc = "Open Oil" })
 
--- telescope: find
-map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find files" })
-map("n", "<leader>fs", "<cmd>Telescope live_grep<cr>", { desc = "Live grep" })
-map("n", "<leader>fc", "<cmd>Telescope grep_string<cr>", { desc = "Grep string under cursor" })
-map("n", "<leader>fb", "<cmd>Telescope buffers<cr>", { desc = "Buffers" })
-map("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Help tags" })
-map("n", "<leader>fcb", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer fuzzy find" })
-map("n", "<leader>fj", "<cmd>Telescope jumplist<cr>", { desc = "Jumplist" })
-map("n", "<leader>ft", "<cmd>Telescope colorscheme<cr>", { desc = "Colorschemes" })
-
--- telescope: git (aligned with LazyVim's <leader>g git prefix)
-map("n", "<leader>gc", "<cmd>Telescope git_commits<cr>", { desc = "Git commits" })
-map("n", "<leader>gB", "<cmd>Telescope git_branches<cr>", { desc = "Git branches" })
-map("n", "<leader>gs", "<cmd>Telescope git_status<cr>", { desc = "Git status" })
+-- telescope: only what LazyVim's own <leader>f/<leader>s/<leader>g groups
+-- don't already cover. Everything else here used to shadow or duplicate an
+-- existing LazyVim default (e.g. <leader>fc was "Find Config File", <leader>ft
+-- was "Terminal" - now under <leader>sw and <leader>uC respectively):
+--   grep            -> <leader>sg or <leader>/
+--   grep word       -> <leader>sw
+--   buffers         -> <leader>fb (already better: MRU-sorted)
+--   help tags       -> <leader>sh
+--   jumplist        -> <leader>sj
+--   colorschemes    -> <leader>uC
+--   git commits     -> <leader>gc (telescope extra)
+--   git status      -> <leader>gs (telescope extra)
+--   git branches    -> use Lazygit (<leader>gg) instead
+map("n", "<leader>ff", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find files (incl. ignored)" })
+map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer lines (exact match)" })
 
 -- window resizing
 map("n", "<C-Up>",    "<cmd>resize +2<CR>", { desc = "Increase window height" })

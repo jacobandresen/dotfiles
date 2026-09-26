@@ -1,38 +1,7 @@
 -- AI assistant via CodeCompanion.nvim, switchable between Ollama (whichever
 -- model is currently loaded) and GitHub Copilot with `ga` inside the chat buffer.
-local function ollama_model()
-  local function models_from(url)
-    local out = vim.fn.system({ "curl", "-s", "--max-time", "2", url })
-    if vim.v.shell_error ~= 0 or out == "" then
-      return nil
-    end
-    local ok, decoded = pcall(vim.json.decode, out)
-    if not ok or not decoded.models or #decoded.models == 0 then
-      return nil
-    end
-    return decoded.models
-  end
-
-  -- prefer whatever Ollama currently has resident in memory
-  local loaded = models_from("http://localhost:11434/api/ps")
-  if loaded then
-    return loaded[1].name
-  end
-
-  -- nothing loaded right now (idle unload, fresh server, ...) - fall back to
-  -- the most recently pulled model rather than guessing a hardcoded name
-  local available = models_from("http://localhost:11434/api/tags")
-  if available then
-    table.sort(available, function(a, b)
-      return a.modified_at > b.modified_at
-    end)
-    vim.notify("Ollama: no model currently loaded, defaulting to " .. available[1].name, vim.log.levels.WARN)
-    return available[1].name
-  end
-
-  vim.notify("Ollama unreachable at localhost:11434 - AI commands will fail until it's running", vim.log.levels.WARN)
-  return "unknown"
-end
+-- Inline ghost-text suggestions (Minuet, further below) follow the same model.
+local ollama_model = require("util.ollama").current_model
 
 return {
   {
@@ -73,8 +42,71 @@ return {
           },
         },
         interactions = {
-          chat = { adapter = "ollama" },
+          chat = {
+            adapter = "ollama",
+            -- narrower, sidebar-like panel, closer to VS Code's Copilot Chat
+            window = { width = 0.35 },
+            keymaps = {
+              -- Copilot Chat's "+" attach-context button: one key, fuzzy list
+              -- of every context type (#buffer, #selection, #diagnostics...)
+              -- and slash command (/file, /symbols...) instead of memorising
+              -- the `#`/`/` syntax.
+              add_context = {
+                modes = { n = "<C-g>", i = "<C-g>" },
+                callback = function(chat) require("codecompanion.interactions.chat.action_palette").launch(chat) end,
+                description = "Add context",
+                index = 1,
+              },
+            },
+          },
           inline = { adapter = "ollama" },
+        },
+      })
+    end,
+  },
+
+  {
+    -- Copilot-style ghost-text suggestions, powered by the local Ollama model.
+    -- Uses the chat-completions endpoint (not FIM) so it works with whichever
+    -- general instruct model happens to be loaded, not just FIM-trained
+    -- coder models - see the "openai_compatible" vs "openai_fim_compatible"
+    -- trade-off in the plugin's README.
+    "milanglacier/minuet-ai.nvim",
+    event = "InsertEnter",
+    config = function()
+      require("minuet").setup({
+        provider = "openai_compatible",
+        n_completions = 1, -- resource saving for a local model
+        context_window = 512, -- small + fast; raise if completions feel too shallow
+        request_timeout = 10, -- local inference can be slower than a cloud API
+        throttle = 2000, -- avoid hammering the local server while typing
+        debounce = 800,
+        provider_options = {
+          openai_compatible = {
+            name = "Ollama",
+            end_point = "http://localhost:11434/v1/chat/completions",
+            api_key = function() return "ollama" end, -- unused, but required to be non-nil
+            model = ollama_model(),
+            optional = {
+              max_tokens = 128,
+              think = false, -- skip reasoning preamble on hybrid-thinking models
+            },
+          },
+        },
+        virtualtext = {
+          auto_trigger_ft = {
+            "c", "cpp", "rust", "cs", "javascript", "typescript",
+            "javascriptreact", "typescriptreact", "lua", "python", "go",
+            "sh", "yaml", "json",
+          },
+          keymap = {
+            accept = "<A-A>",
+            accept_line = "<A-a>",
+            accept_n_lines = "<A-z>",
+            prev = "<A-[>",
+            next = "<A-]>",
+            dismiss = "<A-e>",
+          },
         },
       })
     end,
