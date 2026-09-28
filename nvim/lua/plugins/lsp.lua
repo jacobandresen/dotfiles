@@ -11,6 +11,11 @@ local function clangd_fallback_flags()
   return extra
 end
 
+local function roslyn_needs_mason()
+  local mason_bin = vim.fn.stdpath("data") .. "/mason/bin/roslyn-language-server"
+  return vim.fn.executable("roslyn-language-server") ~= 1 and vim.fn.executable(mason_bin) ~= 1
+end
+
 -- SDL build & run: <leader>rr compiles the current C/C++ file against
 -- whichever SDL version it #includes, then runs the binary in a terminal.
 -- For quick experiments; real projects should use their own build system.
@@ -127,6 +132,8 @@ return {
         docker_language_server = {},
         -- C#: Roslyn (mason package roslyn-language-server)
         roslyn_ls = {
+          -- Older Mason `roslyn` installs provide the same executable name.
+          mason = roslyn_needs_mason(),
           settings = {
             ["csharp|inlay_hints"] = {
               csharp_enable_inlay_hints_for_implicit_object_creation = true,

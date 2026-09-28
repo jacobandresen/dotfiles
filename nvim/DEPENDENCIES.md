@@ -29,7 +29,9 @@ adapters, formatters).
   one model pulled — powers the `ollama` CodeCompanion adapter and Minuet's
   inline ghost-text suggestions (`<A-A>` to accept)
 - **GitHub Copilot** subscription — run `:Copilot auth` once to authenticate;
-  used by the `copilot` CodeCompanion adapter
+  used by the `copilot` CodeCompanion chat adapter and its code-review/test
+  prompt templates. Copilot's own inline completions are disabled; Minuet uses
+  Ollama for local ghost text.
 
 ## SDL game dev (`lua/plugins/lsp.lua`)
 
@@ -58,10 +60,12 @@ Not managed by Mason; install via the language's own tooling:
 
 ## Mason-managed (auto-installed, see `lua/plugins/lsp.lua`)
 
-LSP servers configured under `nvim-lspconfig` (`clangd`, `helm-ls`,
-`docker-language-server`, `roslyn-language-server` for C#) are installed by
-LazyVim. The rest are listed in the `mason.nvim` spec: `rust-analyzer` (run by
-rustaceanvim), `netcoredbg`, `codelldb`, `js-debug-adapter`, `prettier`,
+LSP servers configured under `nvim-lspconfig` (`clangd`, `helm-ls` and
+`docker-language-server`) are installed by LazyVim. Roslyn is installed by
+Mason when `roslyn-language-server` is not already executable; an existing
+executable from an older Mason `roslyn` package is reused to avoid the duplicate
+shim conflict. The rest are listed in the `mason.nvim` spec: `rust-analyzer`
+(run by rustaceanvim), `netcoredbg`, `codelldb`, `js-debug-adapter`, `prettier`,
 `black`, `isort`, `clang-format`, `goimports`, `csharpier`, plus LazyVim's own
 `stylua` and `shfmt`.
 

@@ -1,88 +1,44 @@
-# dotfiles
+# Dotfiles
 
-Neovim, Midnight Commander, kitty and zsh with an MS-DOS / Turbo Pascal look,
-plus the [pi](https://pi.dev) coding agent on local [Ollama](https://ollama.ai)
-models. Everything is sized to the machine's RAM.
+Turbo Pascal-inspired configs for Neovim, Midnight Commander, kitty, zsh and
+the [pi](https://pi.dev) coding agent with local
+[Ollama](https://ollama.com) models.
+
+## Install
 
 ```sh
 make install
 ```
 
-Requirements: Neovim ≥ 0.9, git, Terminess Nerd Font, More Perfect DOS VGA
-(kitty). lazy.nvim installs plugins on first launch.
-
-## Make targets
-
-| Target | What it does |
-| --- | --- |
-| `make install` | deps + all configs below |
-| `make install-nvim` / `-zsh` / `-mc` / `-kitty` / `-pi` | symlink that config |
-| `make install-ollama` | apply the RAM-matched Ollama profile |
-| `make install-docker` | apply the same RAM profile to Docker |
-| `make use-model MODEL=<tag>` | point pi, nvim and mu at `<tag>` |
-| `make setup-host` | re-point pi at this host's selected model |
-| `make verify-model` | check the model can actually drive pi |
-| `make ram-profile` | print this host's profile and what it selects |
-
-## Look
-
-- **Neovim** — LazyVim with Turbo Vision menus, hint line and window frames in
-  the built-in `retrobox` colours (`:colorscheme turbopascal` for the blue TP7
-  screen). F-keys avoid GNOME/KDE shortcuts: plain and Shift+F1–F10 only,
-  Shift+F10 for the local menu. LSP, debugging, database UI (Dadbod), text transforms. AI via
-  CodeCompanion.nvim, Ollama or Copilot (`ga` in the chat buffer). External
-  tools: [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md).
-- **Midnight Commander** — `retrobox` skin to match (`turbopascal` also
-  installed); `F4` opens Neovim.
-- **kitty / zsh** — VGA font, EGA palette, 80x25, DOS-style prompt.
-
-## Local models
-
-`scripts/detect-ram-profile.sh` reports `8gb` (<12GB), `16gb` (<24GB) or
-`32gb`; that picks the model, the Ollama tuning and the Docker limits.
-
-| RAM | Linux (discrete GPU) | macOS |
-| --- | --- | --- |
-| ≥24GB | `qwen3-coder:30b` | `qwen3:4b` |
-| 12–24GB | `qwen3:8b` | `qwen3:4b` |
-| <12GB | `qwen3:4b` | `qwen3:4b` |
-
-Macs don't tier: unified memory means the GPU budget comes out of system RAM
-(Ollama can wire only ~75% of it), and `qwen3:4b` is the largest tag that stays
-100% on GPU on an 8GB M2.
-
-**A model must write, compile and run a C file through pi.** `qwen2.5-coder`
-and `llama3.2:3b` fake tool calls as text; `llama3.1:8b` calls tools but
-mangles the C. `make verify-model` grades what lands on disk, not the
-transcript — run it after any override (`DOTFILES_CODING_MODEL=<tag>`).
-`scripts/bench-model.sh` measures fit only; anything short of `100% GPU` in
-its `PROCESSOR` column has spilled to CPU.
+The installer detects the host OS and RAM profile, installs dependencies,
+symlinks the configs, and applies matching Ollama and Docker limits. On macOS,
+Docker Desktop is opt-in:
 
 ```sh
-make use-model MODEL=qwen3:8b   # load another tag, repoint pi/nvim/mu
-make use-model                  # back to this host's selection
+make deps-docker-macos
 ```
 
-### Tuning
+Requires Git, Neovim 0.12+, and a Nerd Font. Neovim plugins install on first
+launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for Neovim tools.
 
-`make install-ollama` pins one loaded model and `OLLAMA_NUM_PARALLEL=1`.
+## Included
 
-- **Linux** — systemd drop-in (`ollama/ollama.service.d/`): Vulkan, flash
-  attention, `MemoryHigh` 4G / 7G / 19500M.
-- **macOS** — `launchctl setenv` from `ollama/launchd/<profile>.env` plus
-  `~/.ollama/dotfiles.env` for shell-launched `ollama serve`; q8_0 KV cache.
-  Re-run after a reboot.
+- **Neovim** — LazyVim with a Turbo Vision UI, LSP, debugging, database tools
+  and AI integrations. Use `:colorscheme turbopascal` for the blue TP7 palette.
+- **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
+  Neovim.
+- **kitty and zsh** — VGA styling, a 120×40 layout and DOS-style prompt.
+- **pi** — configured to use the host's selected Ollama model.
 
-> `OLLAMA_CONTEXT_LENGTH` is server-wide and overrides a model's `num_ctx`. A
-> stale value in `~/.ollama/dotfiles.env` once cost 2.1x throughput.
+## Model controls
 
-## Docker
+```sh
+make ram-profile                  # show the detected profile and model
+make use-model MODEL=<tag>       # switch pi, Neovim and mu
+make use-model                    # restore the host-selected model
+make verify-model                 # build and run a generated C program
+make install-ollama install-docker
+```
 
-`make install-docker` caps Docker to the same profile so it doesn't starve
-Ollama: systemd drop-in on Linux (~2G / 6G / 12G), Docker Desktop settings
-merge on macOS (`docker/desktop/<profile>.json`, backup left as `.bak`).
-Docker Desktop isn't in `make deps` on macOS — use `make deps-docker-macos`.
-
-## Contact
-
-jacob.andresen@gmail.com
+The last command reapplies the host's resource profile after a hardware or
+configuration change.

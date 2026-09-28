@@ -2,6 +2,40 @@
 -- model is currently loaded) and GitHub Copilot with `ga` inside the chat buffer.
 -- Inline ghost-text suggestions (Minuet, further below) follow the same model.
 local ollama_model = require("util.ollama").current_model
+local copilot_configured = require("util.copilot").is_configured()
+
+local codecompanion_keys = {
+  { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "Toggle AI chat", mode = { "n", "v" } },
+  { "<leader>an", "<cmd>CodeCompanionChat<cr>", desc = "New AI chat" },
+  { "<leader>ap", "<cmd>CodeCompanionChat Add<cr>", desc = "Send selection and open AI chat", mode = "v" },
+  { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "Inline AI edit", mode = { "n", "v" } },
+  { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
+  { "<leader>as", function() require("codecompanion").sessions() end, desc = "Saved AI chats" },
+  { "<leader>ae", function() require("codecompanion").changes() end, desc = "Files the AI edited (quickfix)" },
+}
+if copilot_configured then
+  codecompanion_keys[#codecompanion_keys + 1] = {
+    "<leader>aP",
+    function() require("codecompanion").chat({ params = { adapter = "copilot" } }) end,
+    desc = "New Copilot chat",
+  }
+  codecompanion_keys[#codecompanion_keys + 1] = {
+    "<leader>aA",
+    function()
+      local chat = require("codecompanion").last_chat()
+      if not chat then
+        return vim.notify("No chat open", vim.log.levels.WARN)
+      end
+      require("codecompanion.interactions.chat.keymaps.change_adapter").callback(chat)
+    end,
+    desc = "Change AI chat adapter",
+  }
+  codecompanion_keys[#codecompanion_keys + 1] = {
+    "<leader>ad",
+    function() require("codecompanion").prompt("diff-review") end,
+    desc = "Review Git diff with Copilot",
+  }
+end
 
 return {
   {
@@ -20,68 +54,108 @@ return {
     dependencies = { "nvim-lua/plenary.nvim" },
     -- the AI menu runs these before any AI key has loaded the plugin
     cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions", "CodeCompanionCmd" },
-    keys = {
-      { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "Toggle AI chat", mode = { "n", "v" } },
-      { "<leader>an", "<cmd>CodeCompanionChat<cr>", desc = "New AI chat" },
-      { "<leader>ap", "<cmd>CodeCompanionChat Add<cr>", desc = "Add selection to AI chat", mode = "v" },
-      { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "Inline AI edit", mode = { "n", "v" } },
-      -- Explain/fix/tests/etc. live in the action palette (ships built in,
-      -- no custom hooks needed the way gp.nvim required for GpExplain).
-      { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
-      { "<leader>as", function() require("codecompanion").sessions() end, desc = "Saved AI chats" },
-      { "<leader>ae", function() require("codecompanion").changes() end, desc = "Files the AI edited (quickfix)" },
-      -- same as `ga` inside the chat buffer, from anywhere
-      {
-        "<leader>aA",
-        function()
-          local chat = require("codecompanion").last_chat()
-          if not chat then
-            return vim.notify("No chat open", vim.log.levels.WARN)
-          end
-          require("codecompanion.interactions.chat.keymaps.change_adapter").callback(chat)
-        end,
-        desc = "Change AI chat adapter",
-      },
-    },
+    keys = codecompanion_keys,
     config = function()
+      local http_adapters = {
+        ollama = function()
+          return require("codecompanion.adapters").extend("ollama", {
+            schema = {
+              model = { default = ollama_model() },
+            },
+          })
+        end,
+        -- <leader>ai: small context, capped output, no thinking, kept
+        -- resident longer. Chat keeps the unrestricted "ollama" adapter.
+        ollama_fast = function()
+          return require("codecompanion.adapters").extend("ollama", {
+            schema = {
+              model = { default = ollama_model() },
+              num_ctx = { default = 2048 },
+              think = { default = false },
+              keep_alive = { default = "30m" },
+              num_predict = {
+                order = 13,
+                mapping = "parameters.options",
+                type = "number",
+                optional = true,
+                default = 512,
+                desc = "Cap response length for fast inline edits.",
+              },
+            },
+          })
+        end,
+      }
+      http_adapters.copilot = copilot_configured and "copilot" or false
+      http_adapters.opts = { hidden = { copilot = not copilot_configured } }
+
+      local prompt_library = {}
+      if copilot_configured then
+        prompt_library = {
+          ["Review current code"] = {
+            interaction = "chat",
+            description = "Review the current code for actionable issues",
+            opts = { adapter = { name = "copilot" } },
+            prompts = {
+              {
+                role = "system",
+                content = "Review code carefully. Report only actionable correctness, security, or maintainability issues, ordered by severity. Do not invent problems or rewrite unrelated code.",
+              },
+              {
+                role = "user",
+                content = "Review the code currently in context. Give each finding a concise explanation and point to the relevant code.",
+              },
+            },
+          },
+          ["Write tests for current code"] = {
+            interaction = "chat",
+            description = "Plan tests for the current code using project conventions",
+            opts = { adapter = { name = "copilot" } },
+            prompts = {
+              {
+                role = "system",
+                content = "You are a pragmatic testing assistant. Follow the project's existing test conventions and focus on meaningful behavior and edge cases.",
+              },
+              {
+                role = "user",
+                content = "For the code currently in context, identify the most valuable tests to add. Show the test code and briefly explain what each test protects.",
+              },
+            },
+          },
+          ["Review Git diff"] = {
+            interaction = "chat",
+            description = "Review staged and unstaged Git changes with Copilot",
+            opts = {
+              alias = "diff-review",
+              adapter = { name = "copilot" },
+              auto_submit = true,
+            },
+            prompts = {
+              {
+                role = "system",
+                content = "Review the changes for actionable bugs, regressions, security issues, or data-loss risks. Report findings ordered by severity with file and changed-line references. Do not report style issues or rewrite the code. If there are no findings, say so clearly.",
+              },
+              {
+                role = "user",
+                content = "Review the staged and unstaged changes in the current Git repository. If no diff is available, tell me there are no staged or unstaged changes to review.\n\n#{diff}",
+              },
+            },
+          },
+        }
+      end
+
       require("codecompanion").setup({
         adapters = {
-          http = {
-            ollama = function()
-              return require("codecompanion.adapters").extend("ollama", {
-                schema = {
-                  model = { default = ollama_model() },
-                },
-              })
-            end,
-            -- <leader>ai: small context, capped output, no thinking, kept
-            -- resident longer. Chat keeps the unrestricted "ollama" adapter.
-            ollama_fast = function()
-              return require("codecompanion.adapters").extend("ollama", {
-                schema = {
-                  model = { default = ollama_model() },
-                  num_ctx = { default = 2048 },
-                  think = { default = false },
-                  keep_alive = { default = "30m" },
-                  num_predict = {
-                    order = 13,
-                    mapping = "parameters.options",
-                    type = "number",
-                    optional = true,
-                    default = 512,
-                    desc = "Cap response length for fast inline edits.",
-                  },
-                },
-              })
-            end,
-            copilot = "copilot",
-          },
+          http = http_adapters,
         },
+        prompt_library = prompt_library,
         interactions = {
+          background = { adapter = copilot_configured and "copilot" or "ollama" },
           chat = {
             adapter = "ollama",
             -- narrower, sidebar-like panel, closer to VS Code's Copilot Chat
             window = { width = 0.35 },
+            show_context = true,
+            fold_context = false,
             keymaps = {
               -- Copilot Chat's "+" attach-context button: fuzzy list of
               -- every context type and slash command, no # / syntax to recall.
@@ -90,6 +164,35 @@ return {
                 callback = function(chat) require("codecompanion.interactions.chat.action_palette").launch(chat) end,
                 description = "Add context",
                 index = 1,
+              },
+              remove_context = {
+                modes = { n = "<C-x>" },
+                callback = function(chat)
+                  local line = vim.api.nvim_get_current_line()
+                  local rendered_id = line:match("^> %- (.+)$")
+                  if not rendered_id then
+                    return vim.notify("Place the cursor on an attached context item", vim.log.levels.WARN)
+                  end
+
+                  local icons = require("codecompanion.config").display.chat.icons
+                  for _, item in ipairs(chat.context_items) do
+                    local item_id = item.id
+                    if item.opts and item.opts.sync_all then
+                      item_id = icons.sync_all .. item_id
+                    elseif item.opts and item.opts.sync_diff then
+                      item_id = icons.sync_diff .. item_id
+                    end
+                    if rendered_id == item_id then
+                      chat.context:remove_items({ [item.id] = true })
+                      chat:check_context()
+                      return
+                    end
+                  end
+
+                  vim.notify("No attached context on this line", vim.log.levels.WARN)
+                end,
+                description = "Remove attached context under cursor",
+                index = 2,
               },
             },
           },

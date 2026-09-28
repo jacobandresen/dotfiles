@@ -129,10 +129,10 @@ M.docker = {
 }
 
 M.ai = {
-  { label = "~C~hat window", key = "Space a c", hint = "Show or hide the CodeCompanion chat", action = function() cc().toggle() end },
+  { label = "~C~hat window", key = "Space a c", hint = "Show/hide chat; Ctrl-G adds context, Ctrl-X detaches it", action = function() cc().toggle() end },
   { label = "~N~ew chat (Ollama)", key = "Space a n", hint = "Start a chat with the loaded Ollama model",
     action = function() cc().chat({ params = { adapter = "ollama" } }) end },
-  { label = "~A~dd to chat", key = "Space a p", hint = "Send the block (or line) to the chat",
+  { label = "~A~dd to chat", key = "Space a p", hint = "Send the selection and open chat; q returns to code",
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanionChat Add") end },
   "-",
   { label = "~I~nline edit...", key = "Space a i", hint = "Ask the AI to edit the block (or file) in place",
@@ -142,11 +142,30 @@ M.ai = {
   "-",
   { label = "~S~aved chats...", key = "Space a s", hint = "Restore a saved chat session", action = function() cc().sessions() end },
   { label = "~E~dited files", key = "Space a e", hint = "Files the AI changed, in the quickfix list", action = function() cc().changes() end },
-  { label = "C~h~ange adapter...", key = "Space a A", hint = "Switch the open chat between Ollama and Copilot", action = feed("<leader>aA") },
   "-",
   { label = "~G~host text", key = "Space a g", hint = "Toggle Minuet's inline suggestions in this buffer",
     action = function() require("minuet") vim.cmd("Minuet virtualtext toggle") end },
 }
+if require("util.copilot").is_configured() then
+  table.insert(M.ai, 3, {
+    label = "New chat (Co~p~ilot)",
+    key = "Space a P",
+    hint = "Start Copilot chat",
+    action = function() cc().chat({ params = { adapter = "copilot" } }) end,
+  })
+  table.insert(M.ai, 4, {
+    label = "Review Git ~d~iff",
+    key = "Space a d",
+    hint = "Ask Copilot to review staged and unstaged changes",
+    action = function() require("codecompanion").prompt("diff-review") end,
+  })
+  table.insert(M.ai, 10, {
+    label = "C~h~ange adapter...",
+    key = "Space a A",
+    hint = "Switch the open chat between Ollama and Copilot",
+    action = feed("<leader>aA"),
+  })
+end
 
 M.db = {
   { label = "~T~oggle database UI", key = "Space D u", hint = "Show or hide the Dadbod connections drawer", action = cmd("DBUIToggle") },

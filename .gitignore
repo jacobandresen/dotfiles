@@ -16,11 +16,18 @@ pi/agent/models-store.json
 # properly instead (e.g. `fd` via the system package manager)
 pi/agent/bin/
 
+# Pi-managed installation and bundled dependencies
+pi/agent/install/
+
+# Go telemetry runtime data
+go/telemetry/
+
 # Editor
 *.swp
 *.swo
 .viminfo
 .viminfo.tmp
+kitty/*.bak
 
 # OS
 .DS_Store
