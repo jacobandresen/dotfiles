@@ -146,8 +146,10 @@ install-mc:
 		echo "  ✓ ~/.config/mc/ini -> $(CURDIR)/mc/ini"; \
 	fi
 	@mkdir -p $(HOME)/.local/share/mc/skins
-	@ln -sfn $(CURDIR)/mc/skins/turbopascal.ini $(HOME)/.local/share/mc/skins/turbopascal.ini
-	@echo "  ✓ ~/.local/share/mc/skins/turbopascal.ini -> $(CURDIR)/mc/skins/turbopascal.ini"
+	@for skin in retrobox turbopascal; do \
+		ln -sfn $(CURDIR)/mc/skins/$$skin.ini $(HOME)/.local/share/mc/skins/$$skin.ini; \
+		echo "  ✓ ~/.local/share/mc/skins/$$skin.ini -> $(CURDIR)/mc/skins/$$skin.ini"; \
+	done
 
 install-kitty:
 	@echo "Installing kitty config..."

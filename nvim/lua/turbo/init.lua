@@ -1,15 +1,23 @@
 -- Turbo Vim: Neovim dressed as the Borland Turbo Pascal 7.0 IDE.
---   colors/turbopascal.lua  EGA palette
+--   colors/turbopascal.lua  EGA palette (the default scheme is retrobox)
+--   turbo/highlights.lua    the Turbo chrome's colours under other schemes
 --   turbo/menubar.lua       menu bar + drop-downs
 --   turbo/menus.lua         the menu tree
 --   turbo/chrome.lua        hint line, window frames, About dialog
--- Debugger F-keys (F4, F7, F8, Ctrl+F2, Ctrl+F9, ...) live in plugins/dap.lua.
+-- Debugger F-keys (F4, F5, F7, F8 and their Shift variants) live in plugins/dap.lua.
+--
+-- Only plain and Shift+F-keys: GNOME and KDE grab Ctrl+F1-F4 (desktops),
+-- Ctrl+F7-F10/F12 (Present Windows, desktop grid), Alt+F1-F10 (launcher,
+-- run, window menu, close, move/resize/maximise) and Alt+Space (window menu,
+-- KRunner) before the terminal sees them; F11/F12 are often terminal
+-- fullscreen or drop-down terminal keys. TP's Ctrl/Alt+F-keys moved to Shift.
 local M = {}
 
 -- UI options; called from options.lua so they're in place before first draw
 function M.setup()
   require("turbo.menubar").setup(require("turbo.menus").menus)
   require("turbo.chrome").setup()
+  require("turbo.highlights").setup()
 end
 
 -- Terminals without modifier-aware F-keys send xterm's F13-F60 instead
@@ -55,10 +63,10 @@ function M.keymaps()
   local menubar = require("turbo.menubar")
   local menus = require("turbo.menus")
 
-  -- menus: F10 reopens the last one, Alt+Space the ≡ menu, Alt+letter a
-  -- named one, Alt+F10 / right click the local menu
+  -- menus: F10 reopens the last one, Alt+= the ≡ menu, Alt+letter a named
+  -- one, Shift+F10 (the CUA context-menu key) / right click the local menu
   map({ "n", "x", "i" }, "<F10>", menubar.open_last, { desc = "Menu" })
-  map({ "n", "x" }, "<M-Space>", function() menubar.open(1) end, { desc = "≡ Menu" })
+  map({ "n", "x" }, "<M-=>", function() menubar.open(1) end, { desc = "≡ Menu" })
   for _, menu in ipairs(menus.menus) do
     local key = menu.title:match("~(.)~")
     if key then
@@ -66,12 +74,13 @@ function M.keymaps()
       map({ "n", "x" }, "<M-" .. key .. ">", function() menubar.open_key(key) end, { desc = "Menu" })
     end
   end
-  map({ "n", "x" }, "<M-F10>", M.local_menu, { desc = "Local Menu" })
+  map({ "n", "x" }, "<S-F10>", M.local_menu, { desc = "Local Menu" })
   map("n", "<RightMouse>", "<LeftMouse><cmd>lua require('turbo').local_menu()<cr>", { desc = "Local Menu" })
 
   -- File
   map({ "n", "x", "i" }, "<F2>", "<cmd>write<cr>", { desc = "Save" })
   map("n", "<F3>", function() LazyVim.pick("files")() end, { desc = "Open" })
+  map("n", "<S-F3>", function() Snacks.bufdelete() end, { desc = "Close" })
   map("n", "<M-x>", "<cmd>confirm qall<cr>", { desc = "Exit" })
 
   -- Edit (CUA clipboard keys)
@@ -82,24 +91,21 @@ function M.keymaps()
   map("n", "<S-Insert>", '"+P', { desc = "Paste" })
   map("i", "<S-Insert>", "<C-r>+", { desc = "Paste" })
 
-  -- Search / Tools
+  -- Search
   map("n", "<S-F2>", function() LazyVim.pick("live_grep")() end, { desc = "Grep" })
-  map("n", "<M-F8>", menus.qf("cnext"), { desc = "Go to next" })
-  map("n", "<M-F7>", menus.qf("cprevious"), { desc = "Go to previous" })
 
-  -- Compile
+  -- Build: F9 make, ]q/[q step through its messages (Trouble's list when open)
   map("n", "<F9>", menus.make, { desc = "Make" })
+  map("n", "]q", menus.messages("next"), { desc = "Next message" })
+  map("n", "[q", menus.messages("prev"), { desc = "Previous message" })
 
   -- Window
-  map("n", "<F5>", function() Snacks.zen.zoom() end, { desc = "Zoom" })
   map("n", "<F6>", "<cmd>wincmd w<cr>", { desc = "Next window" })
   map("n", "<S-F6>", "<cmd>wincmd W<cr>", { desc = "Previous window" })
-  map("n", "<M-F3>", function() Snacks.bufdelete() end, { desc = "Close" })
   map("n", "<M-0>", function() require("telescope.builtin").buffers({ sort_mru = true }) end, { desc = "Window list" })
 
-  -- Help (plain F1 is Neovim's :help already)
-  map("n", "<S-F1>", function() require("telescope.builtin").help_tags() end, { desc = "Help index" })
-  map("n", "<C-F1>", function() pcall(vim.cmd.help, vim.fn.expand("<cword>")) end, { desc = "Topic search" })
+  -- Help (plain F1 is Neovim's :help already; Space s h is the index)
+  map("n", "<S-F1>", menus.topic_search, { desc = "Topic search" })
 end
 
 return M

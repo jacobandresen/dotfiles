@@ -12,8 +12,8 @@ adapters, formatters).
 - **make** + a C compiler (`gcc`/`cc`) — builds `telescope-fzf-native.nvim`
 - **A Nerd Font** — statusline/dashboard/explorer icons (e.g. `Terminess Nerd
   Font`, set in `lua/config/options.lua`)
-- **A truecolor terminal** (`COLORTERM=truecolor`) — the Turbo Pascal EGA
-  colours in Neovim and the `turbopascal` Midnight Commander skin
+- **A truecolor terminal** (`COLORTERM=truecolor`) — the retrobox / Turbo
+  Pascal colours in Neovim and the matching Midnight Commander skins
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
 - **docker** — the Docker explorer (`<leader>gC`, Tools ► Docker ► Explorer:

@@ -1,10 +1,11 @@
 return {
-  -- Turbo Pascal 7.0 look: colors/turbopascal.lua plus lua/turbo/ (menu bar
-  -- in the tabline, hint line in the statusline), which replace lualine and
-  -- bufferline
+  -- Turbo Pascal 7.0 look: lua/turbo/ (menu bar in the tabline, hint line in
+  -- the statusline) replaces lualine and bufferline. Colours: Neovim's
+  -- built-in retrobox, with the Turbo chrome in its tones (turbo/highlights.lua);
+  -- `:colorscheme turbopascal` for the full blue EGA screen.
   {
     "LazyVim/LazyVim",
-    opts = { colorscheme = "turbopascal" },
+    opts = { colorscheme = "retrobox" },
   },
   { "nvim-lualine/lualine.nvim", enabled = false },
   { "akinsho/bufferline.nvim", enabled = false },
@@ -21,7 +22,7 @@ return {
       -- opaque notifications (see fidget below)
       opts.styles = vim.tbl_deep_extend("force", opts.styles or {}, {
         notification = { wo = { winblend = 0 } },
-        -- lazygit/lazydocker: Alt+X (or TP's Alt+F3 "Close") quits from any
+        -- lazygit/lazydocker: Alt+X (or Shift+F3, File > Close) quits from any
         -- lazygit panel, instead of hunting for the view where q works
         lazygit = {
           border = "double",
@@ -31,8 +32,8 @@ return {
           footer_pos = "center",
           keys = {
             turbo_close = { "<M-x>", "hide", mode = { "t", "n" }, desc = "Close" },
-            turbo_close_f3 = { "<M-F3>", "hide", mode = { "t", "n" }, desc = "Close" },
-            turbo_close_f51 = { "<F51>", "hide", mode = { "t", "n" }, desc = "Close" }, -- Alt+F3, xterm style
+            turbo_close_f3 = { "<S-F3>", "hide", mode = { "t", "n" }, desc = "Close" },
+            turbo_close_f15 = { "<F15>", "hide", mode = { "t", "n" }, desc = "Close" }, -- Shift+F3, xterm style
           },
         },
       })

@@ -167,6 +167,7 @@ return {
     keys = {
       { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
       { "<leader>Da", "<cmd>DBUIAddConnection<cr>", desc = "DB Add Connection" },
+      { "<leader>Dc", function() require("util.db").edit_connections() end, desc = "DB Edit Connections" },
       { "<leader>Df", function() require("util.db").in_query("DBUIFindBuffer")() end, desc = "DB Find Buffer" },
       { "<leader>Dr", function() require("util.db").in_query("DBUIRenameBuffer")() end, desc = "DB Rename Buffer" },
       { "<leader>Di", "<cmd>DBUILastQueryInfo<cr>", desc = "DB Last Query Info" },

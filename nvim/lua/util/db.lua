@@ -26,6 +26,16 @@ function M.execute(range)
   vim.cmd(range .. "DB")
 end
 
+-- the connections Space D a saved (db_ui_save_location, outside git)
+function M.edit_connections()
+  local file = vim.g.db_ui_save_location .. "/connections.json"
+  if vim.fn.filereadable(file) == 0 then
+    return vim.notify("No saved connections yet - add one with Space D a", vim.log.levels.WARN)
+  end
+  vim.cmd.edit(vim.fn.fnameescape(file))
+  vim.notify("Press R in the database UI to reload it after saving")
+end
+
 -- a DBUI command that needs a query buffer, e.g. M.in_query("DBUIRenameBuffer")
 function M.in_query(command)
   return function()

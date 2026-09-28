@@ -26,11 +26,14 @@ Requirements: Neovim ≥ 0.9, git, Terminess Nerd Font, More Perfect DOS VGA
 
 ## Look
 
-- **Neovim** — LazyVim with a TP7 colorscheme, menu bar, hint line and window
-  frames. LSP, debugging, database UI (Dadbod), text transforms. AI via
+- **Neovim** — LazyVim with Turbo Vision menus, hint line and window frames in
+  the built-in `retrobox` colours (`:colorscheme turbopascal` for the blue TP7
+  screen). F-keys avoid GNOME/KDE shortcuts: plain and Shift+F1–F10 only,
+  Shift+F10 for the local menu. LSP, debugging, database UI (Dadbod), text transforms. AI via
   CodeCompanion.nvim, Ollama or Copilot (`ga` in the chat buffer). External
   tools: [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md).
-- **Midnight Commander** — Turbo Pascal skin; `F4` opens Neovim.
+- **Midnight Commander** — `retrobox` skin to match (`turbopascal` also
+  installed); `F4` opens Neovim.
 - **kitty / zsh** — VGA font, EGA palette, 80x25, DOS-style prompt.
 
 ## Local models

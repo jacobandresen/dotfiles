@@ -20,7 +20,7 @@ require("lazy").setup({
     { import = "plugins" },
   },
   defaults = { lazy = false, version = false },
-  install = { colorscheme = { "turbopascal", "habamax" } },
+  install = { colorscheme = { "retrobox", "habamax" } },
   -- no update checker: autocmds.lua already updates silently on every startup
   performance = {
     rtp = {

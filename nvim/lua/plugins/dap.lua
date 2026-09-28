@@ -31,19 +31,19 @@ return {
     },
     -- fkeys: also bind the F13-F60 names some terminals send (turbo/init.lua)
     keys = require("turbo").fkey_specs({
-      -- Turbo Pascal 7.0 layout (Run and Debug menus, lua/turbo/menus.lua),
-      -- plus Delphi's Shift+F8 for step out, which TP lacked
-      { "<C-F9>", function() require("dap").continue() end,              desc = "Run" },
+      -- Debug menu (lua/turbo/menus.lua). TP's F4/F7/F8 stay; its Ctrl+ and
+      -- Alt+F-keys move to Shift, since GNOME and KDE take those (Ctrl+F1-F4
+      -- switch desktops, Ctrl+F7-F10 Present Windows, Alt+F5-F10 move/resize
+      -- the window). F5 toggles breakpoints (Delphi), Shift+F5 stops (VS Code).
+      { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Run to Cursor" },
+      { "<S-F4>", function() require("dapui").eval(nil, { enter = true }) end, desc = "Evaluate", mode = { "n", "v" } },
+      { "<F5>",   function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
+      { "<S-F5>", function() require("dap").terminate() end,             desc = "Stop" },
+      { "<F7>",   function() require("dap").step_into() end,             desc = "Step Into" },
+      { "<S-F7>", function() require("dapui").elements.watches.add(vim.fn.expand("<cword>")) end, desc = "Add Watch" },
       { "<F8>",   function() require("dap").step_over() end,             desc = "Step Over" },
-      { "<F7>",   function() require("dap").step_into() end,             desc = "Trace Into" },
       { "<S-F8>", function() require("dap").step_out() end,              desc = "Step Out" },
-      { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Go to Cursor" },
-      { "<C-F2>", function() require("dap").terminate() end,             desc = "Program Reset" },
-      { "<C-F8>", function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
-      { "<C-F3>", function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
-      { "<C-F4>", function() require("dapui").eval(nil, { enter = true }) end, desc = "Evaluate/Modify", mode = { "n", "v" } },
-      { "<C-F7>", function() require("dapui").elements.watches.add(vim.fn.expand("<cword>")) end, desc = "Add Watch" },
-      { "<M-F5>", function() require("dapui").toggle() end,              desc = "User Screen" },
+      { "<S-F9>", function() require("dap").continue() end,              desc = "Start / Continue" },
 
       -- Breakpoints
       { "<leader>db",  function() require("dap").toggle_breakpoint() end, desc = "Toggle Breakpoint" },
@@ -54,6 +54,7 @@ return {
       -- Session / UI
       { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
       { "<leader>du",  function() require("dapui").toggle() end,         desc = "Toggle UI" },
+      { "<leader>ds",  function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
       { "<leader>de",  function() require("dapui").eval() end,           desc = "Eval", mode = { "n", "v" } },
       { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
     }),

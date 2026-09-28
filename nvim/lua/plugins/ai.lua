@@ -18,6 +18,8 @@ return {
   {
     "olimorris/codecompanion.nvim",
     dependencies = { "nvim-lua/plenary.nvim" },
+    -- the AI menu runs these before any AI key has loaded the plugin
+    cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions", "CodeCompanionCmd" },
     keys = {
       { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "Toggle AI chat", mode = { "n", "v" } },
       { "<leader>an", "<cmd>CodeCompanionChat<cr>", desc = "New AI chat" },

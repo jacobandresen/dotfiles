@@ -7,7 +7,7 @@ local api = vim.api
 
 local hints = {
   { "F1", "Help" }, { "F2", "Save" }, { "F3", "Open" },
-  { "F9", "Make" }, { "Alt+F10", "Local menu" }, { "F10", "Menu" },
+  { "F9", "Make" }, { "Shift+F10", "Local menu" }, { "F10", "Menu" },
 }
 
 local modes = { i = "Insert", R = "Overwrite", v = "Block", V = "Block", ["\22"] = "Block", t = "Terminal", c = "Command" }

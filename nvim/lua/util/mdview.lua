@@ -1,7 +1,7 @@
 -- Markdown View/Edit modes. Edit shows the source; View renders it with
 -- render-markdown.nvim (every line, the cursor line too), read-only and
 -- soft-wrapped like a document. Switch with the [ View ]/[ Edit ] button in
--- the window frame (turbo/chrome.lua), <leader>um or the Alt+F10 local menu.
+-- the window frame (turbo/chrome.lua), <leader>um or the Shift+F10 local menu.
 local M = {}
 
 -- window options View changes, restored when going back to Edit
