@@ -132,8 +132,10 @@ M.ai = {
   { label = "~C~hat window", key = "Space a c", hint = "Show/hide chat; Ctrl-G adds context, Ctrl-X detaches it", action = function() cc().toggle() end },
   { label = "~N~ew chat (Ollama)", key = "Space a n", hint = "Start a chat with the loaded Ollama model",
     action = function() cc().chat({ params = { adapter = "ollama" } }) end },
-  { label = "~A~dd to chat", key = "Space a p", hint = "Send the selection and open chat; q returns to code",
-    action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanionChat Add") end },
+  { label = "~A~dd to chat", key = "Space a p", hint = "Attach the selection or current file and focus the chat prompt",
+    action = function(ctx) cc() require("util.ai_chat").add(ctx.visual) end },
+  { label = "~B~ack to code", key = "Space a b", hint = "Focus the code window while keeping chat open",
+    action = function() require("util.ai_chat").back() end },
   "-",
   { label = "~I~nline edit...", key = "Space a i", hint = "Ask the AI to edit the block (or file) in place",
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanion") end },
@@ -331,6 +333,8 @@ M.menus = {
       { label = "Re~n~ame...", key = "Space c r", hint = "Rename the symbol under the cursor everywhere", action = function() vim.lsp.buf.rename() end },
       { label = "Code ~a~ction...", key = "Space c a", hint = "Quick fixes and refactorings at the cursor",
         action = function() vim.lsp.buf.code_action() end },
+      { label = "Magic ~w~and: fix diagnostic", key = "Space c w", hint = "Ask the selected AI to fix the diagnostic at the cursor",
+        action = function() cc() require("util.ai_wand").fix() end },
       { label = "~F~ix all", key = "Space c F", hint = "Request a server-provided fix for the whole file",
         action = function() require("util.lsp").fix_all() end },
       { label = "F~o~rmat file", key = "Space c f", hint = "Format with the file type's formatter (conform)",
@@ -439,6 +443,18 @@ M.menus = {
     },
   },
 }
+
+-- Hide the wand while a request is running; the action also checks the lock.
+for _, menu in ipairs(M.menus) do
+  if menu.title == "~C~ode" then
+    local items = menu.items
+    menu.items = function()
+      return vim.tbl_filter(function(item)
+        return type(item) ~= "table" or item.key ~= "Space c w" or not require("util.ai_wand").busy()
+      end, items)
+    end
+  end
+end
 
 -- the edit window's local menu (Shift+F10 / right click): clipboard,
 -- navigation, then the debugger at the cursor

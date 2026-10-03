@@ -15,6 +15,7 @@ local M = {}
 
 -- UI options; called from options.lua so they're in place before first draw
 function M.setup()
+  require("util.ai_wand").setup()
   require("turbo.menubar").setup(require("turbo.menus").menus)
   require("turbo.chrome").setup()
   require("turbo.highlights").setup()

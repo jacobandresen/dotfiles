@@ -7,9 +7,12 @@ local tuning = require("util.ollama_tuning").current()
 local copilot_configured = require("util.copilot").is_configured()
 
 local codecompanion_keys = {
+  { "<leader>cw", function() require("util.ai_wand").fix() end, desc = "Magic wand: fix diagnostic" },
   { "<leader>ac", "<cmd>CodeCompanionChat Toggle<cr>", desc = "Toggle AI chat", mode = { "n", "v" } },
   { "<leader>an", "<cmd>CodeCompanionChat<cr>", desc = "New AI chat" },
-  { "<leader>ap", "<cmd>CodeCompanionChat Add<cr>", desc = "Send selection and open AI chat", mode = "v" },
+  { "<leader>ap", function() require("util.ai_chat").add(false) end, desc = "Add file to AI chat" },
+  { "<leader>ap", function() require("util.ai_chat").add(true) end, desc = "Add selection to AI chat", mode = "x" },
+  { "<leader>ab", function() require("util.ai_chat").back() end, desc = "Back to code" },
   { "<leader>ai", "<cmd>CodeCompanion<cr>", desc = "Inline AI edit", mode = { "n", "v" } },
   { "<leader>aa", "<cmd>CodeCompanionActions<cr>", desc = "AI actions", mode = { "n", "v" } },
   { "<leader>as", function() require("codecompanion").sessions() end, desc = "Saved AI chats" },
@@ -58,6 +61,7 @@ return {
     cmd = { "CodeCompanion", "CodeCompanionChat", "CodeCompanionActions", "CodeCompanionCmd" },
     keys = codecompanion_keys,
     config = function()
+      require("util.ai_chat").setup()
       local http_adapters = {
         ollama = function()
           return require("codecompanion.adapters").extend("ollama", {
@@ -162,6 +166,11 @@ return {
             show_context = true,
             fold_context = false,
             keymaps = {
+              back_to_code = {
+                modes = { n = "gb" },
+                callback = function() require("util.ai_chat").back() end,
+                description = "Back to code (keep chat open)",
+              },
               -- Copilot Chat's "+" attach-context button: fuzzy list of
               -- every context type and slash command, no # / syntax to recall.
               add_context = {
