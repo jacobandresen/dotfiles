@@ -1,4 +1,4 @@
-.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos
+.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common doctor
 
 OS := $(shell uname -s)
 
@@ -22,24 +22,9 @@ endif
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
-	brew install git neovim lazydocker
-	brew install --cask ollama font-terminess-ttf-nerd-font
-	@# pi is not a Homebrew formula (that name is unrelated) — it ships as the
-	@# npm package @earendil-works/pi-coding-agent, which is what pi.dev's
-	@# installer pulls in. Same install path as the Linux targets.
-	@if command -v pi >/dev/null 2>&1; then \
-		echo "  ✓ pi already installed ($$(pi --version 2>/dev/null || echo unknown))"; \
-	else \
-		if [ -d "$(HOME)/.npm" ] && [ -n "$$(find "$(HOME)/.npm" ! -user "$$(id -un)" -print -quit 2>/dev/null)" ]; then \
-			echo "  ✗ ~/.npm contains root-owned files — the npm-based installer will fail."; \
-			echo "    Usually left behind by an earlier 'sudo npm'. Fix with:"; \
-			echo "      sudo chown -R $$(id -u):$$(id -g) \"$(HOME)/.npm\""; \
-			echo "    then re-run 'make deps'."; \
-			exit 1; \
-		fi; \
-		echo "Installing pi..."; \
-		curl -fsSL https://pi.dev/install.sh | bash; \
-	fi
+	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
+	brew install --cask ollama kitty font-terminess-ttf-nerd-font
+	$(MAKE) deps-common
 	@echo "Docker Desktop is not installed by default (it reserves a multi-GB VM"
 	@echo "up front, which hurts on a small machine). Run 'make deps-docker-macos'"
 	@echo "if you want it — 'make install-docker' then sizes it for this host."
@@ -53,45 +38,21 @@ deps-docker-macos:
 	fi
 	$(MAKE) install-docker
 
+deps-common:
+	@bash ./scripts/install-cli-tools.sh
+
 deps-arch:
-	sudo pacman -Syu --needed git neovim lazydocker docker-compose
-	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
+	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker docker docker-compose
+	$(MAKE) deps-common
 
-# lazydocker isn't in apt; the binary release install script puts it in
-# ~/.local/bin, which .zshrc already puts on PATH.
-deps-ubuntu:
+# Upstream binaries avoid mixing Ubuntu repositories into Debian and verify
+# the minimum version required by this configuration before activation.
+deps-ubuntu deps-debian:
 	sudo apt-get update
-	sudo apt-get install -y git curl python3
-	@echo "Installing Neovim from PPA (apt version is often outdated)..."
-	sudo apt-get install -y software-properties-common
-	sudo add-apt-repository -y ppa:neovim-ppa/unstable
-	sudo apt-get update
-	sudo apt-get install -y neovim
-	@echo "Installing pi..."
-	@curl -fsSL https://pi.dev/install.sh | bash
-	@echo "Installing Ollama..."
-	@curl -fsSL https://ollama.com/install.sh | sh
-	@echo "Installing lazydocker..."
-	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
+	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io
+	@bash ./scripts/install-neovim.sh
 	@$(MAKE) --no-print-directory deps-compose
-	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
-
-deps-debian:
-	sudo apt-get update
-	sudo apt-get install -y git curl python3
-	@echo "Installing Neovim from PPA (apt version is often outdated)..."
-	sudo apt-get install -y software-properties-common
-	sudo add-apt-repository -y ppa:neovim-ppa/unstable
-	sudo apt-get update
-	sudo apt-get install -y neovim
-	@echo "Installing pi..."
-	@curl -fsSL https://pi.dev/install.sh | bash
-	@echo "Installing Ollama..."
-	@curl -fsSL https://ollama.com/install.sh | sh
-	@echo "Installing lazydocker..."
-	@curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
-	@$(MAKE) --no-print-directory deps-compose
-	@echo "Install Terminess Nerd Font from https://www.nerdfonts.com/font-downloads"
+	$(MAKE) deps-common
 
 # the docker compose plugin (the nvim Docker explorer's up/down), per user
 # in ~/.docker/cli-plugins so it needs no sudo and works with any docker
@@ -166,21 +127,8 @@ install-kitty:
 	fi
 
 install-pi:
-	@echo "Installing pi agent config..."
-	@if [ -L $(HOME)/.pi ]; then \
-		echo "  ✓ ~/.pi already symlinked"; \
-	elif [ -e $(HOME)/.pi ]; then \
-		echo "  ⚠ ~/.pi exists but is not a symlink — skipping"; \
-	else \
-		ln -s $(CURDIR)/pi $(HOME)/.pi; \
-		echo "  ✓ ~/.pi -> $(CURDIR)/pi"; \
-	fi
-	@if [ -e $(CURDIR)/pi/agent/settings.json ]; then \
-		echo "  ✓ pi/agent/settings.json present (host-managed)"; \
-	else \
-		cp $(CURDIR)/pi/agent/settings.json.template $(CURDIR)/pi/agent/settings.json; \
-		echo "  ✓ seeded pi/agent/settings.json from template (run 'make setup-host' to set the model)"; \
-	fi
+	@echo "Installing host-local pi config..."
+	@python3 ./scripts/install-pi-config.py
 	@if ! command -v ollama >/dev/null 2>&1; then \
 		echo "  ⚠ ollama not found — skipping model selection (run 'make deps' first)"; \
 	elif ! curl -sf --max-time 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then \
@@ -307,3 +255,7 @@ ram-profile:
 		echo "Ollama config: ollama/ollama.service.d/override-$$profile.conf"; \
 		echo "Docker config: docker/docker.service.d/override-$$profile.conf"; \
 	fi
+
+# Read-only checks; Docker is optional on macOS.
+doctor:
+	@python3 ./scripts/doctor.py

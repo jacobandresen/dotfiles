@@ -2,6 +2,8 @@
 -- tools, applied to the visual selection or the whole buffer.
 local M = {}
 
+-- Homebrew prefixes GNU coreutils; its base64 supports the flags below.
+local base64 = vim.fn.executable("gbase64") == 1 and "gbase64" or "base64"
 local py = [[python3 -c "import sys,%s;print(%s(sys.stdin.read()%s),end='')"]]
 
 M.transformations = {
@@ -13,8 +15,8 @@ M.transformations = {
   { name = "URL Decode", cmd = py:format("urllib.parse", "urllib.parse.unquote", ".strip()") },
   { name = "HTML Escape", cmd = py:format("html", "html.escape", "") },
   { name = "HTML Unescape", cmd = py:format("html", "html.unescape", "") },
-  { name = "Base64 Encode", cmd = "base64 -w0" },
-  { name = "Base64 Decode", cmd = "base64 -d" },
+  { name = "Base64 Encode", cmd = base64 .. " -w0" },
+  { name = "Base64 Decode", cmd = base64 .. " -d" },
 }
 
 -- returns the text plus its {row, col} start/end, or nil range for the buffer

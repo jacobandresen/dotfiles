@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""
-patch-gguf-template.py — Fix broken/unparseable chat templates on locally
-pulled Ollama models. Two unrelated bugs, two unrelated fixes, one script:
-
-1. Mistral GGUFs whose embedded Jinja template raises an exception unless
-   roles strictly alternate user/assistant, which breaks a leading system
-   message. Fixed with an in-place, same-length byte patch on the raw GGUF
-   file (see `patch()` below).
-
-   Usage: python3 patch-gguf-template.py <path-to-model.gguf>
-
-2. Qwen3.5-family GGUFs (e.g. community Bonsai-27B re-uploads) whose embedded
-   template is too complex (macros, multi-pass role validation) for Ollama's
-   `minja`-based template-to-parser compiler to statically analyze at all —
-   it fails outright with "Unable to generate parser for this template"
-   before any generation happens. This isn't a byte-level bug to patch; the
-   fix is to override the model's Modelfile TEMPLATE with an explicit
-   ChatML-style Ollama Go-template (bypassing the broken GGUF template and
-   minja's parser-generation step entirely). See `patch_ollama_model()`.
-
-   Usage: python3 patch-gguf-template.py --ollama-model <name>[:<tag>] [--out <new-name>]
-   Creates a new Ollama model (default: "<name>-patched") sharing the same
-   weight blobs, with a working template. Idempotent: skips creation if the
-   target name already exists.
-
-Exit codes:
-  0: Success or already patched
-  1: Error (file not found, patch failed, etc.)
-"""
+"""Patch Mistral GGUF role handling or create a ChatML override for Ollama."""
 import argparse
 import subprocess
 import sys
@@ -114,7 +86,7 @@ def patch_ollama_model(model_name: str, out_name: str | None) -> None:
         ["ollama", "list"], capture_output=True, text=True, check=True
     ).stdout
     if any(line.split()[0].split(":")[0] == out_name for line in existing.splitlines()[1:] if line.strip()):
-        print(f"  ✓ '{out_name}' already exists — nothing to do")
+        print(f"  '{out_name}' already exists — nothing to do")
         sys.exit(0)
 
     modelfile = f"FROM {model_name}\n\n{QWEN_CHATML_TEMPLATE}"
@@ -130,9 +102,9 @@ def patch_ollama_model(model_name: str, out_name: str | None) -> None:
             capture_output=True, text=True,
         )
         if result.returncode != 0:
-            print(f"  ✗ ollama create failed:\n{result.stderr}", file=sys.stderr)
+            print(f"  ollama create failed:\n{result.stderr}", file=sys.stderr)
             sys.exit(1)
-        print(f"  ✓ Created '{out_name}' — use it via: pi --model {out_name} --provider ollama")
+        print(f"  Created '{out_name}' — use it via: pi --model {out_name} --provider ollama")
         sys.exit(0)
     finally:
         os.unlink(modelfile_path)
@@ -187,11 +159,11 @@ def patch(model_path: str) -> None:
     """
     # Validate file exists and is readable
     if not os.path.isfile(model_path):
-        print(f"  ✗ File not found: {model_path}", file=sys.stderr)
+        print(f"  File not found: {model_path}", file=sys.stderr)
         sys.exit(1)
     
     if not os.access(model_path, os.R_OK | os.W_OK):
-        print(f"  ✗ No read/write permission for: {model_path}", file=sys.stderr)
+        print(f"  No read/write permission for: {model_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -200,23 +172,23 @@ def patch(model_path: str) -> None:
         with open(model_path, "rb") as f:
             header = f.read(read_size)
     except IOError as e:
-        print(f"  ✗ Failed to read {model_path}: {e}", file=sys.stderr)
+        print(f"  Failed to read {model_path}: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Already patched?
     if PATCH_MARKER in header:
-        print("  ✓ Chat template already patched — nothing to do")
+        print("  Chat template already patched — nothing to do")
         sys.exit(0)
 
     idx = header.find(OLD_TEMPLATE)
     if idx == -1:
-        print("  ✓ No Mistral template found — patch not needed for this model")
+        print("  No Mistral template found — patch not needed for this model")
         sys.exit(0)
 
     # Pad new template to the exact same byte length
     pad = len(OLD_TEMPLATE) - len(NEW_TEMPLATE_BASE)
     if pad < 0:
-        print("  ✗ ERROR: new template is longer than old — cannot patch in-place", file=sys.stderr)
+        print("  ERROR: new template is longer than old — cannot patch in-place", file=sys.stderr)
         sys.exit(1)
     new_template = NEW_TEMPLATE_BASE + b" " * pad
     assert len(new_template) == len(OLD_TEMPLATE), "Template length mismatch"
@@ -228,7 +200,7 @@ def patch(model_path: str) -> None:
             print(f"  Creating backup: {backup}")
             shutil.copy2(model_path, backup)
     except IOError as e:
-        print(f"  ✗ Failed to create backup: {e}", file=sys.stderr)
+        print(f"  Failed to create backup: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Write patch
@@ -237,10 +209,10 @@ def patch(model_path: str) -> None:
             f.seek(idx)
             f.write(new_template)
     except IOError as e:
-        print(f"  ✗ Failed to write patch: {e}", file=sys.stderr)
+        print(f"  Failed to write patch: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"  ✓ Chat template patched at offset 0x{idx:x}")
+    print(f"  Chat template patched at offset 0x{idx:x}")
     sys.exit(0)
 
 

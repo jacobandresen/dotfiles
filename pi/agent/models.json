@@ -16,8 +16,7 @@
           ],
           "name": "qwen3.5:4b (via Ollama)",
           "contextWindow": 16384,
-          "maxTokens": 4096,
-          "_launch": true
+          "maxTokens": 4096
         },
         {
           "id": "qwen3:4b",

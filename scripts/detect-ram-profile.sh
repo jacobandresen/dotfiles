@@ -1,11 +1,5 @@
 #!/bin/sh
-# Detects total system RAM and prints an override profile name
-# ("8gb", "16gb" or "32gb") for scripts/Makefiles to consume.
-#
-#   < 12GB  -> 8gb   (very tight: base OS already eats 3-4GB)
-#   < 24GB  -> 16gb
-#   >= 24GB -> 32gb
-
+# Print the RAM tier: <12 GiB = 8gb, <24 GiB = 16gb, otherwise 32gb.
 set -eu
 
 if [ "$(uname -s)" = "Darwin" ]; then

@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
-# use-model.sh — point the whole local stack at one model.
-#
-# nvim's CodeCompanion adapter and the mu agent both follow whichever model
-# Ollama currently has loaded (`/api/ps`). pi does not: setup-host.sh points it
-# at this host's *selected* model, so that merely benchmarking a model can't
-# silently repoint the agent at one that fails verify-agent-model.sh. Switching
-# the stack is therefore: load the model, then setup-host.sh --use-loaded to
-# tell pi this one was deliberate.
-#
-#   ./use-model.sh              # this host's selected model (see select-coding-model.sh)
-#   ./use-model.sh qwen3:8b     # a specific tag
-#
-# Loads with a long keep-alive so the model stays resident across a work
-# session; the profile's own OLLAMA_KEEP_ALIVE takes over once it expires.
+# Load a model and configure Pi to use it. KEEPALIVE defaults to 4h.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,18 +9,16 @@ case "$API" in http*) ;; *) API="http://$API" ;; esac
 KEEPALIVE="${KEEPALIVE:-4h}"
 MODEL="${1:-$("$SCRIPT_DIR/select-coding-model.sh")}"
 
-# `ollama list` always prints a tag, so normalise a bare name before comparing.
+# Normalize bare model names to :latest before comparing.
 ollama_has() {
 	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
 	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
 }
 
-echo "============================================================================="
 echo "Pointing the local stack at: $MODEL"
-echo "============================================================================="
 
 if ! curl -sf --max-time 3 "$API/api/version" >/dev/null 2>&1; then
-	echo "  ⚠ Ollama not responding at $API — starting it..."
+	echo "  Ollama not responding at $API — starting it..."
 	open -a Ollama 2>/dev/null || (ollama serve >/dev/null 2>&1 &)
 	for _ in 1 2 3 4 5 6 7 8 9 10; do
 		curl -sf --max-time 2 "$API/api/version" >/dev/null 2>&1 && break
@@ -41,17 +26,17 @@ if ! curl -sf --max-time 3 "$API/api/version" >/dev/null 2>&1; then
 	done
 fi
 curl -sf --max-time 3 "$API/api/version" >/dev/null 2>&1 || {
-	echo "  ✗ Ollama unreachable at $API" >&2; exit 1; }
-echo "  ✓ Ollama responding at $API"
+	echo "  Ollama unreachable at $API" >&2; exit 1; }
+echo "  Ollama responding at $API"
 
 if ollama_has "$MODEL"; then
-	echo "  ✓ $MODEL is present"
+	echo "  $MODEL is present"
 else
-	echo "  ↓ pulling $MODEL..."
+	echo "  pulling $MODEL..."
 	ollama pull "$MODEL"
 fi
 
-echo "  ⏳ loading $MODEL (keep-alive $KEEPALIVE)..."
+echo "  loading $MODEL (keep-alive $KEEPALIVE)..."
 python3 - "$API" "$MODEL" "$KEEPALIVE" <<'PY'
 import json, sys, urllib.request
 api, model, keep = sys.argv[1:4]
@@ -62,9 +47,9 @@ req = urllib.request.Request(f"{api}/api/generate", data=body,
 with urllib.request.urlopen(req, timeout=900) as r:
     d = json.load(r)
 if d.get("error"):
-    print("  ✗", d["error"], file=sys.stderr); sys.exit(1)
+    print("Error:", d["error"], file=sys.stderr); sys.exit(1)
 PY
-echo "  ✓ $MODEL loaded"
+echo "  $MODEL loaded"
 
 echo ""
 # --use-loaded: we just loaded this model deliberately, so pi should follow

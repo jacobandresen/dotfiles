@@ -2,7 +2,11 @@ export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="lambda"
 zstyle ':omz:update' mode disabled # disable automatic updates
 plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
+if [ -r "$ZSH/oh-my-zsh.sh" ]; then
+  source "$ZSH/oh-my-zsh.sh"
+else
+  print -u2 "Oh My Zsh is missing; run make deps in your dotfiles directory."
+fi
 
 # PATH (most-specific user bins first)
 export PATH="$HOME/.local/bin:$PATH"

@@ -1,41 +1,5 @@
 #!/usr/bin/env bash
-# bench-model.sh — Measure whether a model actually fits this machine.
-#
-# select-coding-model.sh picks a model from RAM and memory architecture, but
-# those tiers are a prediction. This checks the prediction on real hardware.
-#
-# This measures FIT ONLY. It deliberately does not try to judge whether a
-# model can drive pi — that question defeated two cheap proxies here:
-#
-#   `ollama show` capabilities   qwen2.5-coder advertises `tools` at every
-#                                size and never emits a call
-#   a one-tool curl probe        wrong in BOTH directions. llama3.1:8b
-#                                returns a clean tool_call and then writes C
-#                                that does not compile (false pass), while
-#                                qwen3:4b spends the probe's token budget
-#                                reasoning and returns finish_reason=length
-#                                with tool_calls=null (false fail) — on the
-#                                very model this repo ships.
-#
-# A column that is wrong in both directions is worse than no column, so it
-# was removed. scripts/verify-agent-model.sh answers that question properly,
-# by compiling and running what pi actually wrote.
-#
-# The number that matters is not tokens/sec, it is the PROCESSOR split from
-# `ollama ps`. Anything short of "100% GPU" means the model didn't fit the
-# GPU's wirable budget and Ollama spilled layers to CPU — on Apple silicon
-# that budget is ~75% of unified RAM (sysctl iogpu.wired_limit_mb, 0 =
-# default), shared with the OS and everything else you have open. Swap growth
-# is the other tell: it doesn't show up in a throughput average, but it is
-# what makes the machine feel broken while an agent is running.
-#
-# Usage:
-#   ./bench-model.sh                     # this host's selected model
-#   ./bench-model.sh qwen3:8b            # a specific model
-#   ./bench-model.sh qwen3:4b qwen3:8b   # compare tiers
-#
-# Models are pulled if missing, but never removed — a comparison run can
-# leave several GB on disk. `ollama rm <model>` to reclaim it.
+# Measure generation speed, load time, GPU residency and macOS swap growth.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,13 +10,17 @@ NUM_PREDICT=160
 
 case "${1:-}" in
 	-h|--help)
-		sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
+		printf '%s\n' "Usage: $(basename "$0") [MODEL ...]"
+		cat <<'HELP'
+Benchmark selected or supplied models. Missing models are pulled and retained.
+Run verify-agent-model.sh separately to check Pi tool use.
+HELP
 		exit 0
 		;;
 esac
 
 if ! curl -sf --max-time 3 "$API/api/version" >/dev/null 2>&1; then
-	echo "✗ Ollama is not responding on $API" >&2
+	echo "Ollama is not responding on $API" >&2
 	echo "  On macOS a fresh install needs its first-run setup completed once:" >&2
 	echo "    open -a Ollama" >&2
 	exit 1
@@ -72,10 +40,7 @@ PROMPTS=(
 
 swap_used_mb() { sysctl -n vm.swapusage 2>/dev/null | awk '{print $6}' | tr -d 'M' || echo 0; }
 
-# `ollama list` always prints a tag, so a bare name like "my-model" (as
-# `ollama create` leaves it) never matches it literally. Normalise to
-# name:latest before comparing, or locally-built models look un-pulled and
-# we try — and fail — to pull them from a registry.
+# Normalize bare model names to :latest before comparing.
 ollama_has() {
 	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
 	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
@@ -86,8 +51,8 @@ printf '%s\n' "-----------------------------------------------------------------
 
 for model in "${MODELS[@]}"; do
 	if ! ollama_has "$model"; then
-		echo "  ↓ pulling $model..." >&2
-		ollama pull "$model" >/dev/null 2>&1 || { echo "  ✗ pull failed: $model" >&2; continue; }
+		echo "  pulling $model..." >&2
+		ollama pull "$model" >/dev/null 2>&1 || { echo "  pull failed: $model" >&2; continue; }
 	fi
 
 	# Force a cold load so load_duration means something.
@@ -112,13 +77,12 @@ print(f'{d.get("eval_count",0)/ed if ed else 0:.2f} '
       f'{d.get("prompt_eval_count",0)/ped if ped else 0:.1f} '
       f'{d.get("load_duration",0)/ns:.2f}')
 PY
-) || { echo "  ✗ generation failed: $model" >&2; continue 2; }
+) || { echo "  generation failed: $model" >&2; continue 2; }
 		results+="$line"$'\n'
 	done
 
 	swap_after=$(swap_used_mb)
-	# `ollama ps` prints the tagged name, so match the normalised form here
-	# too — otherwise a bare name leaves SIZE and PROCESSOR as "?".
+	# Match Ollama's tagged model name.
 	case "$model" in *:*) ps_name="$model" ;; *) ps_name="$model:latest" ;; esac
 	ps_line=$(ollama ps 2>/dev/null | awk -v m="$ps_name" '$1==m{print $3$4" "$5" "$6}')
 	size=$(echo "$ps_line" | awk '{print $1}')
@@ -140,11 +104,3 @@ flag="" if delta<=1 else f"  <-- swapped +{delta:.0f}MB"
 print(f"{model:<22} {gen:8.1f} {pro:8.1f} {load:8.2f} {size:>8} {delta:9.0f}M  {proc}{flag}")
 PY
 done
-
-echo
-echo "This says nothing about whether the model can drive pi — run"
-echo "./verify-agent-model.sh for that. A model can bench perfectly here and"
-echo "still be useless as an agent."
-echo
-echo "PROCESSOR must read 100% GPU. Any CPU share means the model did not fit"
-echo "and layers spilled — expect roughly half the throughput and swap growth."

@@ -1,10 +1,7 @@
-nvim/lazy-lock.json
-
-# pi writes session logs here via the ~/.pi -> dotfiles/pi symlink — runtime data, not config
+# Legacy Pi runtime data retained during migration to a host-local ~/.pi directory
 pi/agent/sessions/
 
-# Host-managed: setup-host.sh patches defaultModel per machine (via the same symlink),
-# so the live file is untracked. Seeded from settings.json.template by 'make install-pi'.
+# Legacy host-managed settings; new installs keep this outside the repository.
 pi/agent/settings.json
 
 # Runtime/host state — contains live OAuth tokens and per-machine data, not config

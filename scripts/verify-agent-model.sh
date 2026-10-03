@@ -1,39 +1,16 @@
 #!/usr/bin/env bash
-# verify-agent-model.sh — Does this model actually drive pi end to end?
-#
-# The one test that matters for this repo: point pi at a model, ask it for a
-# hello world in C, and check that a *compilable, runnable* binary lands on
-# disk. Everything short of that has produced false positives here:
-#
-#   `ollama show` says `tools`        -> qwen2.5-coder declares it and never
-#                                        emits a call
-#   a one-tool curl probe returns
-#   tool_calls                        -> llama3.2:3b passes it, then reverts
-#                                        to text mimicry under pi's real
-#                                        prompt
-#   pi calls write/bash               -> llama3.1:8b gets this far and still
-#                                        fails: it writes the literal two
-#                                        characters \n into the file and
-#                                        drops #include <stdio.h>, so the
-#                                        transcript looks like a success and
-#                                        the C does not compile
-#
-# So the check is the artifact, not the transcript. A model passes only if
-# hello.c compiles with -Werror-ish strictness and the binary prints hello.
-#
-# Usage:
-#   ./verify-agent-model.sh                 # this host's selected model
-#   ./verify-agent-model.sh qwen3:4b ...    # specific tags
-#
-# Each run is a fresh temp dir and an ephemeral pi session, so nothing here
-# touches the real project or session history.
+# Check that Pi writes a C program that compiles and prints hello.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
 	-h|--help)
-		sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+		printf '%s\n' "Usage: $(basename "$0") [MODEL ...]"
+		cat <<'HELP'
+Verify selected or supplied models using a temporary Pi session.
+Failed runs retain their artifacts for inspection.
+HELP
 		exit 0
 		;;
 esac
@@ -54,7 +31,7 @@ printf '%s\n' "-----------------------------------------------------------------
 
 for model in "${MODELS[@]}"; do
 	if ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$model"; then
-		echo "  ↓ pulling $model..." >&2
+		echo "  pulling $model..." >&2
 		ollama pull "$model" >/dev/null 2>&1 || {
 			printf '%-22s %-8s %-10s %-9s %s\n' "$model" - - - "PULL FAILED"
 			rc=1
@@ -96,7 +73,4 @@ for model in "${MODELS[@]}"; do
 	fi
 done
 
-echo
-echo "A PASS means pi wrote C that compiled and printed hello — the only signal"
-echo "that separates a working agent model from one that fakes the transcript."
 exit $rc
