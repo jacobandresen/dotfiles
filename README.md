@@ -64,7 +64,10 @@ resulting lockfile changes.
 Pi's shared model catalog is `pi/agent/models.json`; it has no host-selected
 `_launch` flag. `make install-pi` seeds host-local `~/.pi/agent/models.json` and
 `settings.json`, and `make setup-host` or `make use-model` updates those local
-files. Shared instructions and skills remain linked to this repository.
+files. The host-local catalog caps each model's advertised context to the
+configured Ollama context (8K on Linux, 16K on macOS by default); override this
+with `DOTFILES_OLLAMA_CONTEXT_LENGTH` when using a custom server profile.
+Shared instructions and skills remain linked to this repository.
 `PI_CODING_AGENT_DIR` is supported for a custom configuration directory.
 
 Existing `~/.pi -> dotfiles/pi` installations migrate on the next

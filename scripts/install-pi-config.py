@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 
 REPO = Path(__file__).resolve().parent.parent
@@ -83,11 +84,12 @@ def install(agent_dir, dry_run=False):
     print(f"Pi settings and models are local to {agent_dir}")
 
 
-def configure(agent_dir, model_name, api):
+def configure(agent_dir, model_name, api, context_window=16384):
     settings_path, models_path = agent_dir / "settings.json", agent_dir / "models.json"
     settings = json.loads(settings_path.read_text())
     catalog = json.loads(models_path.read_text())
     shared = json.loads((REPO / "pi/agent/models.json").read_text())
+    shared_models = {model["id"]: model for model in shared["providers"]["ollama"]["models"]}
     provider = catalog.setdefault("providers", {}).setdefault("ollama", {})
     models = provider.setdefault("models", [])
     for seed in shared["providers"]["ollama"]["models"]:
@@ -95,11 +97,19 @@ def configure(agent_dir, model_name, api):
             models.append(seed)
     for model in models:
         model.pop("_launch", None)
+        # Keep Pi's advertised capacity within the server's configured context.
+        # Restore curated model limits from the shared catalog when moving this
+        # host between profiles (for example, Linux 8K to macOS 16K).
+        seed = shared_models.get(model.get("id"))
+        model_limit = seed.get("contextWindow") if seed else model.get("contextWindow", context_window)
+        model["contextWindow"] = min(model_limit, context_window)
     selected = next((model for model in models if model.get("id") == model_name), None)
     if selected is None:
         selected = {"id": model_name, "input": ["text"], "name": f"{model_name} (via Ollama)",
-                    "contextWindow": 16384, "maxTokens": 4096}
+                    "contextWindow": context_window, "maxTokens": 4096}
         models.insert(0, selected)
+    else:
+        selected["contextWindow"] = min(selected.get("contextWindow", context_window), context_window)
     selected["_launch"] = True
     provider.update(api="openai-completions", apiKey="not-needed", baseUrl=api.rstrip("/") + "/v1")
     provider.setdefault("compat", {"supportsDeveloperRole": False, "supportsReasoningEffort": False})
@@ -116,6 +126,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--api", default="http://127.0.0.1:11434")
+    parser.add_argument("--context-window", type=int, default=None,
+                        help="Ollama context limit (defaults to 16K on macOS, 8K on Linux)")
     args = parser.parse_args()
     try:
         agent_dir = args.agent_dir.expanduser().absolute()
@@ -124,7 +136,13 @@ def main():
             if args.dry_run:
                 print(f"Would select {args.model} in host-local settings and models")
             else:
-                configure(agent_dir, args.model, args.api)
+                context_window = args.context_window
+                if context_window is None:
+                    configured = os.environ.get("DOTFILES_OLLAMA_CONTEXT_LENGTH")
+                    context_window = int(configured) if configured else (16384 if sys.platform == "darwin" else 8192)
+                if context_window < 1:
+                    raise ValueError("context window must be a positive integer")
+                configure(agent_dir, args.model, args.api, context_window)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Pi config installation failed: {error}\n")
 
