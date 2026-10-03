@@ -1,39 +1,36 @@
--- silently update plugins on startup (no notification, no UI window).
--- LazyVim sources this file at VeryLazy (or earlier when opening a file), so
--- a nested VeryLazy autocmd wouldn't reliably fire - just defer the call.
-vim.schedule(function()
-  require("lazy").update({ show = false, wait = false })
-end)
-
--- auto-refresh log/jsonl files every 2 seconds
+-- One poller for visible logs; hidden buffers refresh when displayed again.
+local log_timer
+local function visible_logs()
+  local buffers = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    if vim.b[buf].log_refresh then buffers[buf] = true end
+  end
+  return buffers
+end
+local function check_logs()
+  for buf in pairs(visible_logs()) do
+    vim.api.nvim_buf_call(buf, function() vim.cmd("checktime " .. buf) end)
+  end
+end
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   pattern = { "*.log", "*.jsonl" },
   callback = function(args)
-    local buf = args.buf
-    if vim.b[buf].log_refresh then
-      return -- already polling (e.g. after :e)
+    vim.b[args.buf].log_refresh = true
+    vim.bo[args.buf].autoread = true
+    if not log_timer then
+      log_timer = vim.uv.new_timer()
+      log_timer:start(2000, 2000, vim.schedule_wrap(check_logs))
     end
-    vim.b[buf].log_refresh = true
-    vim.opt_local.autoread = true
-    local timer = vim.uv.new_timer()
-    timer:start(2000, 2000, vim.schedule_wrap(function()
-      if not vim.api.nvim_buf_is_valid(buf) then
-        timer:stop()
-        timer:close()
-        return
-      end
-      vim.api.nvim_buf_call(buf, function()
-        vim.cmd("checktime")
-      end)
-    end))
-    vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-      buffer = buf,
-      once = true,
-      callback = function()
-        timer:stop()
-        timer:close()
-      end,
-    })
+  end,
+})
+vim.api.nvim_create_autocmd({ "BufWinEnter", "FocusGained" }, {
+  callback = function() vim.schedule(check_logs) end,
+})
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  once = true,
+  callback = function()
+    if log_timer then log_timer:stop(); log_timer:close() end
   end,
 })
 

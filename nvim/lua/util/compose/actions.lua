@@ -412,14 +412,20 @@ function M.compose_inspect(_, item)
   if not cmd then
     return
   end
-  local res = vim.system(cmd, { text = true }):wait()
-  if res.code ~= 0 then
-    return notify(vim.trim(res.stderr or ""), vim.log.levels.ERROR)
-  end
-  vim.cmd("wincmd l | enew")
-  vim.bo.buftype, vim.bo.bufhidden, vim.bo.filetype = "nofile", "wipe", "json"
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(vim.trim(res.stdout), "\n"))
-  pcall(vim.api.nvim_buf_set_name, 0, ("docker-inspect://%s/%s"):format(item.kind, item.text))
+  local origin = vim.api.nvim_get_current_win()
+  notify("Loading Docker inspect...")
+  vim.system(cmd, { text = true, timeout = 10000 }, vim.schedule_wrap(function(res)
+    if res.code ~= 0 then
+      return notify(vim.trim(res.stderr or ""), vim.log.levels.ERROR)
+    end
+    if not vim.api.nvim_win_is_valid(origin) then return end
+    vim.api.nvim_win_call(origin, function()
+      vim.cmd("wincmd l | enew")
+      vim.bo.buftype, vim.bo.bufhidden, vim.bo.filetype = "nofile", "wipe", "json"
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(vim.trim(res.stdout), "\n"))
+      pcall(vim.api.nvim_buf_set_name, 0, ("docker-inspect://%s/%s"):format(item.kind, item.text))
+    end)
+  end))
 end
 
 local function field(lines, key, value)

@@ -26,10 +26,15 @@ EGA screen. Matching Midnight Commander skins: `../mc/skins/retrobox.ini`
 
 ## Ollama
 
+Client settings are host-specific in `lua/util/ollama_tuning.lua`; preserve
+other hosts and the server RAM/OS profiles in `../ollama/` when tuning one host.
+
 CodeCompanion's `ollama` adapter and Minuet's inline suggestions
 (`lua/plugins/ai.lua`, sharing `lua/util/ollama.lua`) talk to a local Ollama at
 `localhost:11434` and auto-detect **whichever model is currently loaded** —
-neither pins one. `make use-model MODEL=<tag>` in the repo root switches it, pi
+neither pins one. Detection is asynchronous and cached; existing Minuet
+sessions refresh every five seconds while local AI is active; detection starts
+on first AI use, not at startup. `make use-model MODEL=<tag>` in the repo root switches it, pi
 and the mu agent together; `ga` in the chat buffer swaps to GitHub Copilot.
 
 Offload to Ollama when the task is repetitive or mechanical **and the output is

@@ -94,15 +94,24 @@ return {
     end,
   },
 
-  -- LSP usage counts shown inline (cyan, like inlay hints, not comments)
+  -- Reference counts are opt-in per buffer to avoid background LSP work.
   {
     "Wansmer/symbol-usage.nvim",
-    event = "LspAttach",
-    opts = { hl = { link = "LspCodeLens" } },
+    keys = {
+      { "<leader>uR", function()
+        local buf = vim.api.nvim_get_current_buf()
+        vim.b[buf].symbol_usage_enabled = not vim.b[buf].symbol_usage_enabled
+        require("symbol-usage").refresh()
+      end, desc = "Toggle Symbol Reference Counts" },
+    },
+    opts = {
+      hl = { link = "LspCodeLens" },
+      disable = { cond = { function(buf) return not vim.b[buf].symbol_usage_enabled end } },
+    },
   },
 
   -- sign-column wand: shows when a quickfix is available at the cursor,
-  -- matching what <leader>cF (autocmds.lua) applies in bulk
+  -- use normal code actions for individual fixes; <leader>cF requests source.fixAll
   {
     "kosayoda/nvim-lightbulb",
     event = "LspAttach",

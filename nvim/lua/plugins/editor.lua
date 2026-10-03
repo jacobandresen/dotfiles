@@ -19,6 +19,7 @@ return {
   -- folding
   {
     "kevinhwang91/nvim-ufo",
+    event = { "BufReadPost", "BufNewFile" },
     dependencies = { "kevinhwang91/promise-async" },
     config = function()
       local ufo = require("ufo")
@@ -116,7 +117,7 @@ return {
         javascriptreact = { "prettier" },
         typescriptreact = { "prettier" },
         json = { "jq" },
-        jsonc = { "jq" },
+        jsonc = { "prettier" },
         rust = { "rustfmt" },
         cpp = { "clang-format" },
         c = { "clang-format" },
@@ -127,14 +128,6 @@ return {
         css = { "prettier" },
         python = { "black", "isort" },
         go = { "goimports" }, -- goimports also does gofmt's formatting
-      },
-      formatters = {
-        prettier = {
-          prepend_args = { "--end-of-line", "lf" },
-        },
-        stylua = {
-          prepend_args = { "--indent-type", "Spaces", "--indent-width", "2" },
-        },
       },
     },
   },

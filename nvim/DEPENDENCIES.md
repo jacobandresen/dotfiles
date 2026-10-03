@@ -33,6 +33,17 @@ adapters, formatters).
   prompt templates. Copilot's own inline completions are disabled; Minuet uses
   Ollama for local ghost text.
 
+Model detection starts asynchronously on first AI use and refreshes every five
+seconds while an Ollama chat is visible or ghost text is active in Insert mode. Minuet
+updates its model in existing sessions; new chat adapters use the cached model.
+If detection has not finished yet, retry the AI command after a few seconds.
+
+Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
+`<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.
+`<leader>cF` requests server-provided `source.fixAll` actions, applying a single
+action or prompting for alternatives. Servers without this action report no
+available fixes.
+
 ## SDL game dev (`lua/plugins/lsp.lua`)
 
 - **pkg-config** — used by `<leader>rr` to build and run the current SDL
@@ -80,3 +91,38 @@ to compose files (mapped in `lua/config/options.lua`).
 
 - **yaml-language-server** — backs `helm_ls`'s YAML validation
   (`lua/plugins/lsp.lua`); install manually if editing Helm charts
+
+## Performance defaults
+
+- Reference counts are off until toggled for the current buffer with `<leader>uR`.
+- Roslyn compiler/analyzer diagnostics cover open files; reference code lenses are off.
+- Rust uses default Cargo features and `cargo check`; `<leader>rc` runs Clippy
+  in a terminal. Configure additional Cargo features per project when needed.
+- Folding loads when opening a buffer, rather than on an empty startup.
+- Docker data loads asynchronously. Containers refresh every two seconds,
+  CPU/memory every four seconds, and image/volume disk usage every thirty seconds.
+  `R` forces a refresh in the Docker explorer.
+- One shared timer refreshes visible log/JSONL buffers; hidden logs refresh
+  when displayed again.
+
+Use `:Lazy profile` to inspect actual plugin load times and loading triggers.
+
+## Per-host Ollama client tuning
+
+`lua/util/ollama_tuning.lua` holds client overrides by hostname. Unknown hosts
+retain the existing client defaults and the server's own chat settings. The
+RAM/OS daemon profiles in `../ollama/` remain independent and unchanged.
+
+`tatooine` (16 GiB RAM, GTX 1660 SUPER with 6 GiB VRAM) uses 8192 context for
+chat and inline edits, matching the resident model and the server's default
+used by Minuet. Retention is 10 minutes, matching its daemon profile. Ghost
+text gets 2048 characters of surrounding code, a 96-token output cap, and a
+three-second throttle. Inline edits retain their 512-token output cap.
+
+Native requests disable thinking with `think=false`; Minuet's OpenAI-compatible
+requests use `reasoning_effort="none"`; `tatooine` also uses temperature 0.2. See
+[Ollama's supported OpenAI request fields](https://docs.ollama.com/api/openai-compatibility).
+
+The loaded `qwen3.5:4b` was confirmed fully GPU-resident at 8192 context on
+2026-10-03 (~3.18 GiB). Timing probes hit the shared request queue and timed
+out; these settings are conservative tuning, not a measured speed optimum.

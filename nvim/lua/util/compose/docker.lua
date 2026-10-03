@@ -211,43 +211,53 @@ local function build_projects()
   M.state.projects = projects
 end
 
----@param kinds string[] which commands to (re)load
----@param cb? fun(changed: boolean) async when given, else synchronous
+-- Deduplicate concurrent requests from the finder, poller and log picker.
+local inflight, failed = {}, {}
+---@param kinds string[]
+---@param cb? fun(changed: boolean)
 function M.load(kinds, cb)
+  cb = cb or function() end
   local pending, changed = #kinds, false
-  local function done(kind, res)
-    if res.code == 0 and res.stdout ~= M.raw[kind] then
-      M.raw[kind] = res.stdout
-      parse[kind](res.stdout)
-      changed = true
-    elseif res.code ~= 0 and not cb then
-      vim.notify(("docker %s failed: %s"):format(kind, vim.trim(res.stderr or "")), vim.log.levels.ERROR)
-    end
+  if pending == 0 then cb(false); return end
+  local function done(updated)
+    changed = changed or updated
     pending = pending - 1
-    if pending == 0 then
-      if changed then
-        build_projects()
-      end
-      if cb then
-        cb(changed)
-      end
-    end
+    if pending == 0 then cb(changed) end
   end
   for _, kind in ipairs(kinds) do
-    if cb then
-      vim.system(M.cmds[kind], { text = true }, vim.schedule_wrap(function(res) done(kind, res) end))
+    if inflight[kind] then
+      table.insert(inflight[kind], done)
     else
-      done(kind, vim.system(M.cmds[kind], { text = true }):wait())
+      inflight[kind] = { done }
+      local function finish(res)
+        local updated = false
+        if res.code == 0 then
+          failed[kind] = nil
+          if res.stdout ~= M.raw[kind] then
+            M.raw[kind] = res.stdout
+            parse[kind](res.stdout)
+            build_projects()
+            updated = true
+          end
+        elseif not failed[kind] then
+          failed[kind] = true
+          vim.notify(("docker %s failed: %s"):format(kind, vim.trim(res.stderr or "")), vim.log.levels.ERROR)
+        end
+        local callbacks = inflight[kind]
+        inflight[kind] = nil
+        for _, callback in ipairs(callbacks) do callback(updated) end
+      end
+      local ok, err = pcall(vim.system, M.cmds[kind], { text = true, timeout = 10000 }, vim.schedule_wrap(finish))
+      if not ok then finish({ code = 1, stderr = tostring(err) }) end
     end
   end
 end
 
--- make sure the given kinds were loaded at least once
-function M.ensure(kinds)
+-- Returns immediately; redraw the picker when missing data arrives.
+function M.ensure(kinds, cb)
   local missing = vim.tbl_filter(function(k) return M.raw[k] == nil end, kinds)
-  if #missing > 0 then
-    M.load(missing)
-  end
+  if #missing > 0 then M.load(missing, cb) end
+  return #missing == 0
 end
 
 function M.invalidate()
@@ -257,12 +267,26 @@ end
 -- `docker compose` plugin ------------------------------------------------------
 
 local has_compose ---@type boolean?
+local compose_callbacks
+
+function M.check_compose(cb)
+  cb = cb or function() end
+  if has_compose ~= nil then cb(has_compose); return end
+  if compose_callbacks then table.insert(compose_callbacks, cb); return end
+  compose_callbacks = { cb }
+  local function finish(res)
+    has_compose = res.code == 0
+    local callbacks = compose_callbacks
+    compose_callbacks = nil
+    for _, callback in ipairs(callbacks) do callback(has_compose) end
+  end
+  local ok, err = pcall(vim.system, { "docker", "compose", "version" },
+    { timeout = 10000 }, vim.schedule_wrap(finish))
+  if not ok then finish({ code = 1, stderr = tostring(err) }) end
+end
 
 function M.has_compose()
-  if has_compose == nil then
-    has_compose = vim.system({ "docker", "compose", "version" }):wait().code == 0
-  end
-  return has_compose
+  return has_compose == true
 end
 
 ---@param p compose.Project
@@ -284,24 +308,24 @@ end
 
 -- services declared in each project's compose files (async)
 function M.load_services(cb)
-  if not M.has_compose() then
-    return
-  end
-  for _, p in ipairs(M.state.projects) do
-    local cmd = p.files and p.files ~= "" and M.compose_cmd(p, { "config", "--services" })
-    if cmd then
-      vim.system(cmd, { text = true }, vim.schedule_wrap(function(res)
-        if res.code == 0 then
-          local services = split(res.stdout, "[^\n]+")
-          if not vim.deep_equal(services, M.state.services[p.name]) then
-            M.state.services[p.name] = services
-            build_projects()
-            cb()
+  M.check_compose(function(available)
+    if not available then return end
+    for _, p in ipairs(M.state.projects) do
+      local cmd = p.files and p.files ~= "" and M.compose_cmd(p, { "config", "--services" })
+      if cmd then
+        vim.system(cmd, { text = true }, vim.schedule_wrap(function(res)
+          if res.code == 0 then
+            local services = split(res.stdout, "[^\n]+")
+            if not vim.deep_equal(services, M.state.services[p.name]) then
+              M.state.services[p.name] = services
+              build_projects()
+              cb()
+            end
           end
-        end
-      end))
+        end))
+      end
     end
-  end
+  end)
 end
 
 return M

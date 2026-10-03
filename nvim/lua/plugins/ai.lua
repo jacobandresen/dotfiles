@@ -1,7 +1,9 @@
 -- AI assistant via CodeCompanion.nvim, switchable between Ollama (whichever
 -- model is currently loaded) and GitHub Copilot with `ga` inside the chat buffer.
 -- Inline ghost-text suggestions (Minuet, further below) follow the same model.
-local ollama_model = require("util.ollama").current_model
+local ollama = require("util.ollama")
+local ollama_model = ollama.current_model
+local tuning = require("util.ollama_tuning").current()
 local copilot_configured = require("util.copilot").is_configured()
 
 local codecompanion_keys = {
@@ -61,24 +63,27 @@ return {
           return require("codecompanion.adapters").extend("ollama", {
             schema = {
               model = { default = ollama_model() },
+              num_ctx = { default = tuning.chat.num_ctx },
+              think = { default = tuning.chat.think },
+              keep_alive = { default = tuning.chat.keep_alive },
             },
           })
         end,
-        -- <leader>ai: small context, capped output, no thinking, kept
-        -- resident longer. Chat keeps the unrestricted "ollama" adapter.
+        -- <leader>ai: capped output, no thinking, with host-specific context
+        -- and retention. Chat follows this host's own profile.
         ollama_fast = function()
           return require("codecompanion.adapters").extend("ollama", {
             schema = {
               model = { default = ollama_model() },
-              num_ctx = { default = 2048 },
+              num_ctx = { default = tuning.inline.num_ctx },
               think = { default = false },
-              keep_alive = { default = "30m" },
+              keep_alive = { default = tuning.inline.keep_alive },
               num_predict = {
                 order = 13,
                 mapping = "parameters.options",
                 type = "number",
                 optional = true,
-                default = 512,
+                default = tuning.inline.num_predict,
                 desc = "Cap response length for fast inline edits.",
               },
             },
@@ -261,22 +266,24 @@ return {
       { "<leader>ag", "<cmd>Minuet virtualtext toggle<cr>", desc = "Toggle AI ghost text" },
     },
     config = function()
+      ollama.setup()
       require("minuet").setup({
         provider = "openai_compatible",
         n_completions = 1, -- resource saving for a local model
-        context_window = 512, -- small + fast; raise if completions feel too shallow
-        request_timeout = 10, -- local inference can be slower than a cloud API
-        throttle = 2000, -- avoid hammering the local server while typing
-        debounce = 800,
+        context_window = tuning.completion.context_window, -- characters
+        request_timeout = tuning.completion.request_timeout,
+        throttle = tuning.completion.throttle,
+        debounce = tuning.completion.debounce,
         provider_options = {
           openai_compatible = {
             name = "Ollama",
             end_point = "http://localhost:11434/v1/chat/completions",
             api_key = function() return "ollama" end, -- unused, but required to be non-nil
-            model = ollama_model(),
+            model = ollama.cached_model(),
             optional = {
-              max_tokens = 128,
-              think = false, -- skip reasoning preamble on hybrid-thinking models
+              max_tokens = tuning.completion.max_tokens,
+              temperature = tuning.completion.temperature,
+              reasoning_effort = "none", -- /v1 thinking control; `think` is native /api only
             },
           },
         },

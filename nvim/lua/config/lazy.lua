@@ -21,7 +21,7 @@ require("lazy").setup({
   },
   defaults = { lazy = false, version = false },
   install = { colorscheme = { "retrobox", "habamax" } },
-  -- no update checker: autocmds.lua already updates silently on every startup
+  -- Update explicitly with :Lazy update; startup keeps the locked versions.
   performance = {
     rtp = {
       disabled_plugins = {

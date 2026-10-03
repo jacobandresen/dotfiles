@@ -143,8 +143,7 @@ function M.target(item)
 end
 
 -- a picker of every compose service and container, opening the chosen log
-function M.pick()
-  docker.load({ "ps" })
+local function pick_loaded()
   local items = {}
   for _, p in ipairs(docker.state.projects) do
     for _, service in ipairs(p.services) do
@@ -191,6 +190,12 @@ function M.pick()
       end
     end,
   })
+end
+
+function M.pick()
+  docker.check_compose(function()
+    docker.load({ "ps" }, function() pick_loaded() end)
+  end)
 end
 
 return M

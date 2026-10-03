@@ -94,6 +94,7 @@ function right.network(item)
 end
 
 function M.format(item, picker)
+  if item.kind == "loading" then return { { item.label, "Comment" } } end
   local ret = {} ---@type snacks.picker.Highlight[]
   vim.list_extend(ret, Snacks.picker.format.tree(item, picker))
   if item.dir then
@@ -125,8 +126,8 @@ end
 
 -- polling ------------------------------------------------------------------------
 
--- `docker ps` and friends every 2s (stats every 4s: it takes ~1s), redrawing
--- only when the output changed
+-- Containers/networks every 2s, stats every 4s, disk usage every 30s.
+-- Redraw only when the output changed.
 local timer ---@type uv.uv_timer_t?
 
 local function watch(picker)
@@ -137,7 +138,9 @@ local function watch(picker)
       return
     end
     busy, tick = true, tick + 1
-    local kinds = vim.deepcopy(views.needs[picker.opts.view])
+    local kinds = vim.tbl_filter(function(kind)
+      return kind ~= "df" or tick % 15 == 0 or docker.raw.df == nil
+    end, views.needs[picker.opts.view])
     if picker.opts.view == "containers" and tick % 2 == 0 then
       table.insert(kinds, "stats")
     end
@@ -161,7 +164,16 @@ M.source = {
   view = "containers",
   grouping = "project",
   only_running = false,
-  finder = function(opts)
+  finder = function(opts, ctx)
+    local ready = docker.ensure(views.needs[opts.view], function(changed)
+      if changed and not ctx.picker.closed then
+        actions.refresh(ctx.picker)
+        docker.load_services(function() actions.refresh(ctx.picker) end)
+      end
+    end)
+    if not ready then
+      return { { kind = "loading", label = "Loading Docker...", text = "Loading Docker..." } }
+    end
     return views.items(opts)
   end,
   format = M.format,
@@ -174,7 +186,7 @@ M.source = {
   confirm = "compose_toggle",
   actions = actions,
   on_show = function(picker)
-    docker.invalidate()
+    docker.check_compose()
     docker.load({ "stats" }, function(changed)
       if changed then
         actions.refresh(picker)

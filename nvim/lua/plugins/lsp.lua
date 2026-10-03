@@ -150,7 +150,7 @@ return {
               dotnet_suppress_inlay_hints_for_parameters_that_match_method_intent = true,
             },
             ["csharp|code_lens"] = {
-              dotnet_enable_references_code_lens = true,
+              dotnet_enable_references_code_lens = false,
               dotnet_enable_tests_code_lens = true,
             },
             ["csharp|completion"] = {
@@ -158,7 +158,8 @@ return {
               dotnet_show_name_completion_suggestions = true,
             },
             ["csharp|background_analysis"] = {
-              background_analysis_dotnet_compiler_diagnostics_scope = "fullSolution",
+              dotnet_compiler_diagnostics_scope = "openFiles",
+              dotnet_analyzer_diagnostics_scope = "openFiles",
             },
             ["csharp|symbol_search"] = {
               dotnet_search_reference_assemblies = true,
@@ -179,6 +180,11 @@ return {
   -- rustaceanvim: Rust LSP, inlay hints, macro expansion, codelldb DAP
   {
     "mrcjkb/rustaceanvim",
+    keys = {
+      { "<leader>rc", function()
+        require("snacks").terminal.open({ "cargo", "clippy" }, { cwd = LazyVim.root(), auto_close = false })
+      end, ft = "rust", desc = "Cargo Clippy" },
+    },
     ft = { "rust" }, -- build with F9 / Compile > Make (turbo/menus.lua)
     config = function()
       vim.g.rustaceanvim = {
@@ -186,10 +192,10 @@ return {
           default_settings = {
             ["rust-analyzer"] = {
               cargo = {
-                allFeatures = true,
+                allFeatures = false,
                 loadOutDirsFromCheck = true,
               },
-              checkOnSave = { command = "clippy" },
+              check = { command = "check" },
               procMacro = { enable = true },
               inlayHints = {
                 bindingModeHints = { enable = true },

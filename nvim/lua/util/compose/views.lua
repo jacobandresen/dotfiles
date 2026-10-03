@@ -278,7 +278,6 @@ end
 
 ---@param opts table picker opts (view, grouping, only_running)
 function M.items(opts)
-  docker.ensure(M.needs[opts.view])
   local b = setmetatable({ items = {}, opts = opts }, Builder)
   build[opts.view](b)
   mark_last(b.items)

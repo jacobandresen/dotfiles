@@ -347,7 +347,7 @@ M.menus = {
       { label = "Re~n~ame...", key = "Space c r", hint = "Rename the symbol under the cursor everywhere", action = function() vim.lsp.buf.rename() end },
       { label = "Code ~a~ction...", key = "Space c a", hint = "Quick fixes and refactorings at the cursor",
         action = function() vim.lsp.buf.code_action() end },
-      { label = "~F~ix all", key = "Space c F", hint = "Apply the quick fix of every diagnostic in this file",
+      { label = "~F~ix all", key = "Space c F", hint = "Request a server-provided fix for the whole file",
         action = function() require("util.lsp").fix_all() end },
       { label = "F~o~rmat file", key = "Space c f", hint = "Format with the file type's formatter (conform)",
         action = function() LazyVim.format({ force = true }) end },
