@@ -7,6 +7,7 @@ local ns = api.nvim_create_namespace("ai_wand")
 
 function M.busy()
   return active ~= nil or next(requests) ~= nil or next(completions) ~= nil
+    or require("util.ollama_queue").is_busy()
 end
 
 function M.setup()

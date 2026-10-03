@@ -37,6 +37,8 @@ Model detection starts asynchronously on first AI use and refreshes every five
 seconds while an Ollama chat is visible or ghost text is active in Insert mode. Minuet
 updates its model in existing sessions; new chat adapters use the cached model.
 If detection has not finished yet, retry the AI command after a few seconds.
+Local Ollama requests from CodeCompanion share one FIFO queue. Minuet ghost-text
+requests are skipped while that queue is busy; Copilot requests are unaffected.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.

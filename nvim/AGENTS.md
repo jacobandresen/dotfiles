@@ -36,6 +36,8 @@ neither pins one. Detection is asynchronous and cached; existing Minuet
 sessions refresh every five seconds while local AI is active; detection starts
 on first AI use, not at startup. `make use-model MODEL=<tag>` in the repo root switches it, pi
 and the mu agent together; `ga` in the chat buffer swaps to GitHub Copilot.
+Local CodeCompanion requests share a FIFO queue; Minuet ghost-text requests are
+dropped while the queue is busy so stale suggestions do not delay deliberate work.
 
 Offload to Ollama when the task is repetitive or mechanical **and the output is
 verifiable by inspection**:

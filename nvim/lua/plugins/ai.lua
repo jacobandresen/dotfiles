@@ -62,6 +62,7 @@ return {
     keys = codecompanion_keys,
     config = function()
       require("util.ai_chat").setup()
+      require("util.ollama_queue").setup_codecompanion()
       local http_adapters = {
         ollama = function()
           return require("codecompanion.adapters").extend("ollama", {
@@ -312,6 +313,7 @@ return {
           },
         },
       })
+      require("util.ollama_queue").setup_minuet()
     end,
   },
 }
