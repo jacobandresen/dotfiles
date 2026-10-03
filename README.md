@@ -39,7 +39,7 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for Neovim tools.
   and AI integrations. Use `:colorscheme turbopascal` for the blue TP7 palette.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty and zsh** — VGA styling, a 120×40 layout and DOS-style prompt.
+- **kitty and zsh** — Retrobox terminal colors, a 120×40 layout and DOS-style prompt.
 - **pi** — configured to use the host's selected Ollama model.
 
 ## Model controls
