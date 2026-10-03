@@ -9,7 +9,7 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 The UI imitates the Borland Turbo Pascal 7.0 IDE: `lua/turbo/` (menu bar in the tabline, hint line in the
 statusline, window title frames in the winbar, About dialog). lualine and
 bufferline are disabled for it. Menu entries live in `lua/turbo/menus.lua`,
-grouped by task (≡, File, Edit, Search, Code, Build, Debug, AI, Tools, Window,
+grouped by task (File, Edit, Search, Code, Debug, AI, Tools, Window,
 Help) with cascading submenus (►, one level deep); the Turbo Vision look
 stays, TP7's menu names don't have to. Keys: plain and Shift+F1–F10, Alt+letter
 and Space chords only — never Ctrl+F-keys, Alt+F-keys or Alt+Space, which

@@ -17,7 +17,7 @@ M.menus = {} -- { { title = "~F~ile", items = {...} or function() } }
 local stack = {} -- open drop-downs: the menu, then any submenus (last = focused)
 local ctx = { visual = false, win = nil }
 local active_menu = nil -- index into M.menus while its drop-down is open
-local last_menu = 2 -- F10 reopens the last used menu (default File)
+local last_menu = 1 -- F10 reopens the last used menu (default File)
 local last_sel = {} -- menu index -> item last highlighted there
 
 -- "Save ~a~s" -> "Save as", "a", 5 (0-based char index of the hotkey)

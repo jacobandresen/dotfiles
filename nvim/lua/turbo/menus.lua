@@ -1,4 +1,4 @@
--- The menu tree, grouped by task (File, Edit, Search, Code, Build, Debug, AI,
+-- The menu tree, grouped by task (File, Edit, Search, Code, Debug, AI,
 -- Tools, Window, Help) with cascading submenus; Turbo Vision look, but not
 -- TP7's menu names. Every item that shows a key has that key as a keymap too,
 -- and no key is one GNOME or KDE takes first (see turbo/init.lua).
@@ -252,22 +252,6 @@ end
 -- menus are grouped by task; the look (frames, hotkeys, hints, F-keys) is Turbo Vision's
 M.menus = {
   {
-    title = "≡",
-    items = {
-      { label = "~S~ettings", hint = "Editor options, config files, colour scheme", items = {
-        { label = "~E~ditor options...", hint = "Browse and change editor options", action = telescope("vim_options") },
-        { label = "~C~onfig files...", key = "Space f c", hint = "Browse the Turbo Vim config directory",
-          action = pick("files", { cwd = vim.fn.stdpath("config") }) },
-        { label = "Colour ~s~cheme...", hint = "Try another colour scheme (default retrobox; the blue TP screen is `turbopascal`)",
-          action = telescope("colorscheme", { enable_preview = true }) },
-      } },
-      { label = "~P~lugins", key = "Space l", hint = "Install, update and inspect plugins (:Lazy)", action = cmd("Lazy") },
-      { label = "~L~anguage tools", key = "Space c m", hint = "Language servers, debuggers and formatters (:Mason)", action = cmd("Mason") },
-      "-",
-      { label = "~R~epaint desktop", hint = "Redraw the screen", action = cmd("mode") },
-    },
-  },
-  {
     title = "~F~ile",
     items = {
       { label = "~N~ew", hint = "Create a new empty buffer", action = cmd("enew") },
@@ -356,19 +340,18 @@ M.menus = {
         { label = "~A~ll files...", key = "Space s d", hint = "Diagnostics in every open file", action = telescope("diagnostics") },
         { label = "~T~his file...", key = "Space s D", hint = "Diagnostics in this file", action = telescope("diagnostics", { bufnr = 0 }) },
       } },
-      { label = "~L~anguage servers...", key = "Space c l", hint = "Language servers attached to this file",
-        action = function() Snacks.picker.lsp_config() end },
-      { label = "R~e~start language servers", key = "Space c L", hint = "Restart the language servers of this file", action = cmd("lsp restart") },
-    },
-  },
-  {
-    title = "~B~uild",
-    items = {
-      { label = "~M~ake", key = "F9", hint = "Save all and run :make (Rust: cargo build)", action = M.make },
-      "-",
-      { label = "~C~ompiler messages", hint = "The quickfix list from the last Make", action = cmd("copen") },
-      { label = "~N~ext message", key = "] q", hint = "Go to the next compiler message", action = M.messages("next") },
-      { label = "~P~revious message", key = "[ q", hint = "Go to the previous compiler message", action = M.messages("prev") },
+      { label = "~L~anguage servers", hint = "Inspect or restart this file's language servers", items = {
+        { label = "~I~nfo...", key = "Space c l", hint = "Language servers attached to this file",
+          action = function() Snacks.picker.lsp_config() end },
+        { label = "~R~estart", key = "Space c L", hint = "Restart the language servers of this file", action = cmd("lsp restart") },
+      } },
+      { label = "~B~uild", hint = "Make and compiler messages", items = {
+        { label = "~M~ake", key = "F9", hint = "Save all and run :make (Rust: cargo build)", action = M.make },
+        "-",
+        { label = "~C~ompiler messages", hint = "The quickfix list from the last Make", action = cmd("copen") },
+        { label = "~N~ext message", key = "] q", hint = "Go to the next compiler message", action = M.messages("next") },
+        { label = "~P~revious message", key = "[ q", hint = "Go to the previous compiler message", action = M.messages("prev") },
+      } },
     },
   },
   {
@@ -413,6 +396,16 @@ M.menus = {
   {
     title = "~T~ools",
     items = {
+      { label = "~S~ettings", hint = "Editor options, config files, colour scheme", items = {
+        { label = "~E~ditor options...", hint = "Browse and change editor options", action = telescope("vim_options") },
+        { label = "~C~onfig files...", key = "Space f c", hint = "Browse the Turbo Vim config directory",
+          action = pick("files", { cwd = vim.fn.stdpath("config") }) },
+        { label = "Colour ~s~cheme...", hint = "Try another colour scheme (default retrobox; the blue TP screen is `turbopascal`)",
+          action = telescope("colorscheme", { enable_preview = true }) },
+      } },
+      { label = "~P~lugins", key = "Space l", hint = "Install, update and inspect plugins (:Lazy)", action = cmd("Lazy") },
+      { label = "~L~anguage tools", key = "Space c m", hint = "Language servers, debuggers and formatters (:Mason)", action = cmd("Mason") },
+      "-",
       { label = "~G~it", hint = "Lazygit, log, diff and blame", items = M.git },
       { label = "~D~ocker", hint = "Docker explorer, logs and Lazydocker", items = M.docker },
       { label = "Data~b~ase", hint = "Dadbod database UI and queries", items = M.db },

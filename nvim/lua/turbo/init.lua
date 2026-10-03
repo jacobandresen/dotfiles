@@ -63,10 +63,9 @@ function M.keymaps()
   local menubar = require("turbo.menubar")
   local menus = require("turbo.menus")
 
-  -- menus: F10 reopens the last one, Alt+= the ≡ menu, Alt+letter a named
-  -- one, Shift+F10 (the CUA context-menu key) / right click the local menu
+  -- F10 reopens the last menu; Alt+letter opens a named menu.
+  -- Shift+F10 / right click opens the local menu.
   map({ "n", "x", "i" }, "<F10>", menubar.open_last, { desc = "Menu" })
-  map({ "n", "x" }, "<M-=>", function() menubar.open(1) end, { desc = "≡ Menu" })
   for _, menu in ipairs(menus.menus) do
     local key = menu.title:match("~(.)~")
     if key then
