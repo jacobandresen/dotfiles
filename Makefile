@@ -259,3 +259,7 @@ ram-profile:
 # Read-only checks; Docker is optional on macOS.
 doctor:
 	@python3 ./scripts/doctor.py
+
+.PHONY: install-codex-mu
+install-codex-mu:
+	@python3 ./scripts/install-codex-mu.py --consolidate-rules
