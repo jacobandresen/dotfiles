@@ -36,11 +36,11 @@ return {
       -- switch desktops, Ctrl+F7-F10 Present Windows, Alt+F5-F10 move/resize
       -- the window). F5 toggles breakpoints (Delphi), Shift+F5 stops (VS Code).
       { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Run to Cursor" },
-      { "<S-F4>", function() require("dapui").eval(nil, { enter = true }) end, desc = "Evaluate", mode = { "n", "v" } },
+      { "<S-F4>", function() require("turbo.menus").evaluate() end, desc = "Evaluate", mode = { "n", "v" } },
       { "<F5>",   function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
       { "<S-F5>", function() require("dap").terminate() end,             desc = "Stop" },
       { "<F7>",   function() require("dap").step_into() end,             desc = "Step Into" },
-      { "<S-F7>", function() require("dapui").elements.watches.add(vim.fn.expand("<cword>")) end, desc = "Add Watch" },
+      { "<S-F7>", function() require("turbo.menus").add_watch() end, desc = "Add Watch" },
       { "<F8>",   function() require("dap").step_over() end,             desc = "Step Over" },
       { "<S-F8>", function() require("dap").step_out() end,              desc = "Step Out" },
       { "<S-F9>", function() require("dap").continue() end,              desc = "Start / Continue" },
@@ -55,7 +55,7 @@ return {
       { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
       { "<leader>du",  function() require("dapui").toggle() end,         desc = "Toggle UI" },
       { "<leader>ds",  function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
-      { "<leader>de",  function() require("dapui").eval() end,           desc = "Eval", mode = { "n", "v" } },
+      { "<leader>de",  function() require("turbo.menus").evaluate() end, desc = "Eval", mode = { "n", "v" } },
       { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
     }),
     config = function()

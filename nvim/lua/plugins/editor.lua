@@ -28,6 +28,9 @@ return {
         local newVirtText = {}
         local suffix = (" 󰁂 %d "):format(endLnum - lnum)
         local sufWidth = vim.fn.strdisplaywidth(suffix)
+        if width <= sufWidth then
+          return { { truncate(tostring(endLnum - lnum), math.max(0, width)), "MoreMsg" } }
+        end
         local targetWidth = width - sufWidth
         local curWidth = 0
         for _, chunk in ipairs(virtText) do
@@ -97,7 +100,7 @@ return {
       defaults = {
         layout_strategy = "vertical",
         layout_config = { height = 0.95, width = 0.99 },
-        file_ignore_patterns = { "node_modules/", "%.git/", "%.lock" },
+        file_ignore_patterns = { "node_modules/", "%.git/" },
         borderchars = { "═", "║", "═", "║", "╔", "╗", "╝", "╚" }, -- Turbo Vision frames
       },
     },

@@ -58,10 +58,11 @@ end
 -- default may be a function, evaluated when the item is chosen
 local function input(prompt, default, completion, fn)
   return function()
+    local value_default = default
     if type(default) == "function" then
-      default = default()
+      value_default = default()
     end
-    vim.ui.input({ prompt = prompt, default = default, completion = completion }, function(value)
+    vim.ui.input({ prompt = prompt, default = value_default, completion = completion }, function(value)
       if value and value ~= "" then
         fn(value)
       end
@@ -79,15 +80,26 @@ end
 -- Messages (quickfix) window, success says so.
 local function make()
   return function()
-    vim.cmd("silent! wall")
+    local saved, save_error = pcall(vim.cmd, "wall")
+    if not saved then
+      return vim.notify("Make cancelled: unable to save files - " .. save_error, vim.log.levels.ERROR)
+    end
     local target = vim.bo.makeprg:match("^cargo") and "build" or ""
-    vim.cmd("silent make " .. target)
-    local errors = #vim.tbl_filter(function(e) return e.valid == 1 end, vim.fn.getqflist())
+    local built, build_error = pcall(vim.cmd, "silent make " .. target)
+    if not built then
+      return vim.notify("Make failed: " .. build_error, vim.log.levels.ERROR)
+    end
+    local entries = vim.fn.getqflist()
+    local errors = #vim.tbl_filter(function(e)
+      return e.valid == 1 and not (e.type or ""):upper():match("^[WIN]$")
+    end, entries)
+    local warnings = #vim.tbl_filter(function(e) return e.valid == 1 and (e.type or ""):upper() == "W" end, entries)
     if vim.v.shell_error ~= 0 or errors > 0 then
-      vim.cmd("copen")
+      if #entries > 0 then vim.cmd("copen") end
       vim.notify(("Make failed: %d error(s)"):format(errors), vim.log.levels.ERROR)
     else
-      vim.notify("Make succeeded")
+      if warnings > 0 then vim.cmd("copen") end
+      vim.notify(warnings > 0 and "Make succeeded with warnings" or "Make succeeded")
     end
   end
 end
@@ -96,6 +108,27 @@ local M = {}
 
 M.make = make()
 M.qf = qf
+M.add_watch = input("Add watch: ", function() return vim.fn.expand("<cword>") end, nil,
+  function(value) dapui().elements.watches.add(value) end)
+
+-- Menu actions run after Visual mode has ended; shortcuts may still be in it.
+function M.evaluate(visual)
+  local mode = vim.fn.mode()
+  local active_visual = mode:match("^[vV\22]") ~= nil
+  if visual == nil then visual = active_visual end
+  local expression
+  if visual then
+    local selection_mode = active_visual and mode or vim.fn.visualmode()
+    if active_visual then vim.cmd("normal! \27") end
+    expression = table.concat(vim.fn.getregion(vim.fn.getpos("'<"), vim.fn.getpos("'>"), {
+      type = selection_mode, exclusive = vim.o.selection == "exclusive",
+    }), "\n")
+    if expression == "" then
+      return vim.notify("Select an expression to evaluate", vim.log.levels.WARN)
+    end
+  end
+  dapui().eval(expression, { enter = true })
+end
 
 -- ]q / [q: Trouble's list when it's open, else the compiler messages
 function M.messages(dir)
@@ -285,7 +318,7 @@ M.menus = {
           if vim.fn.getreg("/") == "" then
             return vim.notify("No previous search")
           end
-          pcall(vim.cmd, "normal! n")
+          pcall(vim.cmd, "normal n")
         end },
       { label = "~R~eplace...", key = "Space s r", hint = "Search and replace (grug-far)",
         action = function(ctx)
@@ -300,7 +333,15 @@ M.menus = {
       { label = "Find in f~i~les...", key = "Shift+F2", hint = "Search the project with ripgrep", action = pick("live_grep") },
       "-",
       { label = "~G~o to line...", hint = "Jump to a line in this file",
-        action = input("Line number: ", nil, nil, function(v) vim.cmd(tostring(tonumber(v) or 1)) end) },
+        action = input("Line number: ", nil, nil, function(v)
+          v = vim.trim(v)
+          local line = tonumber(v)
+          local last = vim.api.nvim_buf_line_count(0)
+          if not v:match("^%d+$") or not line or line < 1 or line > last then
+            return vim.notify(("Enter a line number from 1 to %d"):format(last), vim.log.levels.WARN)
+          end
+          vim.cmd(tostring(line))
+        end) },
       { label = "Go to ~s~ymbol...", key = "Space s s", hint = "Jump to a function, type... in this file",
         action = telescope("lsp_document_symbols") },
       { label = "Go to symbol in ~w~orkspace...", key = "Space s S", hint = "Search symbols across the project",
@@ -364,9 +405,9 @@ M.menus = {
         { label = "Cl~e~ar all", key = "Space d C", hint = "Remove every breakpoint", action = dap("clear_breakpoints") },
       } },
       { label = "~A~dd watch...", key = "Shift+F7", hint = "Watch an expression",
-        action = input("Add watch: ", function() return vim.fn.expand("<cword>") end, nil, function(v) dapui().elements.watches.add(v) end) },
+        action = M.add_watch },
       { label = "~E~valuate...", key = "Shift+F4", hint = "Evaluate the expression under the cursor",
-        action = function() dapui().eval(nil, { enter = true }) end },
+        action = function(ctx) M.evaluate(ctx.visual) end },
       "-",
       { label = "~V~iews", hint = "Call stack, REPL and debugger panels", items = {
         { label = "~C~all stack", key = "Space d s", hint = "Show the call stack", action = dapui_float("stacks") },
@@ -461,7 +502,7 @@ M.local_menu = {
   { label = "Toggle ~b~reakpoint", key = "F5", hint = "Set or clear a breakpoint on this line", action = dap("toggle_breakpoint") },
   { label = "~R~un to cursor", key = "F4", hint = "Run until the cursor line", action = dap("run_to_cursor") },
   { label = "~E~valuate...", key = "Shift+F4", hint = "Evaluate the expression under the cursor",
-    action = function() dapui().eval(nil, { enter = true }) end },
+    action = function(ctx) M.evaluate(ctx.visual) end },
   "-",
   { label = "~I~nline AI edit...", key = "Space a i", hint = "Ask the AI to edit the block (or line) in place",
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanion") end },

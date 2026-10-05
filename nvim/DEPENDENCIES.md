@@ -61,6 +61,13 @@ available fixes.
 - **python3** — URL/HTML encode/decode
 - **base64** (coreutils) — base64 encode/decode
 
+Transforms support character selections, whole-line selections and whole
+buffers. Rectangular selections are rejected. The picker keeps the original
+buffer and selection, and cancels if that buffer changes while it is open.
+URL encode/decode preserves whitespace.
+
+Check with `NVIM_LOG_FILE=/tmp/nvim-transforms.log nvim --headless -u NONE -i NONE -l nvim/tests/transforms.lua`.
+
 ## Databases (Dadbod, `<leader>D`)
 
 Install the client for the databases you use: **sqlite3** for SQLite, **psql**

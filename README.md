@@ -83,16 +83,3 @@ Run migration regression tests with:
 ```sh
 python3 -m unittest discover -s tests -v
 ```
-
-## Codex for mu
-
-```sh
-make install-codex-mu
-codex -p mu -C /opt/Projects/mu
-```
-
-Installs scoped repository, archive and model-service permissions with automatic
-approval review. The source lives in mu’s `.codex/` directory and also applies to new chats
-opened there. Global user config stays separate. Reinstall after editing mu’s
-`.codex/`; use
-`--mu-dir <checkout>` with `scripts/install-codex-mu.py` for another location.
