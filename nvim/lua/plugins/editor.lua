@@ -153,8 +153,8 @@ return {
   {
     "kristijanhusak/vim-dadbod-ui",
     dependencies = {
-      "tpope/vim-dadbod",
-      "kristijanhusak/vim-dadbod-completion",
+      { "tpope/vim-dadbod", cmd = "DB" },
+      { "kristijanhusak/vim-dadbod-completion", ft = { "sql", "mysql", "plsql" } },
     },
     cmd = { "DBUI", "DBUIToggle", "DBUIClose", "DBUIAddConnection", "DBUIFindBuffer", "DBUIRenameBuffer", "DBUILastQueryInfo" },
     keys = {
@@ -164,6 +164,8 @@ return {
       { "<leader>Df", function() require("util.db").in_query("DBUIFindBuffer")() end, desc = "DB Find Buffer" },
       { "<leader>Dr", function() require("util.db").in_query("DBUIRenameBuffer")() end, desc = "DB Rename Buffer" },
       { "<leader>Di", "<cmd>DBUILastQueryInfo<cr>", desc = "DB Last Query Info" },
+      { "<leader>Ds", function() require("util.db").query_action("<Plug>(DBUI_SaveQuery)")() end, desc = "DB Save Query" },
+      { "<leader>Db", function() require("util.db").query_action("<Plug>(DBUI_EditBindParameters)")() end, desc = "DB Edit Bind Parameters" },
       -- the selection, or the whole buffer, against the buffer's database
       { "<leader>De", function() require("util.db").execute("%") end, desc = "DB Execute Query" },
       { "<leader>De", function() require("util.db").execute("'<,'>") end, mode = "x", desc = "DB Execute Selection" },
@@ -172,6 +174,10 @@ return {
       vim.g.db_ui_use_nerd_fonts = 1
       vim.g.db_ui_save_location = vim.fn.stdpath("data") .. "/db_ui"
       vim.g.db_ui_show_help = 0
+      -- Saving is separate from executing; avoid accidental duplicate writes.
+      vim.g.db_ui_execute_on_save = 0
+      -- Keep SQL shortcuts in the Database (Space D) group.
+      vim.g.db_ui_disable_mappings_sql = 1
     end,
   },
 

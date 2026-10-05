@@ -124,8 +124,6 @@ M.docker = {
     action = function() require("util.compose").open() end },
   { label = "~L~ogs...", key = "Space g O", hint = "Open the log of a compose service or container in a buffer",
     action = function() require("util.compose.logs").pick() end },
-  "-",
-  { label = "Lazy~d~ocker", key = "Space g d", hint = "Docker UI in a terminal window", action = M.lazydocker },
 }
 
 M.ai = {
@@ -134,8 +132,6 @@ M.ai = {
     action = function() cc().chat({ params = { adapter = "ollama" } }) end },
   { label = "~A~dd to chat", key = "Space a p", hint = "Attach the selection or current file and focus the chat prompt",
     action = function(ctx) cc() require("util.ai_chat").add(ctx.visual) end },
-  { label = "~B~ack to code", key = "Space a b", hint = "Focus the code window while keeping chat open",
-    action = function() require("util.ai_chat").back() end },
   "-",
   { label = "~I~nline edit...", key = "Space a i", hint = "Ask the AI to edit the block (or file) in place",
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanion") end },
@@ -143,10 +139,6 @@ M.ai = {
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanionActions") end },
   "-",
   { label = "~S~aved chats...", key = "Space a s", hint = "Restore a saved chat session", action = function() cc().sessions() end },
-  { label = "~E~dited files", key = "Space a e", hint = "Files the AI changed, in the quickfix list", action = function() cc().changes() end },
-  "-",
-  { label = "~G~host text", key = "Space a g", hint = "Toggle Minuet's inline suggestions in this buffer",
-    action = function() require("minuet") vim.cmd("Minuet virtualtext toggle") end },
 }
 if require("util.copilot").is_configured() then
   table.insert(M.ai, 3, {
@@ -161,12 +153,6 @@ if require("util.copilot").is_configured() then
     hint = "Ask Copilot to review staged and unstaged changes",
     action = function() require("codecompanion").prompt("diff-review") end,
   })
-  table.insert(M.ai, 10, {
-    label = "C~h~ange adapter...",
-    key = "Space a A",
-    hint = "Switch the open chat between Ollama and Copilot",
-    action = feed("<leader>aA"),
-  })
 end
 
 M.db = {
@@ -176,9 +162,12 @@ M.db = {
     action = function() require("util.db").edit_connections() end },
   { label = "~F~ind buffer", key = "Space D f", hint = "Show this query buffer in the drawer", action = require("util.db").in_query("DBUIFindBuffer") },
   "-",
-  { label = "~E~xecute query", key = "Space D e", hint = "Run the block (or whole buffer) against the buffer's database",
+  { label = "~E~xecute query", key = "Space D e", hint = "Run the selection or whole buffer against the buffer's database",
     action = function(ctx) require("util.db").execute(ctx.visual and "'<,'>" or "%") end },
-  { label = "~R~ename buffer...", key = "Space D r", hint = "Rename the current query buffer", action = require("util.db").in_query("DBUIRenameBuffer") },
+  { label = "~S~ave query...", key = "Space D s", hint = "Save a scratch query in this connection's saved queries",
+    action = require("util.db").query_action("<Plug>(DBUI_SaveQuery)") },
+  { label = "~B~ind parameters...", key = "Space D b", hint = "Edit values used for :parameters in this query",
+    action = require("util.db").query_action("<Plug>(DBUI_EditBindParameters)") },
   { label = "Last query ~i~nfo", key = "Space D i", hint = "Show timing and details of the last query", action = cmd("DBUILastQueryInfo") },
 }
 
@@ -268,7 +257,6 @@ M.menus = {
       { label = "Save a~l~l", hint = "Save all modified files", action = cmd("wall") },
       "-",
       { label = "~C~lose", key = "Shift+F3", hint = "Close the active file", action = function() Snacks.bufdelete() end },
-      { label = "Clos~e~ all", hint = "Close all files", action = function() Snacks.bufdelete.all() end },
       "-",
       { label = "E~x~it", key = "Alt+X", hint = "Quit Turbo Vim", action = cmd("confirm qall") },
     },
@@ -282,8 +270,6 @@ M.menus = {
       { label = "Cu~t~", key = "Shift+Del", hint = "Cut the block (or line) to the clipboard", action = edit('"+d', '"+dd') },
       { label = "~C~opy", key = "Ctrl+Ins", hint = "Copy the block (or line) to the clipboard", action = edit('"+y', '"+yy') },
       { label = "~P~aste", key = "Shift+Ins", hint = "Insert the clipboard at the cursor", action = edit('"+p', '"+P') },
-      { label = "C~l~ear", key = "Ctrl+Del", hint = "Delete the block (or line) without copying it", action = edit('"_d', '"_dd') },
-      { label = "Clip~b~oard history...", hint = "Browse the registers", action = telescope("registers") },
       "-",
       { label = "Co~m~ment", key = "g c c", hint = "Comment or uncomment the block (or line)",
         action = function(ctx) vim.cmd("normal " .. (ctx.visual and "gvgc" or "gcc")) end },
@@ -312,8 +298,6 @@ M.menus = {
         end },
       "-",
       { label = "Find in f~i~les...", key = "Shift+F2", hint = "Search the project with ripgrep", action = pick("live_grep") },
-      { label = "Find ~l~ines...", key = "Space s B", hint = "Search the lines of this file",
-        action = telescope("current_buffer_fuzzy_find", { fuzzy = false, case_mode = "ignore_case" }) },
       "-",
       { label = "~G~o to line...", hint = "Jump to a line in this file",
         action = input("Line number: ", nil, nil, function(v) vim.cmd(tostring(tonumber(v) or 1)) end) },
@@ -333,7 +317,7 @@ M.menus = {
       { label = "Re~n~ame...", key = "Space c r", hint = "Rename the symbol under the cursor everywhere", action = function() vim.lsp.buf.rename() end },
       { label = "Code ~a~ction...", key = "Space c a", hint = "Quick fixes and refactorings at the cursor",
         action = function() vim.lsp.buf.code_action() end },
-      { label = "Magic ~w~and: fix diagnostic", key = "Space c w", hint = "Ask the selected AI to fix the diagnostic at the cursor",
+      { label = "AI ~w~and: fix diagnostic", key = "Space c w", hint = "Ask the selected AI to fix the diagnostic at the cursor",
         action = function() cc() require("util.ai_wand").fix() end },
       { label = "~F~ix all", key = "Space c F", hint = "Request a server-provided fix for the whole file",
         action = function() require("util.lsp").fix_all() end },
@@ -353,8 +337,6 @@ M.menus = {
         { label = "~M~ake", key = "F9", hint = "Save all and run :make (Rust: cargo build)", action = M.make },
         "-",
         { label = "~C~ompiler messages", hint = "The quickfix list from the last Make", action = cmd("copen") },
-        { label = "~N~ext message", key = "] q", hint = "Go to the next compiler message", action = M.messages("next") },
-        { label = "~P~revious message", key = "[ q", hint = "Go to the previous compiler message", action = M.messages("prev") },
       } },
     },
   },
@@ -386,10 +368,8 @@ M.menus = {
       { label = "~E~valuate...", key = "Shift+F4", hint = "Evaluate the expression under the cursor",
         action = function() dapui().eval(nil, { enter = true }) end },
       "-",
-      { label = "~V~iews", hint = "Watches, call stack, output, REPL and the debugger panels", items = {
-        { label = "~W~atches", hint = "Show the watches", action = dapui_float("watches") },
+      { label = "~V~iews", hint = "Call stack, REPL and debugger panels", items = {
         { label = "~C~all stack", key = "Space d s", hint = "Show the call stack", action = dapui_float("stacks") },
-        { label = "~O~utput", hint = "Show the program output", action = dapui_float("console") },
         { label = "~R~EPL", key = "Space d R", hint = "Open the debugger's command line", action = function() require("dap").repl.open() end },
         "-",
         { label = "Debugger ~p~anels", key = "Space d u", hint = "Show or hide the debugger panels", action = function() dapui().toggle() end },
@@ -400,8 +380,7 @@ M.menus = {
   {
     title = "~T~ools",
     items = {
-      { label = "~S~ettings", hint = "Editor options, config files, colour scheme", items = {
-        { label = "~E~ditor options...", hint = "Browse and change editor options", action = telescope("vim_options") },
+      { label = "~S~ettings", hint = "Config files and colour scheme", items = {
         { label = "~C~onfig files...", key = "Space f c", hint = "Browse the Turbo Vim config directory",
           action = pick("files", { cwd = vim.fn.stdpath("config") }) },
         { label = "Colour ~s~cheme...", hint = "Try another colour scheme (default retrobox; the blue TP screen is `turbopascal`)",
@@ -411,7 +390,7 @@ M.menus = {
       { label = "~L~anguage tools", key = "Space c m", hint = "Language servers, debuggers and formatters (:Mason)", action = cmd("Mason") },
       "-",
       { label = "~G~it", hint = "Lazygit, log, diff and blame", items = M.git },
-      { label = "~D~ocker", hint = "Docker explorer, logs and Lazydocker", items = M.docker },
+      { label = "~D~ocker", hint = "Docker explorer and logs", items = M.docker },
       { label = "Data~b~ase", hint = "Dadbod database UI and queries", items = M.db },
     },
   },
@@ -427,7 +406,6 @@ M.menus = {
       { label = "~Z~oom", key = "Space w m", hint = "Maximise the active window, or restore it", action = function() Snacks.zen.zoom() end },
       "-",
       { label = "~N~ext", key = "F6", hint = "Go to the next window", action = cmd("wincmd w") },
-      { label = "~P~revious", key = "Shift+F6", hint = "Go to the previous window", action = cmd("wincmd W") },
       { label = "~L~ist...", key = "Alt+0", hint = "Pick an open file", action = telescope("buffers", { sort_mru = true }) },
     },
   },
@@ -436,7 +414,6 @@ M.menus = {
     items = {
       { label = "~C~ontents", key = "F1", hint = "Open the Neovim manual", action = cmd("help") },
       { label = "~I~ndex...", key = "Space s h", hint = "Search all help topics", action = telescope("help_tags") },
-      { label = "~T~opic search", key = "Shift+F1", hint = "Help for the word under the cursor", action = M.topic_search },
       { label = "~K~eyboard shortcuts...", key = "Space s k", hint = "Search every key mapping", action = telescope("keymaps") },
       "-",
       { label = "~A~bout...", hint = "Show version and copyright information", action = chrome.about },
@@ -485,8 +462,6 @@ M.local_menu = {
   { label = "~R~un to cursor", key = "F4", hint = "Run until the cursor line", action = dap("run_to_cursor") },
   { label = "~E~valuate...", key = "Shift+F4", hint = "Evaluate the expression under the cursor",
     action = function() dapui().eval(nil, { enter = true }) end },
-  { label = "~A~dd watch...", key = "Shift+F7", hint = "Watch an expression",
-    action = input("Add watch: ", function() return vim.fn.expand("<cword>") end, nil, function(v) dapui().elements.watches.add(v) end) },
   "-",
   { label = "~I~nline AI edit...", key = "Space a i", hint = "Ask the AI to edit the block (or line) in place",
     action = function(ctx) vim.cmd(range(ctx) .. "CodeCompanion") end },

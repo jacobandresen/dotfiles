@@ -61,6 +61,34 @@ available fixes.
 - **python3** — URL/HTML encode/decode
 - **base64** (coreutils) — base64 encode/decode
 
+## Databases (Dadbod, `<leader>D`)
+
+Install the client for the databases you use: **sqlite3** for SQLite, **psql**
+for PostgreSQL, or **mysql** for MySQL/MariaDB. Dadbod uses these executables;
+Mason does not install them.
+
+`Space D u` opens the drawer; `Space D a` adds a connection. Press `R` in the
+drawer after adding or editing connections. `Space D f` assigns an existing
+SQL buffer to a connection and locates it in the drawer.
+
+`Space D e` executes the whole query buffer, or selected lines in Visual mode.
+DBUI queries support `:parameters` and record the last query (`Space D i`).
+`Space D b` edits parameter values; `Space D s` saves a scratch query in its
+connection's saved queries. Saving SQL does **not** execute it. These replace
+Dadbod UI's default SQL shortcuts `Space S`, `Space E` and `Space W`.
+
+Connections and saved queries live under `stdpath("data")/db_ui`, outside this
+repository. `Space D c` edits the saved connections JSON. Standalone SQL can
+also use Dadbod's `b:db`, `g:db`, `w:db`, `t:db` or `DATABASE_URL` connection.
+
+Run `python3 nvim/tests/dadbod.py` from the repository root to check the real
+Neovim configuration and installed plugins against temporary SQLite databases.
+The runner isolates connection files, cache and state, and disables unrelated
+Mason/parser installation for the test session.
+Add `--postgres` to repeat the workflows against a temporary PostgreSQL cluster
+when `initdb`, `pg_ctl` and `psql` are installed. It listens on a private Unix
+socket and is stopped and removed afterward.
+
 ## Language toolchains
 
 Not managed by Mason; install via the language's own tooling:
