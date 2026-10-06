@@ -1,138 +1,29 @@
 #!/usr/bin/env bash
-# Pull and load the selected coding model. Accepts a model tag override.
+# Compatibility entry point for pulling/loading a model without configuring Pi.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODEL_NAME=""
-
-DRY_RUN=false
-VERBOSE=false
+args=(--ollama-only --keepalive 24h)
+model=""
 
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            echo "Usage: $(basename "$0") [OPTIONS] [MODEL]"
-            echo ""
-            echo "Pull and load this host's coding model into Ollama."
-            echo "Defaults to $("$SCRIPT_DIR/select-coding-model.sh"), from select-coding-model.sh."
-            echo ""
-            echo "Arguments:"
-            echo "  MODEL          Ollama tag to use instead of the default"
-            echo ""
-            echo "Options:"
-            echo "  -h, --help     Show this help message and exit"
-            echo "  -n, --dry-run  Show what would be done without making changes"
-            echo "  -v, --verbose  Enable verbose output"
-            exit 0
-            ;;
-        -n|--dry-run)
-            DRY_RUN=true
-            shift
-            ;;
-        -v|--verbose)
-            VERBOSE=true
-            shift
-            ;;
-        -*)
-            echo "Unknown option: $1" >&2
-            exit 1
-            ;;
-        *)
-            MODEL_NAME="$1"
-            shift
-            ;;
-    esac
+	case "$1" in
+		-h|--help)
+			printf '%s\n' "Usage: $(basename "$0") [OPTIONS] [MODEL]" \
+				"Pull and load the selected model without changing Pi settings." \
+				"  -n, --dry-run  Show actions without making changes" \
+				"  -v, --verbose  Accepted for compatibility"
+			exit 0
+			;;
+		-n|--dry-run|-v|--verbose) args+=("$1") ;;
+		-*) echo "Unknown option: $1" >&2; exit 1 ;;
+		*)
+			if [[ -n "$model" ]]; then echo "Only one model may be specified" >&2; exit 1; fi
+			model="$1"
+			;;
+	esac
+	shift
 done
 
-# Fall back to the host-appropriate model when none was given explicitly.
-if [ -z "$MODEL_NAME" ]; then
-    MODEL_NAME="$("$SCRIPT_DIR/select-coding-model.sh")"
-fi
-
-# Normalize bare model names to :latest before comparing.
-ollama_has() {
-	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
-	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
-}
-
-echo "Model setup: $MODEL_NAME via Ollama"
-echo ""
-
-if command -v ollama >/dev/null 2>&1; then
-    echo "  Ollama is installed ($(ollama --version 2>/dev/null || echo 'unknown version'))"
-else
-    echo "  Ollama not found. Install it first:"
-    echo "    macOS/Linux: curl -fsSL https://ollama.com/install.sh | sh"
-    exit 1
-fi
-
-# Check if Ollama server is running
-if ! curl -s -f -o /dev/null http://localhost:11434/v1/models >/dev/null 2>&1; then
-    echo "  Ollama server is not running. Starting it..."
-    if $DRY_RUN; then
-        echo "  [DRY-RUN] Would start Ollama server"
-    else
-        open -a Ollama 2>/dev/null || xdg-open ollama 2>/dev/null || ollama serve &
-        sleep 5
-        if ! curl -s -f -o /dev/null http://localhost:11434/v1/models >/dev/null 2>&1; then
-            echo "  Failed to start Ollama server. Start it manually, then re-run." >&2
-            exit 1
-        fi
-        echo "  Ollama server started"
-    fi
-else
-    echo "  Ollama server is running"
-fi
-
-echo ""
-
-if ollama_has "$MODEL_NAME"; then
-    echo "  $MODEL_NAME is already pulled"
-else
-    if $DRY_RUN; then
-        echo "  [DRY-RUN] Would run: ollama pull $MODEL_NAME"
-    else
-        echo "  Pulling $MODEL_NAME..."
-        if ! ollama pull "$MODEL_NAME"; then
-            echo "  Failed to pull $MODEL_NAME" >&2
-            exit 1
-        fi
-        echo "  $MODEL_NAME pulled successfully"
-    fi
-fi
-
-echo ""
-
-TMP_JSON="$(mktemp)"
-trap 'rm -f "$TMP_JSON"' EXIT
-
-ALREADY_LOADED=false
-if curl -s --max-time 2 http://localhost:11434/api/ps -o "$TMP_JSON" 2>/dev/null && [ -s "$TMP_JSON" ]; then
-    if python3 -c "
-import json, sys
-with open('$TMP_JSON') as f:
-    models = json.load(f).get('models', [])
-sys.exit(0 if any(m.get('name') == '$MODEL_NAME' for m in models) else 1)
-" 2>/dev/null; then
-        ALREADY_LOADED=true
-    fi
-fi
-
-if $ALREADY_LOADED; then
-    echo "  $MODEL_NAME is already loaded"
-elif $DRY_RUN; then
-    echo "  [DRY-RUN] Would load $MODEL_NAME into memory"
-else
-    echo "  Loading $MODEL_NAME (first load can take a while)..."
-    # An empty/no prompt can send some models into an unbounded "thinking"
-    # loop instead of loading and returning - send a trivial real prompt
-    # instead, and ask Ollama to keep it resident well past its 5m default.
-    if ! echo "hi" | ollama run "$MODEL_NAME" --keepalive 24h >/dev/null; then
-        echo "  Failed to load $MODEL_NAME" >&2
-        exit 1
-    fi
-    echo "  $MODEL_NAME loaded into memory"
-fi
-
-echo ""
-echo "Setup complete: $MODEL_NAME pulled and loaded in Ollama"
+if [[ -n "$model" ]]; then args+=("$model"); fi
+exec "$SCRIPT_DIR/use-model.sh" "${args[@]}"

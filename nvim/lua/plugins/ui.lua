@@ -10,15 +10,24 @@ return {
   { "nvim-lualine/lualine.nvim", enabled = false },
   { "akinsho/bufferline.nvim", enabled = false },
 
-  -- dashboard: TurboVim block logo (replaces LazyVim default header)
+  -- dashboard: keep the shortcuts and startup info without a logo
   {
     "folke/snacks.nvim",
+    init = function()
+      vim.api.nvim_create_autocmd("VimEnter", {
+        group = vim.api.nvim_create_augroup("turbo_startup_explorer", { clear = true }),
+        once = true,
+        callback = function()
+          if vim.fn.argc(-1) ~= 0 or vim.api.nvim_buf_get_name(0) ~= "" or #vim.api.nvim_list_uis() == 0 then
+            return
+          end
+          vim.schedule(function()
+            if vim.api.nvim_buf_get_name(0) == "" then Snacks.explorer() end
+          end)
+        end,
+      })
+    end,
     opts = function(_, opts)
-      local head = "SnacksDashboardHeader"
-      local function line(str)
-        return { str .. "\n", hl = head, align = "center" }
-      end
-
       -- opaque notifications (see fidget below)
       opts.styles = vim.tbl_deep_extend("force", opts.styles or {}, {
         notification = { wo = { winblend = 0 } },
@@ -77,16 +86,6 @@ return {
 
       opts.dashboard = opts.dashboard or {}
       opts.dashboard.sections = {
-        {
-          padding = 1,
-          text = {
-            line("████████ ██    ██ ██████  ██████   ██████  ██    ██ ██ ███    ███"),
-            line("   ██    ██    ██ ██   ██ ██   ██ ██    ██ ██    ██ ██ ████  ████"),
-            line("   ██    ██    ██ ██████  ██████  ██    ██ ██    ██ ██ ██ ████ ██"),
-            line("   ██    ██    ██ ██   ██ ██   ██ ██    ██  ██  ██  ██ ██  ██  ██"),
-            line("   ██     ██████  ██   ██ ██████   ██████    ████   ██ ██      ██"),
-          },
-        },
         { section = "keys", gap = 1, padding = 1 },
         { section = "startup" },
       }

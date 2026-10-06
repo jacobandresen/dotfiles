@@ -189,7 +189,7 @@ if require("util.copilot").is_configured() then
 end
 
 M.db = {
-  { label = "~T~oggle database UI", key = "Space D u", hint = "Show or hide the Dadbod connections drawer", action = cmd("DBUIToggle") },
+  { label = "~T~oggle database UI", key = "Space D u", hint = "Alt+U or Space D u: show or hide the Dadbod connections drawer", action = cmd("DBUIToggle") },
   { label = "~A~dd connection...", key = "Space D a", hint = "Add a database connection URL", action = cmd("DBUIAddConnection") },
   { label = "Edit ~c~onnections...", key = "Space D c", hint = "Edit the saved connections file (~/.local/share/nvim/db_ui, not in git)",
     action = function() require("util.db").edit_connections() end },

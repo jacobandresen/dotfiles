@@ -3,6 +3,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/ollama-common.sh"
 
 case "${1:-}" in
 	-h|--help)
@@ -30,7 +31,7 @@ printf '\n%-22s %-8s %-10s %-9s %s\n' MODEL WROTE COMPILES RUNS VERDICT
 printf '%s\n' "----------------------------------------------------------------------"
 
 for model in "${MODELS[@]}"; do
-	if ! ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$model"; then
+	if ! ollama_has_model "$model"; then
 		echo "  pulling $model..." >&2
 		ollama pull "$model" >/dev/null 2>&1 || {
 			printf '%-22s %-8s %-10s %-9s %s\n' "$model" - - - "PULL FAILED"

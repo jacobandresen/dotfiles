@@ -81,3 +81,24 @@ vim.api.nvim_create_autocmd("FileType", {
     end)
   end,
 })
+
+-- Dadbod opens a new query in a split when the dashboard is the only editing
+-- window. Remove that startup page once the database query buffer is ready.
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("turbo_dbui_hide_dashboard", { clear = true }),
+  pattern = "sql",
+  callback = function(args)
+    if not vim.b[args.buf].dbui_db_key_name then return end
+    vim.schedule(function()
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[buf].filetype == "snacks_dashboard" then
+          vim.api.nvim_win_close(win, true)
+          if vim.api.nvim_buf_is_valid(buf) and vim.fn.bufwinid(buf) == -1 then
+            vim.api.nvim_buf_delete(buf, { force = true })
+          end
+        end
+      end
+    end)
+  end,
+})

@@ -161,6 +161,7 @@ return {
     },
     cmd = { "DBUI", "DBUIToggle", "DBUIClose", "DBUIAddConnection", "DBUIFindBuffer", "DBUIRenameBuffer", "DBUILastQueryInfo" },
     keys = {
+      { "<M-u>", "<cmd>DBUIToggle<cr>", desc = "Toggle Database UI" },
       { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
       { "<leader>Da", "<cmd>DBUIAddConnection<cr>", desc = "DB Add Connection" },
       { "<leader>Dc", function() require("util.db").edit_connections() end, desc = "DB Edit Connections" },
@@ -181,6 +182,16 @@ return {
       vim.g.db_ui_execute_on_save = 0
       -- Keep SQL shortcuts in the Database (Space D) group.
       vim.g.db_ui_disable_mappings_sql = 1
+      vim.api.nvim_create_autocmd("FileType", {
+        group = vim.api.nvim_create_augroup("turbo_dbui_keys", { clear = true }),
+        pattern = "dbui",
+        callback = function(args)
+          vim.keymap.set("n", "<Esc>", "<cmd>DBUIClose<cr>", {
+            buffer = args.buf,
+            desc = "Close Database UI",
+          })
+        end,
+      })
     end,
   },
 

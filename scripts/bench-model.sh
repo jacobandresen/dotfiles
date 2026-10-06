@@ -3,6 +3,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/ollama-common.sh"
 API="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 case "$API" in http*) ;; *) API="http://$API" ;; esac
 
@@ -40,17 +41,11 @@ PROMPTS=(
 
 swap_used_mb() { sysctl -n vm.swapusage 2>/dev/null | awk '{print $6}' | tr -d 'M' || echo 0; }
 
-# Normalize bare model names to :latest before comparing.
-ollama_has() {
-	case "$1" in *:*) _t="$1" ;; *) _t="$1:latest" ;; esac
-	ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$_t"
-}
-
 printf '\n%-22s %8s %8s %8s %8s %10s  %s\n' MODEL GEN_TPS PROMPT_TPS LOAD_S SIZE SWAP_DELTA PROCESSOR
 printf '%s\n' "-------------------------------------------------------------------------------------------"
 
 for model in "${MODELS[@]}"; do
-	if ! ollama_has "$model"; then
+	if ! ollama_has_model "$model"; then
 		echo "  pulling $model..." >&2
 		ollama pull "$model" >/dev/null 2>&1 || { echo "  pull failed: $model" >&2; continue; }
 	fi

@@ -28,6 +28,16 @@ map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { des
 map("n", "<leader>gC", function() require("util.compose").open() end, { desc = "Docker Explorer" })
 map("n", "<leader>gO", function() require("util.compose.logs").pick() end, { desc = "Docker Logs" })
 
+-- Toggle the Snacks explorer from either its sidebar or the editing window.
+map("n", "<leader>e", function()
+  local explorers = Snacks.picker.get({ source = "explorer" })
+  if #explorers > 0 then
+    for _, picker in ipairs(explorers) do picker:close() end
+  else
+    Snacks.explorer({ cwd = LazyVim.root() })
+  end
+end, { desc = "Toggle File Explorer" })
+
 -- LSP restart next to LazyVim's <leader>cl (Lsp Info)
 map("n", "<leader>cL", "<cmd>lsp restart<cr>", { desc = "Restart LSP" })
 

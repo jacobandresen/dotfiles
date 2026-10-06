@@ -1,7 +1,7 @@
 # Dotfiles
 
-Turbo Pascal-inspired configs for Neovim, Midnight Commander, kitty, zsh and
-the [pi](https://pi.dev) coding agent with local
+Turbo Pascal-inspired configs with a modern twist for Neovim, Midnight
+Commander, kitty, zsh and the [pi](https://pi.dev) coding agent with local
 [Ollama](https://ollama.com) models.
 
 ## Install
@@ -39,7 +39,9 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for Neovim tools.
   and AI integrations. Use `:colorscheme turbopascal` for the blue TP7 palette.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty and zsh** — Retrobox terminal colors, a 120×40 layout and DOS-style prompt.
+- **kitty, GNOME Terminal and zsh** — matching Retrobox terminal colors, a
+  120×40 kitty layout and DOS-style prompt. On Linux, `make install` creates
+  and selects the GNOME Terminal Retrobox profile.
 - **pi** — configured to use the host's selected Ollama model.
 
 ## Model controls

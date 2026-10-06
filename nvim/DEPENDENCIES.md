@@ -33,12 +33,12 @@ adapters, formatters).
   prompt templates. Copilot's own inline completions are disabled; Minuet uses
   Ollama for local ghost text.
 
-Model detection starts asynchronously on first AI use and refreshes every five
-seconds while an Ollama chat is visible or ghost text is active in Insert mode. Minuet
-updates its model in existing sessions; new chat adapters use the cached model.
-If detection has not finished yet, retry the AI command after a few seconds.
-Local Ollama requests from CodeCompanion share one FIFO queue. Minuet ghost-text
-requests are skipped while that queue is busy; Copilot requests are unaffected.
+Model detection starts on first AI use and refreshes every five seconds while
+chat or ghost text is active. Minuet updates existing sessions; new chats use
+the cached model. CodeCompanion requests share a FIFO queue, and Minuet skips
+suggestions while it is busy. If detection is still pending, retry the AI command.
+`make use-model MODEL=<tag>` switches the model for Neovim, Pi, and mu; `ga` in
+the chat buffer switches to Copilot.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.

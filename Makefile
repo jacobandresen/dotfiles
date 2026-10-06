@@ -1,8 +1,8 @@
-.PHONY: install install-nvim install-zsh install-mc install-kitty install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common doctor
+.PHONY: install install-nvim install-zsh install-mc install-kitty install-gnome-terminal install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common doctor
 
 OS := $(shell uname -s)
 
-install: deps install-nvim install-zsh install-mc install-kitty install-ollama install-docker install-pi
+install: deps install-nvim install-zsh install-mc install-kitty install-gnome-terminal install-ollama install-docker install-pi
 
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
@@ -70,42 +70,15 @@ deps-compose:
 
 install-nvim:
 	@echo "Installing nvim config..."
-	@mkdir -p $(HOME)/.config
-	@if [ -L $(HOME)/.config/nvim ]; then \
-		echo "  ✓ ~/.config/nvim already symlinked"; \
-	elif [ -e $(HOME)/.config/nvim ]; then \
-		echo "  ⚠ ~/.config/nvim exists but is not a symlink — skipping"; \
-	else \
-		ln -s $(CURDIR)/nvim $(HOME)/.config/nvim; \
-		echo "  ✓ ~/.config/nvim -> $(CURDIR)/nvim"; \
-	fi
+	@./scripts/install-link.sh --skip "$(CURDIR)/nvim" "$(HOME)/.config/nvim"
 
 install-zsh:
 	@echo "Installing zsh config..."
-	@if [ -L $(HOME)/.zshrc ]; then \
-		echo "  ✓ ~/.zshrc already symlinked"; \
-	elif [ -e $(HOME)/.zshrc ]; then \
-		mv $(HOME)/.zshrc $(HOME)/.zshrc.bak; \
-		ln -s $(CURDIR)/.zshrc $(HOME)/.zshrc; \
-		echo "  ✓ backed up old ~/.zshrc -> ~/.zshrc.bak, linked repo copy"; \
-	else \
-		ln -s $(CURDIR)/.zshrc $(HOME)/.zshrc; \
-		echo "  ✓ ~/.zshrc -> $(CURDIR)/.zshrc"; \
-	fi
+	@./scripts/install-link.sh --backup "$(CURDIR)/.zshrc" "$(HOME)/.zshrc"
 
 install-mc:
 	@echo "Installing Midnight Commander config..."
-	@mkdir -p $(HOME)/.config/mc
-	@if [ -L $(HOME)/.config/mc/ini ]; then \
-		echo "  ✓ ~/.config/mc/ini already symlinked"; \
-	elif [ -e $(HOME)/.config/mc/ini ]; then \
-		mv $(HOME)/.config/mc/ini $(HOME)/.config/mc/ini.bak; \
-		ln -s $(CURDIR)/mc/ini $(HOME)/.config/mc/ini; \
-		echo "  ✓ backed up old ini -> ini.bak, linked repo copy"; \
-	else \
-		ln -s $(CURDIR)/mc/ini $(HOME)/.config/mc/ini; \
-		echo "  ✓ ~/.config/mc/ini -> $(CURDIR)/mc/ini"; \
-	fi
+	@./scripts/install-link.sh --backup "$(CURDIR)/mc/ini" "$(HOME)/.config/mc/ini"
 	@mkdir -p $(HOME)/.local/share/mc/skins
 	@for skin in retrobox turbopascal; do \
 		ln -sfn $(CURDIR)/mc/skins/$$skin.ini $(HOME)/.local/share/mc/skins/$$skin.ini; \
@@ -114,44 +87,19 @@ install-mc:
 
 install-kitty:
 	@echo "Installing kitty config..."
-	@if [ -L $(HOME)/.config/kitty ]; then \
-		echo "  ✓ ~/.config/kitty already symlinked"; \
-	elif [ -e $(HOME)/.config/kitty ]; then \
-		mv $(HOME)/.config/kitty $(HOME)/.config/kitty.bak; \
-		ln -s $(CURDIR)/kitty $(HOME)/.config/kitty; \
-		echo "  ✓ backed up old ~/.config/kitty -> kitty.bak, linked repo copy"; \
+	@./scripts/install-link.sh --backup "$(CURDIR)/kitty" "$(HOME)/.config/kitty"
+
+install-gnome-terminal:
+	@if [ "$(OS)" = Linux ]; then \
+		./scripts/install-gnome-terminal.sh; \
 	else \
-		mkdir -p $(HOME)/.config; \
-		ln -s $(CURDIR)/kitty $(HOME)/.config/kitty; \
-		echo "  ✓ ~/.config/kitty -> $(CURDIR)/kitty"; \
+		echo "  ⏭ skipping GNOME Terminal profile (unsupported OS: $(OS))"; \
 	fi
 
 install-pi:
 	@echo "Installing host-local pi config..."
 	@python3 ./scripts/install-pi-config.py
-	@if ! command -v ollama >/dev/null 2>&1; then \
-		echo "  ⚠ ollama not found — skipping model selection (run 'make deps' first)"; \
-	elif ! curl -sf --max-time 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then \
-		echo "  ⚠ Ollama is installed but not responding on 127.0.0.1:11434 — skipping model setup."; \
-		echo "    A fresh install needs its first-run setup completed once:"; \
-		echo "      open -a Ollama   # then click through the setup window"; \
-		echo "    Re-run 'make install-pi' afterwards."; \
-	else \
-		model=$$($(CURDIR)/scripts/select-coding-model.sh); \
-		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
-		echo "  → RAM profile: $$profile → coding model: $$model"; \
-		case "$$model" in *:*) tag="$$model" ;; *) tag="$$model:latest" ;; esac; \
-		if ollama list | awk 'NR>1{print $$1}' | grep -qx "$$tag"; then \
-			echo "  ✓ $$model already pulled"; \
-		else \
-			echo "  ↓ pulling $$model (this may take a while)..."; \
-			ollama pull "$$model"; \
-		fi; \
-		echo "  ⏳ loading $$model into memory..."; \
-		curl -s http://127.0.0.1:11434/api/generate -d "{\"model\":\"$$model\",\"prompt\":\"hi\",\"stream\":false}" >/dev/null; \
-		echo "  ✓ $$model loaded"; \
-		$(CURDIR)/scripts/setup-host.sh; \
-	fi
+	@$(CURDIR)/scripts/use-model.sh --skip-if-unavailable
 
 install-ollama:
 ifeq ($(OS),Darwin)

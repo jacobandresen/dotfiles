@@ -25,6 +25,9 @@ go/telemetry/
 .viminfo
 .viminfo.tmp
 kitty/*.bak
+# Dadbod UI stores personal database URLs here when XDG_DATA_HOME points into
+# this checkout. The normal location is outside the repository.
+**/db_ui/connections.json
 
 # OS
 .DS_Store
