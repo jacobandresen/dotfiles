@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts/install-pi-config.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts/pi_config.py"
 spec = importlib.util.spec_from_file_location("pi_config", SCRIPT)
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)

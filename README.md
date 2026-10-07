@@ -1,28 +1,27 @@
 # Dotfiles
 
-Turbo Pascal-inspired configs with a modern twist for Neovim, Midnight
-Commander, kitty, zsh and the [pi](https://pi.dev) coding agent with local
-[Ollama](https://ollama.com) models.
+Turbo Pascal-inspired configuration for Neovim, Midnight Commander, kitty,
+zsh, and the [pi](https://pi.dev) coding agent with local [Ollama](https://ollama.com) models.
 
 ## Install
+
+From the repository root, on macOS, Arch, Debian, or Ubuntu:
 
 ```sh
 make install
 ```
 
-The installer detects the host OS and RAM profile, installs dependencies,
-links shared configs, keeps Pi runtime settings local to the host, and applies
-matching Ollama and Docker limits. On macOS,
-Docker Desktop is opt-in:
+This installs dependencies, links configs, selects Ollama and Docker resource
+profiles based on RAM, and keeps pi settings local to the host. On macOS,
+Docker Desktop is optional:
 
 ```sh
 make deps-docker-macos
 ```
 
-`make deps` installs the CLI tools, Oh My Zsh, terminal/editor dependencies,
-and a Nerd Font. Debian and Ubuntu use upstream Neovim binaries when the
-installed version is older than 0.12; no Ubuntu PPA is added on Debian.
-Override the binary release with `NEOVIM_VERSION=<tag>` when needed.
+`make deps` installs tools without linking configs. Debian and Ubuntu use an
+upstream Neovim binary when the installed version is older than 0.12. Set
+`NEOVIM_VERSION=<tag>` to select a specific release.
 
 Check the installed tools without making changes:
 
@@ -30,8 +29,8 @@ Check the installed tools without making changes:
 make doctor
 ```
 
-Requires Git, Neovim 0.12+, and a Nerd Font. Neovim plugins install on first
-launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for Neovim tools.
+The Neovim config needs Neovim 0.12+ and a Nerd Font. Plugins install on first
+launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 
 ## Included
 
@@ -39,23 +38,22 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for Neovim tools.
   and AI integrations. Use `:colorscheme turbopascal` for the blue TP7 palette.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty, GNOME Terminal and zsh** — matching Retrobox terminal colors, a
-  120×40 kitty layout and DOS-style prompt. On Linux, `make install` creates
-  and selects the GNOME Terminal Retrobox profile.
+- **kitty and zsh** — matching Retrobox terminal colors, a 120×40 kitty layout,
+  and a DOS-style prompt.
 - **pi** — configured to use the host's selected Ollama model.
 
 ## Model controls
 
 ```sh
-make ram-profile                  # show the detected profile and model
-make use-model MODEL=<tag>       # switch pi, Neovim and mu
-make use-model                    # restore the host-selected model
-make verify-model                 # build and run a generated C program
-make install-ollama install-docker
+make ram-profile             # show the RAM profile and selected model
+make use-model MODEL=<tag>  # pull and load a model; configure pi to use it
+make use-model               # restore the host-selected model
+make setup-host              # configure pi without pulling a model
+make verify-model            # check that pi writes and runs a C program
 ```
 
-The last command reapplies the host's resource profile after a hardware or
-configuration change.
+Neovim uses the model currently loaded in Ollama. Reapply resource limits after
+a hardware or configuration change with `make install-ollama install-docker`.
 
 ## Shared configuration and host state
 
@@ -63,24 +61,20 @@ Neovim's `nvim/lazy-lock.json` is tracked so new installations use the same
 plugin versions. Update deliberately with `:Lazy update` and commit the
 resulting lockfile changes.
 
-Pi's shared model catalog is `pi/agent/models.json`; it has no host-selected
-`_launch` flag. `make install-pi` seeds host-local `~/.pi/agent/models.json` and
-`settings.json`, and `make setup-host` or `make use-model` updates those local
-files. The host-local catalog caps each model's advertised context to the
-configured Ollama context (8K on Linux, 16K on macOS by default); override this
-with `DOTFILES_OLLAMA_CONTEXT_LENGTH` when using a custom server profile.
-Shared instructions and skills remain linked to this repository.
-`PI_CODING_AGENT_DIR` is supported for a custom configuration directory.
+The shared pi model catalog is `pi/agent/models.json`. `make install-pi` creates
+host-local `~/.pi/agent/models.json` and `settings.json`; `make setup-host` and
+`make use-model` update those files. Shared instructions and skills stay linked
+to this repository. Set `PI_CODING_AGENT_DIR` for another config directory.
+The host-local catalog caps context at 8K on Linux or 16K on macOS by default;
+set `DOTFILES_OLLAMA_CONTEXT_LENGTH` for a custom Ollama context.
 
-Existing `~/.pi -> dotfiles/pi` installations migrate on the next
-`make install-pi` or `make setup-host`: data is copied into a real `~/.pi`
-directory and the old symlink is preserved as `~/.pi.dotfiles-link.bak`
-(with an additional `.bak` suffix if that name already exists). Existing
-sessions, authentication, custom settings, and installed packages are kept.
-The ignored legacy runtime files in the repository are retained as well.
-Preview this migration with `python3 scripts/install-pi-config.py --dry-run`.
+For older `~/.pi -> dotfiles/pi` installations, `make install-pi` or
+`make setup-host` copies runtime data into a real `~/.pi` directory and saves
+the old link as `~/.pi.dotfiles-link.bak` (adding another `.bak` if needed).
+Sessions, authentication, settings, and packages are preserved. Preview with
+`python3 scripts/pi_config.py --dry-run`.
 
-Run migration regression tests with:
+Run installer and migration tests with:
 
 ```sh
 python3 -m unittest discover -s tests -v

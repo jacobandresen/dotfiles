@@ -120,7 +120,7 @@ def configure(agent_dir, model_name, api, context_window=16384):
     print(f"Pi launch model: {model_name} (host-local)")
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agent-dir", type=Path, default=Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")))
     parser.add_argument("--dry-run", action="store_true")
@@ -128,7 +128,7 @@ def main():
     parser.add_argument("--api", default="http://127.0.0.1:11434")
     parser.add_argument("--context-window", type=int, default=None,
                         help="Ollama context limit (defaults to 16K on macOS, 8K on Linux)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         agent_dir = args.agent_dir.expanduser().absolute()
         install(agent_dir, args.dry_run)

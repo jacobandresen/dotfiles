@@ -1,5 +1,5 @@
 {
-  "_comment": "Docker Desktop VM sizing for an 8GB machine. The VM's memory is taken from the host up front, so this is the single most important knob when Ollama also needs RAM: 2GB VM + ~3GB model + ~3.5GB macOS is already the whole box. Merged into Docker Desktop's settings-store.json by scripts/install-docker-macos.sh.",
+  "_comment": "Docker Desktop VM sizing for an 8GB machine. The VM's memory is taken from the host up front, so this is the single most important knob when Ollama also needs RAM: 2GB VM + ~3GB model + ~3.5GB macOS is already the whole box. Merged into Docker Desktop's settings-store.json by scripts/dotfiles.py.",
   "memoryMiB": 2048,
   "swapMiB": 1024,
   "cpus": 4,

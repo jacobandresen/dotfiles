@@ -13,25 +13,44 @@ local function check_logs()
     vim.api.nvim_buf_call(buf, function() vim.cmd("checktime " .. buf) end)
   end
 end
+local function stop_log_timer()
+  if not log_timer then return end
+  log_timer:stop()
+  log_timer:close()
+  log_timer = nil
+end
+local function sync_log_timer()
+  if next(visible_logs()) then
+    if not log_timer then
+      log_timer = vim.uv.new_timer()
+      log_timer:start(2000, 2000, vim.schedule_wrap(check_logs))
+    end
+  elseif log_timer then
+    stop_log_timer()
+  end
+end
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   pattern = { "*.log", "*.jsonl" },
   callback = function(args)
     vim.b[args.buf].log_refresh = true
     vim.bo[args.buf].autoread = true
-    if not log_timer then
-      log_timer = vim.uv.new_timer()
-      log_timer:start(2000, 2000, vim.schedule_wrap(check_logs))
-    end
+    sync_log_timer()
   end,
 })
 vim.api.nvim_create_autocmd({ "BufWinEnter", "FocusGained" }, {
-  callback = function() vim.schedule(check_logs) end,
+  callback = function()
+    vim.schedule(function()
+      sync_log_timer()
+      check_logs()
+    end)
+  end,
+})
+vim.api.nvim_create_autocmd({ "BufWinLeave", "WinClosed", "BufDelete" }, {
+  callback = function() vim.schedule(sync_log_timer) end,
 })
 vim.api.nvim_create_autocmd("VimLeavePre", {
   once = true,
-  callback = function()
-    if log_timer then log_timer:stop(); log_timer:close() end
-  end,
+  callback = stop_log_timer,
 })
 
 -- <leader>cF next to LazyVim's <leader>ca (code action), only where LSP

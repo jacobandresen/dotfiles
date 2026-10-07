@@ -236,7 +236,7 @@ function M.load(kinds, cb)
           if res.stdout ~= M.raw[kind] then
             M.raw[kind] = res.stdout
             parse[kind](res.stdout)
-            build_projects()
+            if kind == "ps" then build_projects() end
             updated = true
           end
         elseif not failed[kind] then

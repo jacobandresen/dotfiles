@@ -1,10 +1,17 @@
-.PHONY: install install-nvim install-zsh install-mc install-kitty install-gnome-terminal install-pi install-ollama use-model install-docker install-fonts setup-host ram-profile verify-model deps deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common doctor
+.PHONY: install deps doctor ram-profile setup-host use-model verify-model
+.PHONY: install-nvim install-zsh install-mc install-kitty install-pi install-ollama install-docker install-fonts
+.PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
 
 OS := $(shell uname -s)
-
-install: deps install-nvim install-zsh install-mc install-kitty install-gnome-terminal install-ollama install-docker install-pi
-
+PYTHON ?= python3
+CLI := $(PYTHON) "$(CURDIR)/scripts/dotfiles.py"
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
+
+install: deps
+	@$(MAKE) install-nvim install-zsh install-mc install-kitty
+	@$(MAKE) install-ollama
+	@$(MAKE) install-docker
+	@$(MAKE) install-pi
 
 deps:
 ifeq ($(OS),Darwin)
@@ -18,67 +25,48 @@ else ifneq ($(wildcard /etc/debian_version),)
 else
 	$(error Unsupported OS: $(OS))
 endif
-	$(MAKE) install-fonts
+	@$(MAKE) install-fonts
 
 deps-macos:
 	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
 	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
 	brew install --cask ollama kitty font-terminess-ttf-nerd-font
-	$(MAKE) deps-common
-	@echo "Docker Desktop is not installed by default (it reserves a multi-GB VM"
-	@echo "up front, which hurts on a small machine). Run 'make deps-docker-macos'"
-	@echo "if you want it — 'make install-docker' then sizes it for this host."
+	@$(MAKE) deps-common
+	@echo "Docker Desktop is optional: make deps-docker-macos"
 
-# Opt-in: Docker Desktop is deliberately kept out of 'make deps' on macOS.
 deps-docker-macos:
 	@if [ -d /Applications/Docker.app ]; then \
 		echo "  ✓ Docker Desktop already installed"; \
 	else \
 		brew install --cask docker; \
 	fi
-	$(MAKE) install-docker
+	@$(MAKE) install-docker
 
 deps-common:
-	@bash ./scripts/install-cli-tools.sh
+	@$(CLI) install-cli-tools
 
 deps-arch:
 	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker docker docker-compose
-	$(MAKE) deps-common
+	@$(MAKE) deps-common
 
-# Upstream binaries avoid mixing Ubuntu repositories into Debian and verify
-# the minimum version required by this configuration before activation.
 deps-ubuntu deps-debian:
 	sudo apt-get update
 	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io
-	@bash ./scripts/install-neovim.sh
+	@$(CLI) install-neovim
 	@$(MAKE) --no-print-directory deps-compose
-	$(MAKE) deps-common
+	@$(MAKE) deps-common
 
-# the docker compose plugin (the nvim Docker explorer's up/down), per user
-# in ~/.docker/cli-plugins so it needs no sudo and works with any docker
 deps-compose:
-	@if docker compose version >/dev/null 2>&1; then \
-		echo "  ✓ docker compose already installed"; \
-	else \
-		echo "Installing the docker compose plugin..."; \
-		mkdir -p $(HOME)/.docker/cli-plugins; \
-		curl -fsSL -o $(HOME)/.docker/cli-plugins/docker-compose \
-			https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$$(uname -m); \
-		chmod +x $(HOME)/.docker/cli-plugins/docker-compose; \
-		docker compose version; \
-	fi
+	@$(CLI) install-compose
 
 install-nvim:
-	@echo "Installing nvim config..."
-	@./scripts/install-link.sh --skip "$(CURDIR)/nvim" "$(HOME)/.config/nvim"
+	@$(CLI) install-link skip "$(CURDIR)/nvim" "$(HOME)/.config/nvim"
 
 install-zsh:
-	@echo "Installing zsh config..."
-	@./scripts/install-link.sh --backup "$(CURDIR)/.zshrc" "$(HOME)/.zshrc"
+	@$(CLI) install-link backup "$(CURDIR)/.zshrc" "$(HOME)/.zshrc"
 
 install-mc:
-	@echo "Installing Midnight Commander config..."
-	@./scripts/install-link.sh --backup "$(CURDIR)/mc/ini" "$(HOME)/.config/mc/ini"
+	@$(CLI) install-link backup "$(CURDIR)/mc/ini" "$(HOME)/.config/mc/ini"
 	@mkdir -p $(HOME)/.local/share/mc/skins
 	@for skin in retrobox turbopascal; do \
 		ln -sfn $(CURDIR)/mc/skins/$$skin.ini $(HOME)/.local/share/mc/skins/$$skin.ini; \
@@ -86,128 +74,32 @@ install-mc:
 	done
 
 install-kitty:
-	@echo "Installing kitty config..."
-	@./scripts/install-link.sh --backup "$(CURDIR)/kitty" "$(HOME)/.config/kitty"
-
-install-gnome-terminal:
-	@if [ "$(OS)" = Linux ]; then \
-		./scripts/install-gnome-terminal.sh; \
-	else \
-		echo "  ⏭ skipping GNOME Terminal profile (unsupported OS: $(OS))"; \
-	fi
+	@$(CLI) install-link backup "$(CURDIR)/kitty" "$(HOME)/.config/kitty"
 
 install-pi:
-	@echo "Installing host-local pi config..."
-	@python3 ./scripts/install-pi-config.py
-	@$(CURDIR)/scripts/use-model.sh --skip-if-unavailable
+	@$(PYTHON) ./scripts/pi_config.py
+	@$(CLI) use-model --skip-if-unavailable
 
 install-ollama:
-ifeq ($(OS),Darwin)
-	@echo "Applying Ollama env profile (launchd)..."
-	@./scripts/install-ollama-macos.sh
-else ifeq ($(OS),Linux)
-	@echo "Installing Ollama systemd overrides..."
-	@set -e; \
-	profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
-	echo "  → detected RAM profile: $$profile"; \
-	sudo mkdir -p /etc/systemd/system/ollama.service.d; \
-	sudo cp $(CURDIR)/ollama/ollama.service.d/override-$$profile.conf /etc/systemd/system/ollama.service.d/override.conf; \
-	sed -e "s|__USER__|$$(id -un)|" -e "s|__REPO_DIR__|$(CURDIR)|" \
-		$(CURDIR)/ollama/ollama-warm-model.service | sudo tee /etc/systemd/system/ollama-warm-model.service >/dev/null; \
-	sudo systemctl daemon-reload; \
-	sudo systemctl restart ollama; \
-	echo "  ✓ /etc/systemd/system/ollama.service.d/override.conf installed ($$profile profile) and ollama restarted"; \
-	echo "  ✓ ollama-warm-model.service installed - loads $$($(CURDIR)/scripts/select-coding-model.sh) whenever ollama (re)starts"
-else
-	@echo "  ⚠ skipping Ollama tuning (unsupported OS: $(OS))"
-endif
+	@$(CLI) install-ollama
 
-# Point pi, nvim's CodeCompanion adapter and the mu agent at one model — all
-# three resolve "whichever model Ollama currently has loaded", so this loads
-# it and re-runs setup-host.sh. 'use-model' takes MODEL=<tag>; bare
-# 'use-model' falls back to this host's selection.
 use-model:
-	@./scripts/use-model.sh $(MODEL)
+	@$(CLI) use-model $(MODEL)
 
 install-docker:
-ifeq ($(OS),Darwin)
-	@echo "Applying Docker Desktop resource profile..."
-	@./scripts/install-docker-macos.sh
-else ifeq ($(OS),Linux)
-	@echo "Installing Docker systemd overrides..."
-	@if ! command -v docker >/dev/null 2>&1 && ! systemctl list-unit-files docker.service >/dev/null 2>&1; then \
-		echo "  ⚠ Docker not found — skipping (install it first)"; \
-	else \
-		profile=$$($(CURDIR)/scripts/detect-ram-profile.sh); \
-		echo "  → detected RAM profile: $$profile"; \
-		sudo mkdir -p /etc/systemd/system/docker.service.d; \
-		sudo cp $(CURDIR)/docker/docker.service.d/override-$$profile.conf /etc/systemd/system/docker.service.d/override.conf; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl restart docker; \
-		echo "  ✓ /etc/systemd/system/docker.service.d/override.conf installed ($$profile profile) and docker restarted"; \
-	fi
-else
-	@echo "  ⚠ skipping Docker tuning (unsupported OS: $(OS))"
-endif
-
-FONT_DIR := $(HOME)/.local/share/fonts
-HACK_NERD_URL := https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz
+	@$(CLI) install-docker
 
 install-fonts:
-	@echo "Installing Hack Nerd Font..."
-ifeq ($(OS),Darwin)
-	@if fc-list 2>/dev/null | grep -qi "Hack Nerd Font"; then \
-		echo "  ✓ Hack Nerd Font already installed"; \
-	else \
-		brew install --cask font-hack-nerd-font; \
-	fi
-else
-	@if fc-list | grep -qi "Hack Nerd Font"; then \
-		echo "  ✓ Hack Nerd Font already installed"; \
-	else \
-		tmp=$$(mktemp -d) && \
-		echo "  ↓ downloading Hack.tar.xz..." && \
-		curl -fsSL "$(HACK_NERD_URL)" -o "$$tmp/Hack.tar.xz" && \
-		mkdir -p "$(FONT_DIR)/HackNerdFont" && \
-		tar -xJf "$$tmp/Hack.tar.xz" -C "$(FONT_DIR)/HackNerdFont" && \
-		rm -rf "$$tmp" && \
-		fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 && \
-		echo "  ✓ Hack Nerd Font -> $(FONT_DIR)/HackNerdFont"; \
-	fi
-endif
+	@$(CLI) install-fonts
 
-# Point pi agent at whatever model Ollama currently has loaded on this
-# machine, host-managed so the committed, cross-machine dotfiles stay
-# untouched. Re-run after switching models or a hardware change. (mu tunes
-# itself — see `make setup-host` in the mu repo.)
 setup-host:
-	@./scripts/setup-host.sh
+	@$(CLI) setup-host
 
-# Ask pi for a hello world in C using this host's selected model, then
-# compile and run what it wrote. The only check that catches a model which
-# calls the tools and still produces code that does not build — see the
-# header of scripts/verify-agent-model.sh.
 verify-model:
-	@./scripts/verify-agent-model.sh
+	@$(CLI) verify-model
 
-# Print what this host's RAM detects as, and what that selects. Handy when a
-# profile-driven target does something unexpected.
 ram-profile:
-	@profile=$$(./scripts/detect-ram-profile.sh); \
-	echo "RAM profile:   $$profile"; \
-	echo "Coding model:  $$(./scripts/select-coding-model.sh)"; \
-	if [ "$(OS)" = "Darwin" ]; then \
-		echo "Ollama config: ollama/launchd/$$profile.env"; \
-		echo "Docker config: docker/desktop/$$profile.json"; \
-	else \
-		echo "Ollama config: ollama/ollama.service.d/override-$$profile.conf"; \
-		echo "Docker config: docker/docker.service.d/override-$$profile.conf"; \
-	fi
+	@$(CLI) show-profile
 
-# Read-only checks; Docker is optional on macOS.
 doctor:
-	@python3 ./scripts/doctor.py
-
-.PHONY: install-codex-mu
-install-codex-mu:
-	@python3 ./scripts/install-codex-mu.py --consolidate-rules
+	@$(CLI) doctor

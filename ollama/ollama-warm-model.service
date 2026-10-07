@@ -9,7 +9,7 @@ PartOf=ollama.service
 [Service]
 Type=oneshot
 User=__USER__
-# use-model.sh pulls the model if missing and loads it - a first pull needs
+# dotfiles.py use-model pulls the model if missing and loads it - a first pull needs
 # more than systemd's default 90s start timeout.
 TimeoutStartSec=1800
-ExecStart=__REPO_DIR__/scripts/use-model.sh
+ExecStart=/usr/bin/env python3 __REPO_DIR__/scripts/dotfiles.py use-model
