@@ -2,11 +2,9 @@
 """Load and update pinned dependency hashes."""
 
 import json
-import os
 from pathlib import Path
 import platform
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -82,8 +80,6 @@ def validate(text, hashes):
     missing = [key for key in keys if not re.search(rf"^{key}\s*=", text, re.MULTILINE)]
     if missing:
         raise RuntimeError(f"updated file is missing install constants: {' '.join(missing)}")
-    if re.search(r"^OLLAMA_VERSIONOLLAMA_VERSION\s*=", text, re.MULTILINE):
-        raise RuntimeError("updated file contains a duplicated OLLAMA_VERSION marker")
     required = ("neovim", "pi", "ollama", "lazydocker", "compose", "font", "homebrew")
     if any(key not in hashes for key in required):
         raise RuntimeError("dependency hash file is missing required entries")
@@ -93,25 +89,6 @@ def validate(text, hashes):
            if not isinstance(digest, dict)):
         raise RuntimeError("dependency hash file contains an invalid SHA-256 digest")
 
-
-def summary(report):
-    if not shutil.which("ollama"):
-        log("Ollama not installed; skipping summary")
-        return
-    log("asking Ollama for a summary")
-    command = [
-        "ollama", "run", os.environ.get("OLLAMA_MODEL", "qwen3:4b"),
-        "Summarize these verified dependency updates in one concise sentence. "
-        "Do not alter values:\n" + "\n".join(report),
-    ]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
-        if result.returncode == 0:
-            print(result.stdout.strip())
-        else:
-            print("Ollama summary skipped or timed out.")
-    except subprocess.TimeoutExpired:
-        print("Ollama summary skipped or timed out.")
 
 
 def main():
