@@ -93,6 +93,14 @@ class PiConfigTests(unittest.TestCase):
         self.assertEqual(provider["baseUrl"], "http://custom-host:11434/v1")
         self.assertEqual(sum(bool(m.get("_launch")) for m in provider["models"]), 1)
 
+    def test_existing_web_search_package_is_pinned(self):
+        self.agent.mkdir(parents=True)
+        (self.agent / "settings.json").write_text(json.dumps({"theme": "custom", "packages": ["npm:@ollama/pi-web-search", "npm:other@1.0.0"]}))
+        config.install(self.agent)
+        settings = json.loads((self.agent / "settings.json").read_text())
+        self.assertEqual(settings["theme"], "custom")
+        self.assertEqual(settings["packages"], ["npm:@ollama/pi-web-search@0.0.5", "npm:other@1.0.0"])
+
 
 if __name__ == "__main__":
     unittest.main()

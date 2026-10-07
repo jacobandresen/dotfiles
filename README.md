@@ -19,9 +19,8 @@ Docker Desktop is optional:
 make deps-docker-macos
 ```
 
-`make deps` installs tools without linking configs. Debian and Ubuntu use an
-upstream Neovim binary when the installed version is older than 0.12. Set
-`NEOVIM_VERSION=<tag>` to select a specific release.
+`make deps` installs tools without linking configs. Debian and Ubuntu use a
+SHA-256 verified Neovim release when the installed version is older than 0.12.
 
 Check the installed tools without making changes:
 

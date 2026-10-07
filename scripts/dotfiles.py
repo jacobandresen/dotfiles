@@ -4,6 +4,7 @@
 import argparse
 from contextlib import closing
 import getpass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,10 +24,68 @@ from host_tools import HOME, ROOT, api_json, api_ready, coding_model, has_model,
 
 DOCKER_APP = Path("/Applications/Docker.app")
 OLLAMA_APP = Path("/Applications/Ollama.app")
+NEOVIM_VERSION = "v0.12.1"
+NEOVIM_SHA256 = {"x86_64": "ab757a1fd9ad307d53d2df4045698906a7ca3993d92260dd8fe49108712d57d0",
+                 "arm64": "a3f8aa5590fd2ac930bcc5c9070b9ac1ec33461d262b6428874c5fc640f3f13c"}
+PI_VERSION = "1.0.4"
+PI_SHA256 = {"Linux": {"x86_64": "284c45dd28cf975a13cff6af34741dd0a0cdca6634e8bdfc0083ae7d452e86d6",
+                       "arm64": "6a6bc66a6ac2750bd7ccd7f2109090463f564d447feefb10a5965f6b6aed2211"},
+             "Darwin": {"x86_64": "665022918678542dd7c87fe7b0da70d2a3dcd926bc6ff4cc712308f2ca313358",
+                        "arm64": "717dcd38a03849e919f9dec9daa96f5ca102e15ea33d804e5db57b1d47e513bc"}}
+OLLAMA_VERSION = "v0.34.0"
+OLLAMA_SHA256 = {"x86_64": "cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804",
+                 "arm64": "6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e"}
+LAZYDOCKER_VERSION = "0.24.4"
+LAZYDOCKER_SHA256 = {"x86_64": "c47e6f4b61debde5422183c7eb446a704a92c58b4c35bbd128c722d8bf269a86",
+                     "arm64": "0fcf85b736895f46daa38eec5871ef1ca3d1e38b20201b2811b26258faccf1c7"}
+COMPOSE_VERSION = "v5.6.0"
+COMPOSE_SHA256 = {"x86_64": "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a",
+                  "aarch64": "733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"}
+FONT_VERSION = "v3.5.1"
+FONT_SHA256 = "cdd389472e10e2261520140ff1b382b4f8a226af5fd0b2735b975d31151d9c3c"
+BREW_COMMIT = "35da6871c4be7d7fdab2fd505fb7fa667926a2a5"
+BREW_SHA256 = "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148"
+ZSH_COMMIT = "60c9a7a839b790cd905d0fd4419435124fd1bdc0"
 
 
 def fail(message):
     raise RuntimeError(message)
+
+
+def download_verified(url, path, sha256):
+    try:
+        urllib.request.urlretrieve(url, path)
+    except OSError as exc:
+        fail(f"Download failed: {exc}")
+    with path.open("rb") as stream:
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != sha256:
+        path.unlink()
+        fail(f"SHA-256 mismatch for {url}")
+
+
+def release_asset(repo, version, filename, path, sha256):
+    download_verified(f"https://github.com/{repo}/releases/download/{version}/{filename}", path, sha256)
+
+
+def architecture(mapping):
+    arch = "arm64" if platform.machine() in ("aarch64", "arm64") else platform.machine()
+    if arch not in mapping:
+        fail(f"Unsupported architecture: {platform.machine()}")
+    return arch
+
+
+def extract_verified_tar(archive, destination):
+    with tarfile.open(archive) as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(destination, filter="data")
+        else:
+            for member in tar.getmembers():
+                if member.name.startswith("/") or ".." in Path(member.name).parts or member.issym() or member.islnk():
+                    fail(f"Unsafe archive member: {member.name}")
+            tar.extractall(destination)
 
 
 def link(args):
@@ -63,29 +122,15 @@ def install_neovim(_):
     if current and compatible_nvim(current):
         print("Neovim >= 0.12 is already installed")
         return
-    arch = {"x86_64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
-    if not arch:
-        fail(f"Unsupported Neovim binary architecture: {platform.machine()}")
-    version = os.environ.get("NEOVIM_VERSION", "stable")
+    arch = architecture(NEOVIM_SHA256)
     archive = f"nvim-linux-{arch}"
-    url = f"https://github.com/neovim/neovim/releases/download/{version}/{archive}.tar.gz"
     with tempfile.TemporaryDirectory() as work:
         tar_path = Path(work) / "nvim.tar.gz"
-        try:
-            urllib.request.urlretrieve(url, tar_path)
-        except OSError as exc:
-            fail(f"Neovim download failed: {exc}")
-        with tarfile.open(tar_path) as tar:
-            if hasattr(tarfile, "data_filter"):
-                tar.extractall(work, filter="data")
-            else:
-                for member in tar.getmembers():
-                    if member.name.startswith("/") or ".." in Path(member.name).parts or member.issym() or member.islnk():
-                        fail(f"Unsafe archive member: {member.name}")
-                tar.extractall(work)
+        release_asset("neovim/neovim", NEOVIM_VERSION, archive + ".tar.gz", tar_path, NEOVIM_SHA256[arch])
+        extract_verified_tar(tar_path, work)
         binary = Path(work) / archive / "bin/nvim"
         if not compatible_nvim(str(binary)):
-            fail("This release is older than 0.12; set NEOVIM_VERSION to a compatible release tag")
+            fail("Pinned Neovim release is older than 0.12")
         first = run(str(binary), "--version", capture_output=True, text=True).stdout.splitlines()[0]
         destination = HOME / ".local/share/neovim" / (first.replace(" ", "_").replace("/", "_") + f"-{arch}")
         target = HOME / ".local/bin/nvim"
@@ -202,34 +247,100 @@ def ollama_macos(_):
         print("  Ollama.app not installed — env applied for CLI 'ollama serve' only")
 
 
+def install_homebrew(_):
+    if shutil.which("brew"):
+        return
+    with tempfile.TemporaryDirectory() as work:
+        script = Path(work) / "install.sh"
+        download_verified(f"https://raw.githubusercontent.com/Homebrew/install/{BREW_COMMIT}/install.sh", script, BREW_SHA256)
+        run("/bin/bash", str(script))
+
+
+def install_pi_binary():
+    system = platform.system()
+    if system not in PI_SHA256:
+        fail(f"Unsupported Pi platform: {system}")
+    arch = architecture(PI_SHA256[system])
+    filename = f"pi-{'linux' if system == 'Linux' else 'darwin'}-{'x64' if arch == 'x86_64' else 'arm64'}.tar.gz"
+    destination = HOME / ".local/share/pi" / PI_VERSION
+    target = HOME / ".local/bin/pi"
+    with tempfile.TemporaryDirectory() as work:
+        archive = Path(work) / filename
+        release_asset("earendil-works/pi", f"v{PI_VERSION}", filename, archive, PI_SHA256[system][arch])
+        extract_verified_tar(archive, work)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists():
+            shutil.move(str(Path(work) / "pi"), destination)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and not target.is_symlink():
+        fail(f"Refusing to overwrite {target}")
+    target.unlink(missing_ok=True)
+    target.symlink_to(destination / "pi")
+    run(str(target), "--version")
+
+
+def install_ollama_binary():
+    arch = architecture(OLLAMA_SHA256)
+    name = f"ollama-linux-{'amd64' if arch == 'x86_64' else 'arm64'}.tar.zst"
+    with tempfile.TemporaryDirectory() as work:
+        archive = Path(work) / name
+        release_asset("ollama/ollama", OLLAMA_VERSION, name, archive, OLLAMA_SHA256[arch])
+        run("sudo", "tar", "--zstd", "-xf", str(archive), "-C", "/usr/local")
+    if run("id", "ollama", check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        run("sudo", "useradd", "--system", "--user-group", "--create-home", "--home-dir", "/usr/share/ollama", "--shell", "/usr/sbin/nologin", "ollama")
+    for group in ("render", "video"):
+        if run("getent", "group", group, check=False, stdout=subprocess.DEVNULL).returncode == 0:
+            run("sudo", "usermod", "-aG", group, "ollama")
+    service = "[Unit]\nDescription=Ollama Service\nAfter=network-online.target\n\n[Service]\nExecStart=/usr/local/bin/ollama serve\nUser=ollama\nGroup=ollama\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target\n"
+    run("sudo", "tee", "/etc/systemd/system/ollama.service", input=service.encode(), stdout=subprocess.DEVNULL)
+    run("sudo", "systemctl", "daemon-reload")
+    run("sudo", "systemctl", "enable", "--now", "ollama")
+
+
+def install_lazydocker_binary():
+    arch = architecture(LAZYDOCKER_SHA256)
+    name = f"lazydocker_{LAZYDOCKER_VERSION}_Linux_{arch}.tar.gz"
+    target = HOME / ".local/bin/lazydocker"
+    with tempfile.TemporaryDirectory() as work:
+        archive = Path(work) / name
+        release_asset("jesseduffield/lazydocker", f"v{LAZYDOCKER_VERSION}", name, archive, LAZYDOCKER_SHA256[arch])
+        with tarfile.open(archive) as tar:
+            binary = tar.extractfile("lazydocker")
+            if binary is None:
+                fail("Lazydocker archive has no binary")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as output:
+                staged = Path(output.name)
+                shutil.copyfileobj(binary, output)
+            try:
+                staged.chmod(0o755)
+                staged.replace(target)
+            finally:
+                staged.unlink(missing_ok=True)
+
+
 def cli_tools(_):
     zsh = Path(os.environ.get("ZSH", HOME / ".oh-my-zsh"))
     if not (zsh / "oh-my-zsh.sh").is_file():
-        run("git", "clone", "--depth=1", "https://github.com/ohmyzsh/ohmyzsh.git", str(zsh))
+        zsh.parent.mkdir(parents=True, exist_ok=True)
+        run("git", "clone", "--no-checkout", "https://github.com/ohmyzsh/ohmyzsh.git", str(zsh))
+        run("git", "-C", str(zsh), "checkout", "--detach", ZSH_COMMIT)
     if not shutil.which("fd") and shutil.which("fdfind"):
         target = HOME / ".local/bin/fd"
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists() and not target.is_symlink():
             target.symlink_to(shutil.which("fdfind"))
-    with tempfile.TemporaryDirectory() as work:
-        def installer(command, url, name):
-            path = Path(work) / name
-            urllib.request.urlretrieve(url, path)
-            run(command, str(path))
-        if not shutil.which("pi"):
-            npm = HOME / ".npm"
-            if npm.exists() and any(path.stat().st_uid != os.getuid() for path in npm.rglob("*")):
-                fail("~/.npm has files owned by another user; fix their ownership before installing Pi")
-            installer("bash", "https://pi.dev/install.sh", "pi.sh")
-        if not shutil.which("ollama"):
-            if platform.system() == "Darwin":
-                fail("Install Ollama with: brew install --cask ollama")
-            installer("sh", "https://ollama.com/install.sh", "ollama.sh")
-        if not shutil.which("lazydocker"):
-            if platform.system() == "Darwin":
-                run("brew", "install", "lazydocker")
-            else:
-                installer("bash", "https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh", "lazydocker.sh")
+    if not shutil.which("pi"):
+        install_pi_binary()
+    if not shutil.which("ollama"):
+        if platform.system() == "Darwin":
+            fail("Install Ollama with: brew install --cask ollama")
+        install_ollama_binary()
+    if not shutil.which("lazydocker"):
+        if platform.system() == "Darwin":
+            run("brew", "install", "lazydocker")
+        else:
+            install_lazydocker_binary()
 
 
 def install_compose(_):
@@ -238,11 +349,11 @@ def install_compose(_):
         return
     target = HOME / ".docker/cli-plugins/docker-compose"
     target.parent.mkdir(parents=True, exist_ok=True)
-    url = f"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{platform.machine()}"
+    arch = architecture(COMPOSE_SHA256)
     with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as handle:
         temporary = Path(handle.name)
     try:
-        urllib.request.urlretrieve(url, temporary)
+        release_asset("docker/compose", COMPOSE_VERSION, f"docker-compose-linux-{arch}", temporary, COMPOSE_SHA256[arch])
         temporary.chmod(0o755)
         temporary.replace(target)
     finally:
@@ -260,7 +371,7 @@ def install_fonts(_):
     destination = HOME / ".local/share/fonts/HackNerdFont"
     with tempfile.TemporaryDirectory() as work:
         archive = Path(work) / "Hack.tar.xz"
-        urllib.request.urlretrieve("https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.tar.xz", archive)
+        release_asset("ryanoasis/nerd-fonts", FONT_VERSION, "Hack.tar.xz", archive, FONT_SHA256)
         destination.mkdir(parents=True, exist_ok=True)
         run("tar", "-xJf", str(archive), "-C", str(destination))
     run("fc-cache", "-f", str(destination.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -479,7 +590,7 @@ def verify_model(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, func in (("install-neovim", install_neovim), ("install-cli-tools", cli_tools),
+    for name, func in (("install-homebrew", install_homebrew), ("install-neovim", install_neovim), ("install-cli-tools", cli_tools),
                        ("install-compose", install_compose),
                        ("install-fonts", install_fonts), ("install-ollama", install_ollama),
                        ("install-docker", install_docker), ("show-profile", show_profile),

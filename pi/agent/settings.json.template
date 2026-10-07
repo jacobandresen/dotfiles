@@ -14,7 +14,7 @@
   "enableSkillCommands": true,
   "httpIdleTimeoutMs": 0,
   "packages": [
-    "npm:@ollama/pi-web-search"
+    "npm:@ollama/pi-web-search@0.0.5"
   ],
   "quietStartup": true,
   "retry": {

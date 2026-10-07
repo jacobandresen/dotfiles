@@ -65,6 +65,15 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "download failed"):
                 dotfiles.install_neovim(None)
 
+    def test_bad_download_is_removed_before_installation(self):
+        path = self.root / "asset"
+        def download(_url, target):
+            target.write_bytes(b"wrong")
+        with patch.object(dotfiles.urllib.request, "urlretrieve", side_effect=download):
+            with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+                dotfiles.download_verified("https://example.test/asset", path, "0" * 64)
+        self.assertFalse(path.exists())
+
     def test_matching_docker_desktop_profile_does_not_stop_app(self):
         home = self.root / "home"
         settings = home / "Library/Group Containers/group.com.docker/settings-store.json"

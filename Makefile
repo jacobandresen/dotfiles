@@ -28,7 +28,7 @@ endif
 	@$(MAKE) install-fonts
 
 deps-macos:
-	@command -v brew >/dev/null 2>&1 || { echo "Installing Homebrew..."; /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; }
+	@$(CLI) install-homebrew
 	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
 	brew install --cask ollama kitty font-terminess-ttf-nerd-font
 	@$(MAKE) deps-common
@@ -46,12 +46,12 @@ deps-common:
 	@$(CLI) install-cli-tools
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker docker docker-compose
+	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker docker docker-compose zstd
 	@$(MAKE) deps-common
 
 deps-ubuntu deps-debian:
 	sudo apt-get update
-	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io
+	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io zstd
 	@$(CLI) install-neovim
 	@$(MAKE) --no-print-directory deps-compose
 	@$(MAKE) deps-common
