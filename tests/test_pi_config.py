@@ -70,6 +70,22 @@ class PiConfigTests(unittest.TestCase):
         self.assertEqual(json.loads((shared / "models.json").read_text()), self.catalog)
         self.assertTrue((self.agent / "AGENTS.md").is_symlink())
 
+    def test_nested_legacy_link_migration_detaches_agent(self):
+        shared = self.repo / "pi/agent"
+        (shared / "sessions").mkdir()
+        (shared / "sessions/history.jsonl").write_text("history")
+        (shared / "auth.json").write_text('{"test":"private"}')
+        (self.home / ".pi").mkdir()
+        self.agent.symlink_to(shared)
+
+        config.install(self.agent)
+
+        self.assertFalse(self.agent.is_symlink())
+        self.assertEqual((self.agent / "sessions/history.jsonl").read_text(), "history")
+        self.assertEqual((self.agent / "auth.json").read_text(), '{"test":"private"}')
+        self.assertTrue((self.agent / "AGENTS.md").is_symlink())
+        self.assertTrue((self.agent / "skills").is_symlink())
+
     def test_dry_run_does_not_create_config_or_migrate(self):
         config.install(self.agent, dry_run=True)
         self.assertFalse((self.home / ".pi").exists())

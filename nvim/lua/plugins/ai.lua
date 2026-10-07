@@ -5,6 +5,8 @@ local ollama = require("util.ollama")
 local ollama_model = ollama.current_model
 local tuning = require("util.ollama_tuning").current()
 local copilot_configured = require("util.copilot").is_configured()
+local copilot_model = "gpt-5.6-luna"
+local copilot_reasoning_effort = "low"
 
 local codecompanion_keys = {
   { "<leader>cw", function() require("util.ai_wand").fix() end, desc = "Magic wand: fix diagnostic" },
@@ -95,7 +97,14 @@ return {
           })
         end,
       }
-      http_adapters.copilot = copilot_configured and "copilot" or false
+      http_adapters.copilot = copilot_configured and function()
+        return require("codecompanion.adapters").extend("copilot", {
+          schema = {
+            model = { default = copilot_model },
+            reasoning_effort = { default = copilot_reasoning_effort },
+          },
+        })
+      end or false
       http_adapters.opts = { hidden = { copilot = not copilot_configured } }
 
       local prompt_library = {}
@@ -161,7 +170,7 @@ return {
         interactions = {
           background = { adapter = copilot_configured and "copilot" or "ollama" },
           chat = {
-            adapter = "ollama",
+            adapter = copilot_configured and "copilot" or "ollama",
             -- narrower, sidebar-like panel, closer to VS Code's Copilot Chat
             window = { width = 0.35 },
             show_context = true,

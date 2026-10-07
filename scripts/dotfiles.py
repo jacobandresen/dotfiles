@@ -20,31 +20,25 @@ import time
 import urllib.request
 
 import pi_config
+import hashes
 from host_tools import HOME, ROOT, api_json, api_ready, coding_model, has_model, ollama_api, ram_profile, run
 
 DOCKER_APP = Path("/Applications/Docker.app")
 OLLAMA_APP = Path("/Applications/Ollama.app")
 NEOVIM_VERSION = "v0.12.1"
-NEOVIM_SHA256 = {"x86_64": "ab757a1fd9ad307d53d2df4045698906a7ca3993d92260dd8fe49108712d57d0",
-                 "arm64": "a3f8aa5590fd2ac930bcc5c9070b9ac1ec33461d262b6428874c5fc640f3f13c"}
+NEOVIM_SHA256 = hashes.DEPENDENCY_HASHES["neovim"]
 PI_VERSION = "1.0.4"
-PI_SHA256 = {"Linux": {"x86_64": "284c45dd28cf975a13cff6af34741dd0a0cdca6634e8bdfc0083ae7d452e86d6",
-                       "arm64": "6a6bc66a6ac2750bd7ccd7f2109090463f564d447feefb10a5965f6b6aed2211"},
-             "Darwin": {"x86_64": "665022918678542dd7c87fe7b0da70d2a3dcd926bc6ff4cc712308f2ca313358",
-                        "arm64": "717dcd38a03849e919f9dec9daa96f5ca102e15ea33d804e5db57b1d47e513bc"}}
-OLLAMA_VERSION = "v0.34.0"
-OLLAMA_SHA256 = {"x86_64": "cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804",
-                 "arm64": "6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e"}
+PI_SHA256 = hashes.DEPENDENCY_HASHES["pi"]
+OLLAMA_VERSION = "v0.40.0"
+OLLAMA_SHA256 = hashes.DEPENDENCY_HASHES["ollama"]
 LAZYDOCKER_VERSION = "0.24.4"
-LAZYDOCKER_SHA256 = {"x86_64": "c47e6f4b61debde5422183c7eb446a704a92c58b4c35bbd128c722d8bf269a86",
-                     "arm64": "0fcf85b736895f46daa38eec5871ef1ca3d1e38b20201b2811b26258faccf1c7"}
+LAZYDOCKER_SHA256 = hashes.DEPENDENCY_HASHES["lazydocker"]
 COMPOSE_VERSION = "v5.6.0"
-COMPOSE_SHA256 = {"x86_64": "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a",
-                  "aarch64": "733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"}
+COMPOSE_SHA256 = hashes.DEPENDENCY_HASHES["compose"]
 FONT_VERSION = "v3.5.1"
-FONT_SHA256 = "cdd389472e10e2261520140ff1b382b4f8a226af5fd0b2735b975d31151d9c3c"
+FONT_SHA256 = hashes.DEPENDENCY_HASHES["font"]
 BREW_COMMIT = "35da6871c4be7d7fdab2fd505fb7fa667926a2a5"
-BREW_SHA256 = "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148"
+BREW_SHA256 = hashes.DEPENDENCY_HASHES["homebrew"]
 ZSH_COMMIT = "60c9a7a839b790cd905d0fd4419435124fd1bdc0"
 
 

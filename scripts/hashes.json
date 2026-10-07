@@ -1,0 +1,30 @@
+{
+  "neovim": {
+    "x86_64": "ab757a1fd9ad307d53d2df4045698906a7ca3993d92260dd8fe49108712d57d0",
+    "arm64": "a3f8aa5590fd2ac930bcc5c9070b9ac1ec33461d262b6428874c5fc640f3f13c"
+  },
+  "pi": {
+    "Linux": {
+      "x86_64": "284c45dd28cf975a13cff6af34741dd0a0cdca6634e8bdfc0083ae7d452e86d6",
+      "arm64": "6a6bc66a6ac2750bd7ccd7f2109090463f564d447feefb10a5965f6b6aed2211"
+    },
+    "Darwin": {
+      "x86_64": "665022918678542dd7c87fe7b0da70d2a3dcd926bc6ff4cc712308f2ca313358",
+      "arm64": "717dcd38a03849e919f9dec9daa96f5ca102e15ea33d804e5db57b1d47e513bc"
+    }
+  },
+  "ollama": {
+    "x86_64": "c94aa4156b3d13e64ebc2efe5ea53f015384c882be776e6695cfb37fb180d5ad",
+    "arm64": "4d27cb1d8f46176a3c0ce10aea2a16e4ad73dfe1599f2ed13468f29e5b8aba0d"
+  },
+  "lazydocker": {
+    "x86_64": "c47e6f4b61debde5422183c7eb446a704a92c58b4c35bbd128c722d8bf269a86",
+    "arm64": "0fcf85b736895f46daa38eec5871ef1ca3d1e38b20201b2811b26258faccf1c7"
+  },
+  "compose": {
+    "x86_64": "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a",
+    "aarch64": "733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"
+  },
+  "font": "cdd389472e10e2261520140ff1b382b4f8a226af5fd0b2735b975d31151d9c3c",
+  "homebrew": "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148"
+}

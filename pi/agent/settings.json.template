@@ -27,13 +27,5 @@
       "timeoutMs": 900000
     }
   },
-  "theme": "dark",
-  "mcpServers": {
-    "filesystem": {
-      "enabled": true
-    },
-    "git": {
-      "enabled": true
-    }
-  }
+  "theme": "dark"
 }

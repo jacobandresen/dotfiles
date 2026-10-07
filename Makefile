@@ -1,5 +1,5 @@
 .PHONY: install deps doctor ram-profile setup-host use-model verify-model
-.PHONY: install-nvim install-zsh install-mc install-kitty install-pi install-ollama install-docker install-fonts
+.PHONY: install-nvim install-zsh install-mc install-kitty install-pi update-pi install-ollama install-docker install-fonts
 .PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
 
 OS := $(shell uname -s)
@@ -76,8 +76,11 @@ install-mc:
 install-kitty:
 	@$(CLI) install-link backup "$(CURDIR)/kitty" "$(HOME)/.config/kitty"
 
-install-pi:
+install-pi: update-pi
 	@$(PYTHON) ./scripts/pi_config.py
+
+update-pi:
+	@pi update --all
 	@$(CLI) use-model --skip-if-unavailable
 
 install-ollama:

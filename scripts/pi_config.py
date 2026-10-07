@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Install shared Pi resources while keeping settings and models host-local."""
+
 import argparse
 import json
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from pathlib import Path
+
+print("Hello World")
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -28,20 +31,28 @@ def install(agent_dir, dry_run=False):
     home = Path.home()
     legacy = home / ".pi"
     migrate = agent_dir == legacy / "agent" and legacy.is_symlink()
-    nested_migrate = agent_dir.is_symlink() and agent_dir.resolve() == REPO / "pi" / "agent"
+    nested_migrate = (
+        agent_dir.is_symlink() and agent_dir.resolve() == REPO / "pi" / "agent"
+    )
     if migrate and legacy.resolve() != REPO / "pi":
-        raise ValueError(f"{legacy} points to another installation; refusing to replace it")
+        raise ValueError(
+            f"{legacy} points to another installation; refusing to replace it"
+        )
     if nested_migrate:
         migrate = True
     if not migrate and agent_dir.resolve().is_relative_to(REPO):
-        raise ValueError("Pi host configuration must live outside the dotfiles repository")
+        raise ValueError(
+            "Pi host configuration must live outside the dotfiles repository"
+        )
     if dry_run:
         print(f"Would install host-local Pi config at {agent_dir}")
         if migrate:
             if nested_migrate:
                 print(f"Would detach the legacy {agent_dir} symlink and copy its data")
             else:
-                print(f"Would preserve the legacy {legacy} symlink as a backup and copy its data")
+                print(
+                    f"Would preserve the legacy {legacy} symlink as a backup and copy its data"
+                )
         return
 
     if nested_migrate:
@@ -88,7 +99,9 @@ def install(agent_dir, dry_run=False):
             except Exception:
                 backup.rename(legacy)
                 raise
-            print(f"Preserved legacy Pi link at {backup}; runtime data copied to {legacy}")
+            print(
+                f"Preserved legacy Pi link at {backup}; runtime data copied to {legacy}"
+            )
         finally:
             if stage.exists():
                 shutil.rmtree(stage)
@@ -98,7 +111,10 @@ def install(agent_dir, dry_run=False):
         target = agent_dir / resource
         if not target.exists() and not target.is_symlink():
             target.symlink_to(REPO / "pi" / "agent" / resource)
-    for filename, seed in (("settings.json", "settings.json.template"), ("models.json", "models.json")):
+    for filename, seed in (
+        ("settings.json", "settings.json.template"),
+        ("models.json", "models.json"),
+    ):
         target = agent_dir / filename
         if target.is_symlink():
             atomic_json(target, json.loads(target.read_text()))
@@ -108,8 +124,14 @@ def install(agent_dir, dry_run=False):
     settings = json.loads(settings_path.read_text())
     packages = settings.get("packages", [])
     if "npm:@ollama/pi-web-search" in packages:
-        settings["packages"] = ["npm:@ollama/pi-web-search@0.0.5" if package == "npm:@ollama/pi-web-search" else package
-                                for package in packages]
+        settings["packages"] = [
+            (
+                "npm:@ollama/pi-web-search@0.0.5"
+                if package == "npm:@ollama/pi-web-search"
+                else package
+            )
+            for package in packages
+        ]
         atomic_json(settings_path, settings)
     print(f"Pi settings and models are local to {agent_dir}")
 
@@ -119,7 +141,9 @@ def configure(agent_dir, model_name, api, context_window=16384):
     settings = json.loads(settings_path.read_text())
     catalog = json.loads(models_path.read_text())
     shared = json.loads((REPO / "pi/agent/models.json").read_text())
-    shared_models = {model["id"]: model for model in shared["providers"]["ollama"]["models"]}
+    shared_models = {
+        model["id"]: model for model in shared["providers"]["ollama"]["models"]
+    }
     provider = catalog.setdefault("providers", {}).setdefault("ollama", {})
     models = provider.setdefault("models", [])
     for seed in shared["providers"]["ollama"]["models"]:
@@ -131,7 +155,11 @@ def configure(agent_dir, model_name, api, context_window=16384):
         # Restore curated model limits from the shared catalog when moving this
         # host between profiles (for example, Linux 8K to macOS 16K).
         seed = shared_models.get(model.get("id"))
-        model_limit = seed.get("contextWindow") if seed else model.get("contextWindow", context_window)
+        model_limit = (
+            seed.get("contextWindow")
+            if seed
+            else model.get("contextWindow", context_window)
+        )
         model["contextWindow"] = min(model_limit, context_window)
         if seed and "maxTokens" in seed:
             model["maxTokens"] = seed["maxTokens"]
@@ -139,14 +167,25 @@ def configure(agent_dir, model_name, api, context_window=16384):
             model["reasoning"] = seed["reasoning"]
     selected = next((model for model in models if model.get("id") == model_name), None)
     if selected is None:
-        selected = {"id": model_name, "input": ["text"], "name": f"{model_name} (via Ollama)",
-                    "contextWindow": context_window, "maxTokens": 4096}
+        selected = {
+            "id": model_name,
+            "input": ["text"],
+            "name": f"{model_name} (via Ollama)",
+            "contextWindow": context_window,
+            "maxTokens": 4096,
+        }
         models.insert(0, selected)
     else:
-        selected["contextWindow"] = min(selected.get("contextWindow", context_window), context_window)
+        selected["contextWindow"] = min(
+            selected.get("contextWindow", context_window), context_window
+        )
     selected["_launch"] = True
-    provider.update(api="openai-completions", apiKey="not-needed", baseUrl=api.rstrip("/") + "/v1")
-    provider.setdefault("compat", {"supportsDeveloperRole": False, "supportsReasoningEffort": False})
+    provider.update(
+        api="openai-completions", apiKey="not-needed", baseUrl=api.rstrip("/") + "/v1"
+    )
+    provider.setdefault(
+        "compat", {"supportsDeveloperRole": False, "supportsReasoningEffort": False}
+    )
     settings.update(defaultModel=model_name, defaultProvider="ollama")
     for path, value in ((models_path, catalog), (settings_path, settings)):
         if json.loads(path.read_text()) != value:
@@ -156,12 +195,20 @@ def configure(agent_dir, model_name, api, context_window=16384):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--agent-dir", type=Path, default=Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")))
+    parser.add_argument(
+        "--agent-dir",
+        type=Path,
+        default=Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")),
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--api", default="http://127.0.0.1:11434")
-    parser.add_argument("--context-window", type=int, default=None,
-                        help="Ollama context limit (defaults to 16K on macOS, 8K on Linux)")
+    parser.add_argument(
+        "--context-window",
+        type=int,
+        default=None,
+        help="Ollama context limit (defaults to 16K on macOS, 8K on Linux)",
+    )
     args = parser.parse_args(argv)
     try:
         agent_dir = args.agent_dir.expanduser().absolute()
@@ -173,7 +220,11 @@ def main(argv=None):
                 context_window = args.context_window
                 if context_window is None:
                     configured = os.environ.get("DOTFILES_OLLAMA_CONTEXT_LENGTH")
-                    context_window = int(configured) if configured else (16384 if sys.platform == "darwin" else 8192)
+                    context_window = (
+                        int(configured)
+                        if configured
+                        else (16384 if sys.platform == "darwin" else 8192)
+                    )
                 if context_window < 1:
                     raise ValueError("context window must be a positive integer")
                 configure(agent_dir, args.model, args.api, context_window)
