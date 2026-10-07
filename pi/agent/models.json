@@ -10,23 +10,14 @@
       },
       "models": [
         {
-          "id": "qwen3.5:4b",
-          "input": [
-            "text"
-          ],
-          "name": "qwen3.5:4b (via Ollama)",
-          "contextWindow": 16384,
-          "maxTokens": 4096
-        },
-        {
           "id": "qwen3:4b",
           "name": "qwen3:4b (via Ollama) \u2014 verified: writes C that compiles",
           "input": [
             "text"
           ],
-          "reasoning": true,
+          "reasoning": false,
           "contextWindow": 16384,
-          "maxTokens": 4096
+          "maxTokens": 2048
         },
         {
           "id": "qwen3:8b",
@@ -34,9 +25,9 @@
           "input": [
             "text"
           ],
-          "reasoning": true,
+          "reasoning": false,
           "contextWindow": 16384,
-          "maxTokens": 4096
+          "maxTokens": 2048
         },
         {
           "id": "qwen3-coder:30b",

@@ -24,7 +24,7 @@
     "provider": {
       "maxRetries": 1,
       "maxRetryDelayMs": 0,
-      "timeoutMs": 86400000
+      "timeoutMs": 900000
     }
   },
   "theme": "dark",

@@ -28,15 +28,38 @@ def install(agent_dir, dry_run=False):
     home = Path.home()
     legacy = home / ".pi"
     migrate = agent_dir == legacy / "agent" and legacy.is_symlink()
+    nested_migrate = agent_dir.is_symlink() and agent_dir.resolve() == REPO / "pi" / "agent"
     if migrate and legacy.resolve() != REPO / "pi":
         raise ValueError(f"{legacy} points to another installation; refusing to replace it")
+    if nested_migrate:
+        migrate = True
     if not migrate and agent_dir.resolve().is_relative_to(REPO):
         raise ValueError("Pi host configuration must live outside the dotfiles repository")
     if dry_run:
         print(f"Would install host-local Pi config at {agent_dir}")
         if migrate:
-            print(f"Would preserve the legacy {legacy} symlink as a backup and copy its data")
+            if nested_migrate:
+                print(f"Would detach the legacy {agent_dir} symlink and copy its data")
+            else:
+                print(f"Would preserve the legacy {legacy} symlink as a backup and copy its data")
         return
+
+    if nested_migrate:
+        source = agent_dir.resolve()
+        stage = Path(tempfile.mkdtemp(prefix=".pi-migrate-", dir=home))
+        try:
+            shutil.copytree(source, stage / "agent", symlinks=True)
+            agent_dir.unlink()
+            shutil.copytree(stage / "agent", agent_dir, symlinks=True)
+            for resource in ("AGENTS.md", "skills"):
+                copied = agent_dir / resource
+                if copied.is_symlink() or copied.is_file():
+                    copied.unlink()
+                elif copied.is_dir():
+                    shutil.rmtree(copied)
+        finally:
+            shutil.rmtree(stage)
+        migrate = False
 
     if migrate:
         stage = Path(tempfile.mkdtemp(prefix=".pi-migrate-", dir=home))
@@ -110,6 +133,10 @@ def configure(agent_dir, model_name, api, context_window=16384):
         seed = shared_models.get(model.get("id"))
         model_limit = seed.get("contextWindow") if seed else model.get("contextWindow", context_window)
         model["contextWindow"] = min(model_limit, context_window)
+        if seed and "maxTokens" in seed:
+            model["maxTokens"] = seed["maxTokens"]
+        if seed and "reasoning" in seed:
+            model["reasoning"] = seed["reasoning"]
     selected = next((model for model in models if model.get("id") == model_name), None)
     if selected is None:
         selected = {"id": model_name, "input": ["text"], "name": f"{model_name} (via Ollama)",
