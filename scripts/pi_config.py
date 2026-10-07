@@ -9,8 +9,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-print("Hello World")
-
 REPO = Path(__file__).resolve().parent.parent
 
 
