@@ -92,20 +92,6 @@ return {
     },
   },
 
-  -- telescope: `opts` merges into the telescope extra's config (which also
-  -- builds and loads fzf-native); a `config` here would discard its mappings
-  {
-    "nvim-telescope/telescope.nvim",
-    opts = {
-      defaults = {
-        layout_strategy = "vertical",
-        layout_config = { height = 0.95, width = 0.99 },
-        file_ignore_patterns = { "node_modules/", "%.git/" },
-        borderchars = { "═", "║", "═", "║", "╔", "╗", "╝", "╚" }, -- Turbo Vision frames
-      },
-    },
-  },
-
   -- formatting with conform.nvim
   -- NOTE: LazyVim owns conform's `config` and drives format-on-save itself, so
   -- this spec must only contribute `opts` (deep-merged into LazyVim's defaults).

@@ -29,9 +29,12 @@ local function sdl_run()
   vim.cmd("write")
 
   local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+  local pc_cache = {}
   local function pc_exists(pkg)
-    vim.fn.system({ "pkg-config", "--exists", pkg })
-    return vim.v.shell_error == 0
+    if pc_cache[pkg] == nil then
+      pc_cache[pkg] = vim.system({ "pkg-config", "--exists", pkg }):wait().code == 0
+    end
+    return pc_cache[pkg]
   end
 
   local pkgs = {}
@@ -115,7 +118,8 @@ return {
           -- header-insertion=iwyu is already clangd's default; pinned here
           -- so it's documented. Only fires on completion accept, not for an
           -- identifier already typed - clangd has no code action for that.
-          cmd = { "clangd", "--offset-encoding=utf-16", "--header-insertion=iwyu" },
+          cmd = { "clangd", "--offset-encoding=utf-16", "--header-insertion=iwyu",
+            "--background-index", "--clang-tidy", "--completion-style=detailed" },
           init_options = {
             fallbackFlags = clangd_fallback_flags(),
           },
@@ -191,10 +195,6 @@ return {
         server = {
           default_settings = {
             ["rust-analyzer"] = {
-              cargo = {
-                allFeatures = false,
-                loadOutDirsFromCheck = true,
-              },
               check = { command = "check" },
               procMacro = { enable = true },
               inlayHints = {

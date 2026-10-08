@@ -15,7 +15,6 @@ local M = {}
 
 -- UI options; called from options.lua so they're in place before first draw
 function M.setup()
-  require("util.ai_wand").setup()
   require("turbo.menubar").setup(require("turbo.menus").menus)
   require("turbo.chrome").setup()
   require("turbo.highlights").setup()
@@ -105,7 +104,7 @@ function M.keymaps()
   -- Window
   map("n", "<F6>", "<cmd>wincmd w<cr>", { desc = "Next window" })
   map("n", "<S-F6>", "<cmd>wincmd W<cr>", { desc = "Previous window" })
-  map("n", "<M-0>", function() require("telescope.builtin").buffers({ sort_mru = true }) end, { desc = "Window list" })
+  map("n", "<M-0>", function() Snacks.picker.buffers() end, { desc = "Window list" })
 
   -- Help (plain F1 is Neovim's :help already; Space s h is the index)
   map("n", "<S-F1>", menus.topic_search, { desc = "Topic search" })

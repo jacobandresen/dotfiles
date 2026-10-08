@@ -26,8 +26,8 @@ EGA screen. Matching Midnight Commander skins: `../mc/skins/retrobox.ini`
 
 ## Ollama
 
-Client settings are host-specific in `lua/util/ollama_tuning.lua`; preserve
-other hosts and the server RAM/OS profiles in `../ollama/` when tuning one host.
+Neovim has no Ollama client of its own: pi, Claude Code and Codex run in terminal
+splits (`lua/util/agents.lua`). Preserve the server RAM/OS profiles in `../ollama/`.
 
 For AI runtime behavior, see [DEPENDENCIES.md](DEPENDENCIES.md#ai-luapluginsaelua).
 

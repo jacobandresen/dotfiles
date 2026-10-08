@@ -29,46 +29,6 @@ local function respond(stdout, code)
   flush()
 end
 
--- Reading the AI spec must not start polling or make a request.
-package.loaded["util.copilot"] = { is_configured = function() return false end }
-dofile("nvim/lua/plugins/ai.lua")
-assert(#requests == 0 and #timers == 0)
-local ollama = require("util.ollama")
-package.loaded.minuet = { config = { provider_options = { openai_compatible = {} } } }
-ollama.setup()
-assert(#requests == 1 and #timers == 1)
-respond(vim.json.encode({ models = { { name = "first" } } }))
-now = now + 6000
-timers[1].callback()
-flush()
-assert(#requests == 0, "Idle AI must not poll")
-local original_mode = vim.fn.mode
-vim.fn.mode = function() return "i" end
-vim.b.minuet_virtual_text_auto_trigger = true
-timers[1].callback()
-flush()
-assert(#requests == 1, "Active ghost text must refresh")
-ollama.refresh()
-assert(#requests == 1, "Ollama requests must not overlap")
-respond(vim.json.encode({ models = { { name = "second" } } }))
-assert(package.loaded.minuet.config.provider_options.openai_compatible.model == "second")
-vim.fn.mode = original_mode
-
--- Cloud chat does not keep local-model polling active.
-vim.bo.filetype = "codecompanion"
-local adapter_name = "copilot"
-package.loaded.codecompanion = { buf_get_chat = function() return { adapter = { name = adapter_name } } end }
-now = now + 6000
-timers[1].callback()
-flush()
-assert(#requests == 0)
-adapter_name = "ollama"
-timers[1].callback()
-flush()
-assert(#requests == 1)
-respond(vim.json.encode({ models = { { name = "third" } } }))
-vim.bo.filetype = ""
-
 -- Async Docker loads share requests and notify all subscribers.
 LazyVim = { root = function() return "/tmp/nvim-perf-empty-root-not-created" end }
 local docker = require("util.compose.docker")
@@ -162,5 +122,5 @@ flush()
 assert(timers[#timers] ~= active_log_timer and not timers[#timers].closed, "Reopening a log must restart polling")
 vim.cmd = original_cmd
 vim.api.nvim_exec_autocmds("VimLeavePre", {})
-assert(timers[1].closed and timers[#timers].closed)
-print("PASS: syntax, demand-driven AI, async Docker, request deduplication, polling frequency, visible log refresh and cleanup")
+assert(timers[#timers].closed)
+print("PASS: syntax, async Docker, request deduplication, polling frequency, visible log refresh and cleanup")

@@ -7,9 +7,8 @@ adapters, formatters).
 ## Core
 
 - **Neovim** >= 0.12 (`vim.lsp.config`, `:lsp restart`)
-- **git** — plugin management, gitsigns, telescope
-- **ripgrep** (`rg`) — `Telescope live_grep` / `grep_string`
-- **make** + a C compiler (`gcc`/`cc`) — builds `telescope-fzf-native.nvim`
+- **git** — plugin management, gitsigns
+- **ripgrep** (`rg`) — live grep / grep word
 - **A Nerd Font** — statusline/dashboard/explorer icons (e.g. `Terminess Nerd
   Font`, set in `lua/config/options.lua`)
 - **A truecolor terminal** (`COLORTERM=truecolor`) — the retrobox / Turbo
@@ -22,23 +21,16 @@ adapters, formatters).
   plugin (`make deps-compose`, per user) is needed for up/down, services
   without a container yet and service logs; the rest only needs the CLI.
 
-## AI (`lua/plugins/ai.lua`)
+## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
-- **curl** — queries the local Ollama API
-- **[Ollama](https://ollama.com)** running at `localhost:11434` with at least
-  one model pulled — powers the `ollama` CodeCompanion adapter and Minuet's
-  inline ghost-text suggestions (`<A-A>` to accept)
-- **GitHub Copilot** subscription — run `:Copilot auth` once to authenticate;
-  used by the `copilot` CodeCompanion chat adapter and its code-review/test
-  prompt templates. Copilot's own inline completions are disabled; Minuet uses
-  Ollama for local ghost text.
-
-Model detection starts on first AI use and refreshes every five seconds while
-chat or ghost text is active. Minuet updates existing sessions; new chats use
-the cached model. CodeCompanion requests share a FIFO queue, and Minuet skips
-suggestions while it is busy. If detection is still pending, retry the AI command.
-`make use-model MODEL=<tag>` switches the model for Neovim, Pi, and mu; `ga` in
-the chat buffer switches to Copilot.
+- **[pi](https://pi.dev)**, **[Claude Code](https://claude.com/claude-code)** and
+  **[Codex](https://github.com/openai/codex)** — run as plain CLIs in a terminal
+  split: `<leader>ap`, `<leader>ac`, `<leader>ax` toggle them (Ctrl+/ hides one).
+  `<leader>as` pastes `@file` (or `@file:lines` plus the selection) into the agent
+  used last. Buffers reload when the agent edits files (`checktime` on focus).
+  pi talks to the host's Ollama model (`make use-model MODEL=<tag>`).
+- **GitHub Copilot** subscription — run `:Copilot auth` once. Inline ghost text
+  (`<A-A>` accept, `<A-a>` accept line, `<leader>ag` toggle).
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.
@@ -143,23 +135,3 @@ to compose files (mapped in `lua/config/options.lua`).
   when displayed again.
 
 Use `:Lazy profile` to inspect actual plugin load times and loading triggers.
-
-## Per-host Ollama client tuning
-
-`lua/util/ollama_tuning.lua` holds client overrides by hostname. Unknown hosts
-retain the existing client defaults and the server's own chat settings. The
-RAM/OS daemon profiles in `../ollama/` remain independent and unchanged.
-
-`tatooine` (16 GiB RAM, GTX 1660 SUPER with 6 GiB VRAM) uses 8192 context for
-chat and inline edits, matching the resident model and the server's default
-used by Minuet. Retention is 10 minutes, matching its daemon profile. Ghost
-text gets 2048 characters of surrounding code, a 96-token output cap, and a
-three-second throttle. Inline edits retain their 512-token output cap.
-
-Native requests disable thinking with `think=false`; Minuet's OpenAI-compatible
-requests use `reasoning_effort="none"`; `tatooine` also uses temperature 0.2. See
-[Ollama's supported OpenAI request fields](https://docs.ollama.com/api/openai-compatibility).
-
-The loaded `qwen3.5:4b` was confirmed fully GPU-resident at 8192 context on
-2026-10-03 (~3.18 GiB). Timing probes hit the shared request queue and timed
-out; these settings are conservative tuning, not a measured speed optimum.

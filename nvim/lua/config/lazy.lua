@@ -25,7 +25,7 @@ require("lazy").setup({
   performance = {
     rtp = {
       disabled_plugins = {
-        "gzip", "matchit", "matchparen", "netrwPlugin",
+        "gzip", "netrwPlugin", -- netrw: the Snacks explorer replaces it
         "tarPlugin", "tohtml", "tutor", "zipPlugin",
       },
     },

@@ -83,6 +83,10 @@ ifeq ($(OS),Darwin)
 else
 	@mkdir -p "$(HOME)/.config/Code/User"
 	@$(CLI) install-link backup "$(CURDIR)/vscode/User/settings.json" "$(HOME)/.config/Code/User/settings.json"
+	@if [ -d "$(HOME)/.config/Code - OSS" ]; then \
+		mkdir -p "$(HOME)/.config/Code - OSS/User"; \
+		$(CLI) install-link backup "$(CURDIR)/vscode/User/settings.json" "$(HOME)/.config/Code - OSS/User/settings.json"; \
+	fi
 endif
 
 install-pi: update-pi

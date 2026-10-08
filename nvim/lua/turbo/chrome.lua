@@ -22,14 +22,7 @@ function M.statusline()
     return "%#StatusLine# " .. esc(menu_hint)
   end
   local parts = { "%#StatusLine#" }
-  local active_hints = hints
-  if vim.bo.filetype == "codecompanion" then
-    active_hints = {
-      { "Ctrl+S", "Send" }, { "q (Normal)", "Stop" }, { "Ctrl+G", "Context" },
-      { "gb (Normal)", "Back to code" }, { "? (Normal)", "Help" },
-    }
-  end
-  for _, h in ipairs(active_hints) do
+  for _, h in ipairs(hints) do
     table.insert(parts, (" %%#TurboStatusKey#%s%%#StatusLine# %s "):format(h[1], h[2]))
   end
   table.insert(parts, "%=")

@@ -19,9 +19,9 @@ map("n", "<C-o>", "<C-o>zzzv")
 map("n", "<C-d>", "<C-d>zzzv")
 map("n", "<C-u>", "<C-u>zzzv")
 
--- telescope: only deviations from LazyVim's own <leader>f/s defaults
-map("n", "<leader>fI", "<cmd>Telescope find_files no_ignore=true<cr>", { desc = "Find Files (incl. ignored)" })
-map("n", "<leader>sB", "<cmd>Telescope current_buffer_fuzzy_find fuzzy=false case_mode=ignore_case<cr>", { desc = "Buffer Lines (exact)" })
+-- Snacks picker (LazyVim default): only deviations from LazyVim's own <leader>f/s defaults
+map("n", "<leader>fI", function() Snacks.picker.files({ hidden = true, ignored = true }) end, { desc = "Find Files (incl. ignored)" })
+map("n", "<leader>sB", function() Snacks.picker.lines({ matcher = { fuzzy = false } }) end, { desc = "Buffer Lines (exact)" })
 
 -- lazydocker and the Docker Compose explorer, next to LazyVim's <leader>gg (Lazygit)
 map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { desc = "Lazydocker" })
