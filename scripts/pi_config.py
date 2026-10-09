@@ -106,10 +106,27 @@ def install(agent_dir, dry_run=False):
             atomic_json(target, json.loads((REPO / "pi" / "agent" / seed).read_text()))
     settings_path = agent_dir / "settings.json"
     settings = json.loads(settings_path.read_text())
+    settings_before = settings.copy()
+    template = json.loads((REPO / "pi" / "agent" / "settings.json.template").read_text())
+    if settings.get("defaultProvider") == "ollama":
+        for key in ("defaultModel", "defaultProvider", "defaultThinkingLevel", "enabledModels"):
+            if key in template:
+                settings[key] = template[key]
+        models_path = agent_dir / "models.json"
+        models = json.loads(models_path.read_text())
+        changed = False
+        for provider in models.get("providers", {}).values():
+            for model in provider.get("models", []):
+                if "_launch" in model:
+                    model.pop("_launch")
+                    changed = True
+        if changed:
+            atomic_json(models_path, models)
     packages = settings.get("packages", [])
     if "npm:@ollama/pi-web-search" in packages:
         settings["packages"] = ["npm:@ollama/pi-web-search@0.0.5" if package == "npm:@ollama/pi-web-search" else package
                                 for package in packages]
+    if settings != settings_before:
         atomic_json(settings_path, settings)
     print(f"Pi settings and models are local to {agent_dir}")
 

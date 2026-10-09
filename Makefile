@@ -94,7 +94,6 @@ install-pi: update-pi
 
 update-pi:
 	@pi update --all
-	@$(CLI) use-model --skip-if-unavailable
 
 install-ollama:
 	@$(CLI) install-ollama

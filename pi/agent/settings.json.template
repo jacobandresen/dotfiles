@@ -4,9 +4,9 @@
     "keepRecentTokens": 8000,
     "reserveTokens": 4096
   },
-  "defaultModel": "qwen3:4b",
-  "defaultProvider": "ollama",
-  "defaultThinkingLevel": "off",
+  "defaultModel": "gpt-5.6-luna",
+  "defaultProvider": "github-copilot",
+  "defaultThinkingLevel": "low",
   "enabledModels": [
     "ollama/*",
     "github-copilot/*"
