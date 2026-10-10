@@ -23,33 +23,12 @@ class InstallerTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
-                        PI_CODING_AGENT_DIR=str(self.root / "agent"), DOTFILES_CODING_MODEL="qwen3.5:4b")
+                        PI_CODING_AGENT_DIR=str(self.root / "agent"))
 
     def executable(self, name, script):
         path = self.bin / name
         path.write_text("#!/usr/bin/env bash\nset -eu\n" + script)
         path.chmod(0o755)
-
-    def test_setup_host_default_and_deliberate_switch_do_not_change_catalog(self):
-        catalog = REPO / "pi/agent/models.json"
-        before = catalog.read_bytes()
-        args = lambda loaded: dotfiles.argparse.Namespace(dry_run=False, use_loaded=loaded)
-        def install(model, dry_run=False):
-            return subprocess.run([sys.executable, str(REPO / "scripts/pi_config.py"),
-                                   "--agent-dir", str(self.root / "agent"), "--model", model,
-                                   "--api", "http://127.0.0.1:11434"], check=True, capture_output=True, text=True)
-        with patch.dict(os.environ, self.env), patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
-             patch.object(dotfiles, "api_ready", return_value=True), \
-             patch.object(dotfiles, "api_json", return_value={"models": [{"name": "qwen3:8b"}]}), \
-             patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0, "ollama test version", "")), \
-             patch.object(dotfiles, "install_pi", side_effect=install), contextlib.redirect_stdout(io.StringIO()):
-            dotfiles.setup_host(args(False))
-            agent = self.root / "agent"
-            self.assertEqual(json.loads((agent / "settings.json").read_text())["defaultModel"], "qwen3.5:4b")
-            dotfiles.setup_host(args(True))
-        models = json.loads((agent / "models.json").read_text())["providers"]["ollama"]["models"]
-        self.assertEqual([m["id"] for m in models if m.get("_launch")], ["qwen3:8b"])
-        self.assertEqual(before, catalog.read_bytes())
 
     def test_compatible_neovim_skips_network_and_installation(self):
         self.executable("nvim", 'echo "NVIM v0.12.5"\n')
@@ -97,17 +76,14 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(json.loads((settings.parent / "settings-store.json.bak").read_text())["memoryMiB"], 4096)
 
     def test_use_model_configures_pi_without_reprobing(self):
-        args = dotfiles.argparse.Namespace(model="chosen:latest", keepalive=None, ollama_only=False,
-                                          skip_if_unavailable=False, dry_run=False)
+        args = dotfiles.argparse.Namespace(dry_run=False)
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
              patch.object(dotfiles, "has_model", return_value=True), \
              patch.object(dotfiles, "api_json", return_value={}), \
-             patch.object(dotfiles, "install_pi") as install, \
-             patch.object(dotfiles, "setup_host") as setup, contextlib.redirect_stdout(io.StringIO()):
+             patch.object(dotfiles.pi_config, "main") as install, contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
-        install.assert_called_once_with("chosen:latest")
-        setup.assert_not_called()
+        install.assert_called_once_with([])
 
     def test_matching_ollama_profile_keeps_app_running(self):
         home = self.root / "home"
@@ -116,13 +92,13 @@ class InstallerTests(unittest.TestCase):
         with contextlib.closing(sqlite3.connect(database)) as db, db:
             db.execute("create table settings (context_length integer)")
             db.execute("insert into settings values (8192)")
-        source = self.root / "ollama/launchd/8gb.env"
+        source = self.root / "ollama/ollama.env"
         source.parent.mkdir(parents=True)
         source.write_text("OLLAMA_CONTEXT_LENGTH=8192\n")
         app = self.root / "Ollama.app"
         app.mkdir()
         with patch.object(dotfiles, "ROOT", self.root), patch.object(dotfiles, "HOME", home), \
-             patch.object(dotfiles, "OLLAMA_APP", app), patch.object(dotfiles, "ram_profile", return_value="8gb"), \
+             patch.object(dotfiles, "OLLAMA_APP", app), \
              patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0)) as command, \
              patch.object(dotfiles.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):

@@ -1,201 +1,64 @@
 #!/usr/bin/env python3
-"""Install shared Pi resources while keeping settings and models host-local."""
+"""Install the local pi-agent configuration for Ministral 3B."""
+
 import argparse
 import json
 import os
 from pathlib import Path
-import shutil
-import sys
 import tempfile
 
-REPO = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[1]
+MODEL = "ministral-3:3b"
 
 
-def atomic_json(path, value):
+def write_json(path, value):
+    data = json.dumps(value, indent=2) + "\n"
+    if path.is_file() and not path.is_symlink() and path.read_text() == data:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w") as stream:
-            json.dump(value, stream, indent=2)
-            stream.write("\n")
-        os.replace(name, path)  # replaces a symlink rather than writing through it
+            stream.write(data)
+        os.replace(name, path)
     finally:
         if os.path.exists(name):
             os.unlink(name)
 
 
 def install(agent_dir, dry_run=False):
-    home = Path.home()
-    legacy = home / ".pi"
-    migrate = agent_dir == legacy / "agent" and legacy.is_symlink()
-    nested_migrate = agent_dir.is_symlink() and agent_dir.resolve() == REPO / "pi" / "agent"
-    if migrate and legacy.resolve() != REPO / "pi":
-        raise ValueError(f"{legacy} points to another installation; refusing to replace it")
-    if nested_migrate:
-        migrate = True
-    if not migrate and agent_dir.resolve().is_relative_to(REPO):
-        raise ValueError("Pi host configuration must live outside the dotfiles repository")
+    if agent_dir.resolve().is_relative_to(ROOT) or agent_dir.is_symlink() or agent_dir.parent.is_symlink():
+        raise ValueError("pi config directory must be a real directory outside this repository")
     if dry_run:
-        print(f"Would install host-local Pi config at {agent_dir}")
-        if migrate:
-            if nested_migrate:
-                print(f"Would detach the legacy {agent_dir} symlink and copy its data")
-            else:
-                print(f"Would preserve the legacy {legacy} symlink as a backup and copy its data")
+        print(f"Would configure {agent_dir} for {MODEL}")
         return
-
-    if nested_migrate:
-        source = agent_dir.resolve()
-        stage = Path(tempfile.mkdtemp(prefix=".pi-migrate-", dir=home))
-        try:
-            shutil.copytree(source, stage / "agent", symlinks=True)
-            agent_dir.unlink()
-            shutil.copytree(stage / "agent", agent_dir, symlinks=True)
-            for resource in ("AGENTS.md", "skills"):
-                copied = agent_dir / resource
-                if copied.is_symlink() or copied.is_file():
-                    copied.unlink()
-                elif copied.is_dir():
-                    shutil.rmtree(copied)
-        finally:
-            shutil.rmtree(stage)
-        migrate = False
-
-    if migrate:
-        stage = Path(tempfile.mkdtemp(prefix=".pi-migrate-", dir=home))
-        backup = home / ".pi.dotfiles-link.bak"
-        while backup.exists() or backup.is_symlink():
-            backup = backup.with_name(backup.name + ".bak")
-        try:
-            shutil.copytree(legacy.resolve(), stage, dirs_exist_ok=True, symlinks=True)
-            # A nested agent symlink must also be detached before editing.
-            if (stage / "agent").is_symlink():
-                source = (stage / "agent").resolve()
-                (stage / "agent").unlink()
-                shutil.copytree(source, stage / "agent", symlinks=True)
-            # These copied resources are identical to the shared sources.
-            for resource in ("AGENTS.md", "skills"):
-                copied = stage / "agent" / resource
-                if copied.is_symlink() or copied.is_file():
-                    copied.unlink()
-                elif copied.is_dir():
-                    shutil.rmtree(copied)
-                copied.parent.mkdir(parents=True, exist_ok=True)
-                copied.symlink_to(REPO / "pi" / "agent" / resource)
-            legacy.rename(backup)
-            try:
-                stage.rename(legacy)
-            except Exception:
-                backup.rename(legacy)
-                raise
-            print(f"Preserved legacy Pi link at {backup}; runtime data copied to {legacy}")
-        finally:
-            if stage.exists():
-                shutil.rmtree(stage)
-
     agent_dir.mkdir(parents=True, exist_ok=True)
-    for resource in ("AGENTS.md", "skills"):
-        target = agent_dir / resource
-        if not target.exists() and not target.is_symlink():
-            target.symlink_to(REPO / "pi" / "agent" / resource)
-    for filename, seed in (("settings.json", "settings.json.template"), ("models.json", "models.json")):
-        target = agent_dir / filename
-        if target.is_symlink():
-            atomic_json(target, json.loads(target.read_text()))
-        elif not target.exists():
-            atomic_json(target, json.loads((REPO / "pi" / "agent" / seed).read_text()))
-    settings_path = agent_dir / "settings.json"
-    settings = json.loads(settings_path.read_text())
-    settings_before = settings.copy()
-    template = json.loads((REPO / "pi" / "agent" / "settings.json.template").read_text())
-    if settings.get("defaultProvider") == "ollama":
-        for key in ("defaultModel", "defaultProvider", "defaultThinkingLevel", "enabledModels"):
-            if key in template:
-                settings[key] = template[key]
-        models_path = agent_dir / "models.json"
-        models = json.loads(models_path.read_text())
-        changed = False
-        for provider in models.get("providers", {}).values():
-            for model in provider.get("models", []):
-                if "_launch" in model:
-                    model.pop("_launch")
-                    changed = True
-        if changed:
-            atomic_json(models_path, models)
-    packages = settings.get("packages", [])
-    if "npm:@ollama/pi-web-search" in packages:
-        settings["packages"] = ["npm:@ollama/pi-web-search@0.0.5" if package == "npm:@ollama/pi-web-search" else package
-                                for package in packages]
-    if settings != settings_before:
-        atomic_json(settings_path, settings)
-    print(f"Pi settings and models are local to {agent_dir}")
-
-
-def configure(agent_dir, model_name, api, context_window=16384):
-    settings_path, models_path = agent_dir / "settings.json", agent_dir / "models.json"
-    settings = json.loads(settings_path.read_text())
-    catalog = json.loads(models_path.read_text())
-    shared = json.loads((REPO / "pi/agent/models.json").read_text())
-    shared_models = {model["id"]: model for model in shared["providers"]["ollama"]["models"]}
-    provider = catalog.setdefault("providers", {}).setdefault("ollama", {})
-    models = provider.setdefault("models", [])
-    for seed in shared["providers"]["ollama"]["models"]:
-        if not any(model.get("id") == seed["id"] for model in models):
-            models.append(seed)
-    for model in models:
-        model.pop("_launch", None)
-        # Keep Pi's advertised capacity within the server's configured context.
-        # Restore curated model limits from the shared catalog when moving this
-        # host between profiles (for example, Linux 8K to macOS 16K).
-        seed = shared_models.get(model.get("id"))
-        model_limit = seed.get("contextWindow") if seed else model.get("contextWindow", context_window)
-        model["contextWindow"] = min(model_limit, context_window)
-        if seed and "maxTokens" in seed:
-            model["maxTokens"] = seed["maxTokens"]
-        if seed and "reasoning" in seed:
-            model["reasoning"] = seed["reasoning"]
-    selected = next((model for model in models if model.get("id") == model_name), None)
-    if selected is None:
-        selected = {"id": model_name, "input": ["text"], "name": f"{model_name} (via Ollama)",
-                    "contextWindow": context_window, "maxTokens": 4096}
-        models.insert(0, selected)
-    else:
-        selected["contextWindow"] = min(selected.get("contextWindow", context_window), context_window)
-    selected["_launch"] = True
-    provider.update(api="openai-completions", apiKey="not-needed", baseUrl=api.rstrip("/") + "/v1")
-    provider.setdefault("compat", {"supportsDeveloperRole": False, "supportsReasoningEffort": False})
-    settings.update(defaultModel=model_name, defaultProvider="ollama")
-    for path, value in ((models_path, catalog), (settings_path, settings)):
-        if json.loads(path.read_text()) != value:
-            atomic_json(path, value)
-    print(f"Pi launch model: {model_name} (host-local)")
+    instructions = agent_dir / "AGENTS.md"
+    if not instructions.exists() and not instructions.is_symlink():
+        instructions.symlink_to(ROOT / "pi/agent/AGENTS.md")
+    skills = agent_dir / "skills"
+    if skills.is_symlink() and skills.resolve() == ROOT / "pi/agent/skills":
+        skills.unlink()
+    settings = json.loads((ROOT / "pi/agent/settings.json.template").read_text())
+    models = json.loads((ROOT / "pi/agent/models.json").read_text())
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    if not host.startswith(("http://", "https://")):
+        host = "http://" + host
+    models["providers"]["ollama"]["baseUrl"] = host.rstrip("/") + "/v1"
+    write_json(agent_dir / "settings.json", settings)
+    write_json(agent_dir / "models.json", models)
+    print(f"pi-agent: {MODEL}")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agent-dir", type=Path, default=Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")))
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--model")
-    parser.add_argument("--api", default="http://127.0.0.1:11434")
-    parser.add_argument("--context-window", type=int, default=None,
-                        help="Ollama context limit (defaults to 16K on macOS, 8K on Linux)")
     args = parser.parse_args(argv)
     try:
-        agent_dir = args.agent_dir.expanduser().absolute()
-        install(agent_dir, args.dry_run)
-        if args.model:
-            if args.dry_run:
-                print(f"Would select {args.model} in host-local settings and models")
-            else:
-                context_window = args.context_window
-                if context_window is None:
-                    configured = os.environ.get("DOTFILES_OLLAMA_CONTEXT_LENGTH")
-                    context_window = int(configured) if configured else (16384 if sys.platform == "darwin" else 8192)
-                if context_window < 1:
-                    raise ValueError("context window must be a positive integer")
-                configure(agent_dir, args.model, args.api, context_window)
+        install(args.agent_dir.expanduser().absolute(), args.dry_run)
     except (OSError, ValueError) as error:
-        parser.exit(1, f"Pi config installation failed: {error}\n")
+        parser.exit(1, f"pi config failed: {error}\n")
 
 
 if __name__ == "__main__":

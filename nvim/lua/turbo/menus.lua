@@ -140,17 +140,10 @@ function M.lazydocker()
 end
 
 M.ai = {
-  { label = "~P~i agent", key = "Space a p", hint = "Show/hide the pi agent in a terminal split (Ctrl+/ hides it)",
-    action = function() require("util.agents").toggle("pi") end },
-  { label = "~C~laude Code", key = "Space a c", hint = "Show/hide Claude Code in a terminal split",
-    action = function() require("util.agents").toggle("claude") end },
-  { label = "Code~x~", key = "Space a x", hint = "Show/hide Codex in a terminal split",
-    action = function() require("util.agents").toggle("codex") end },
-  "-",
-  { label = "~S~end to agent", key = "Space a s", hint = "Paste the selection (or the file path) into the agent last used",
+  { label = "~P~i agent", key = "Space a p", hint = "Show or hide pi with Ministral 3B",
+    action = function() require("util.agents").toggle() end },
+  { label = "~S~end to pi", key = "Space a s", hint = "Paste the selection or file path into pi",
     action = function(ctx) require("util.agents").send(ctx.visual) end },
-  { label = "Copilot ~g~host text", key = "Space a g", hint = "Turn Copilot's inline suggestions on or off (Alt+A accepts)",
-    action = function() require("util.agents").toggle_ghost() end },
 }
 
 M.db = {
@@ -412,7 +405,7 @@ M.local_menu = {
   { label = "~E~valuate...", key = "Shift+F4", hint = "Evaluate the expression under the cursor",
     action = function(ctx) M.evaluate(ctx.visual) end },
   "-",
-  { label = "Send to ~a~gent", key = "Space a s", hint = "Paste the block (or file path) into the agent last used",
+  { label = "Send to pi ~a~gent", key = "Space a s", hint = "Paste the block or file path into pi",
     action = function(ctx) require("util.agents").send(ctx.visual) end },
 }
 

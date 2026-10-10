@@ -1,7 +1,5 @@
 [Unit]
-# Pulled in by Wants= on ollama.service's own drop-in, so this fires on
-# every (re)start, not just at enable time - After=/Requires= alone won't.
-Description=Load the dotfiles-selected coding model into Ollama
+Description=Load Ministral 3B into Ollama
 After=ollama.service
 Requires=ollama.service
 PartOf=ollama.service
@@ -9,7 +7,5 @@ PartOf=ollama.service
 [Service]
 Type=oneshot
 User=__USER__
-# dotfiles.py use-model pulls the model if missing and loads it - a first pull needs
-# more than systemd's default 90s start timeout.
 TimeoutStartSec=1800
 ExecStart=/usr/bin/env python3 __REPO_DIR__/scripts/dotfiles.py use-model

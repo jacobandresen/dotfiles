@@ -23,14 +23,8 @@ adapters, formatters).
 
 ## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
-- **[pi](https://pi.dev)**, **[Claude Code](https://claude.com/claude-code)** and
-  **[Codex](https://github.com/openai/codex)** — run as plain CLIs in a terminal
-  split: `<leader>ap`, `<leader>ac`, `<leader>ax` toggle them (Ctrl+/ hides one).
-  `<leader>as` pastes `@file` (or `@file:lines` plus the selection) into the agent
-  used last. Buffers reload when the agent edits files (`checktime` on focus).
-  pi talks to the host's Ollama model (`make use-model MODEL=<tag>`).
-- **GitHub Copilot** subscription — run `:Copilot auth` once. Inline ghost text
-  (`<A-A>` accept, `<A-a>` accept line, `<leader>ag` toggle).
+- **pi-agent** with Ollama `ministral-3:3b` — `<leader>ap` toggles the terminal;
+  `<leader>as` sends the file or selection. Buffers reload on focus.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.

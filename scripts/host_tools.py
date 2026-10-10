@@ -27,10 +27,7 @@ def ram_profile():
 
 
 def coding_model():
-    override = os.environ.get("DOTFILES_CODING_MODEL")
-    if override:
-        return override
-    return "qwen3:4b" if platform.system() == "Darwin" else "qwen3-coder:30b" if ram_profile() == "32gb" else "qwen3:8b"
+    return "ministral-3:3b"
 
 
 def ollama_api():

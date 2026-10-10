@@ -1,27 +1,20 @@
--- Coding agents (pi, Claude Code, Codex) run as plain CLIs in a Snacks
--- terminal split; this module toggles them and pastes editor context in.
 local M = {}
 
-local commands = { pi = "pi", claude = "claude", codex = "codex" }
-local last
+local command = "pi"
 
 local function opts()
   return { cwd = LazyVim.root(), win = { position = "right", width = 0.4 } }
 end
 
-function M.toggle(name)
-  local cmd = commands[name]
-  if vim.fn.executable(cmd) ~= 1 then
-    return vim.notify(cmd .. " is not installed", vim.log.levels.WARN)
+function M.toggle()
+  if vim.fn.executable(command) ~= 1 then
+    return vim.notify("pi is not installed", vim.log.levels.WARN)
   end
-  last = name
-  Snacks.terminal.toggle(cmd, opts())
+  Snacks.terminal.toggle(command, opts())
 end
 
--- The terminal of the agent used last, or nil when none is running.
 local function running()
-  if not last then return end
-  local term = Snacks.terminal.get(commands[last], opts(), false)
+  local term = Snacks.terminal.get(command, opts(), false)
   if term and term:buf_valid() and vim.bo[term.buf].buftype == "terminal" then return term end
 end
 
@@ -35,7 +28,7 @@ function M.send(visual)
   end
   local term = running()
   if not term then
-    return vim.notify("No agent running: Space a p (pi), c (Claude), x (Codex)", vim.log.levels.WARN)
+    return vim.notify("Start pi with Space a p", vim.log.levels.WARN)
   end
   local file = vim.api.nvim_buf_get_name(0)
   if file == "" then
@@ -51,12 +44,6 @@ function M.send(visual)
   vim.api.nvim_chan_send(vim.bo[term.buf].channel, "\27[200~" .. text .. "\27[201~")
   term:show():focus()
   vim.cmd("startinsert")
-end
-
-function M.toggle_ghost()
-  local ok, suggestion = pcall(require, "copilot.suggestion")
-  if not ok then return vim.notify("copilot.lua is not loaded", vim.log.levels.WARN) end
-  suggestion.toggle_auto_trigger()
 end
 
 return M

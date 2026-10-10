@@ -1,31 +1,6 @@
 {
-  "compaction": {
-    "enabled": true,
-    "keepRecentTokens": 8000,
-    "reserveTokens": 4096
-  },
-  "defaultModel": "gpt-5.6-luna",
-  "defaultProvider": "github-copilot",
-  "defaultThinkingLevel": "low",
-  "enabledModels": [
-    "ollama/*",
-    "github-copilot/*"
-  ],
-  "enableSkillCommands": true,
-  "httpIdleTimeoutMs": 0,
-  "packages": [
-    "npm:@ollama/pi-web-search@0.0.5"
-  ],
-  "quietStartup": true,
-  "retry": {
-    "baseDelayMs": 50000,
-    "enabled": true,
-    "maxRetries": 5,
-    "provider": {
-      "maxRetries": 1,
-      "maxRetryDelayMs": 0,
-      "timeoutMs": 900000
-    }
-  },
-  "theme": "dark"
+  "defaultProvider": "ollama",
+  "defaultModel": "ministral-3:3b",
+  "defaultThinkingLevel": "off",
+  "enabledModels": ["ollama/ministral-3:3b"]
 }

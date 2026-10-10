@@ -24,22 +24,7 @@ derives them for any other scheme). `colors/turbopascal.lua` is the full blue
 EGA screen. Matching Midnight Commander skins: `../mc/skins/retrobox.ini`
 (default) and `../mc/skins/turbopascal.ini`.
 
-## Ollama
+## AI
 
-Neovim has no Ollama client of its own: pi, Claude Code and Codex run in terminal
-splits (`lua/util/agents.lua`). Preserve the server RAM/OS profiles in `../ollama/`.
-
-For AI runtime behavior, see [DEPENDENCIES.md](DEPENDENCIES.md#ai-luapluginsaelua).
-
-Offload to Ollama when the task is repetitive or mechanical **and the output is
-verifiable by inspection**:
-
-- Generating lookup tables (e.g. menu key→index mappings for tests)
-- Filling in boilerplate that follows an obvious pattern from one example
-- Scaffolding repetitive `it()` test blocks
-
-Write the critical scaffolding yourself; hand the stamp-out work to Ollama.
-
-Do not offload work whose correctness you cannot check at a glance. A small
-local model fails unpredictably, including on tasks that look trivial, so
-"it produced something plausible" is not evidence it is right.
+Only pi-agent is available in a terminal split. It uses Ollama's
+`ministral-3:3b` model. Keep the AI menu and keymaps limited to pi.

@@ -1,4 +1,4 @@
-.PHONY: install deps doctor ram-profile setup-host use-model verify-model
+.PHONY: install deps doctor ram-profile use-model verify-model
 .PHONY: install-nvim install-zsh install-mc install-kitty install-vscode install-pi update-pi install-ollama install-docker install-fonts
 .PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
 
@@ -11,7 +11,7 @@ install: deps
 	@$(MAKE) install-nvim install-zsh install-mc install-kitty install-vscode
 	@$(MAKE) install-ollama
 	@$(MAKE) install-docker
-	@$(MAKE) install-pi
+	@$(MAKE) use-model
 
 deps:
 ifeq ($(OS),Darwin)
@@ -89,7 +89,7 @@ else
 	fi
 endif
 
-install-pi: update-pi
+install-pi:
 	@$(PYTHON) ./scripts/pi_config.py
 
 update-pi:
@@ -99,16 +99,13 @@ install-ollama:
 	@$(CLI) install-ollama
 
 use-model:
-	@$(CLI) use-model $(MODEL)
+	@$(CLI) use-model
 
 install-docker:
 	@$(CLI) install-docker
 
 install-fonts:
 	@$(CLI) install-fonts
-
-setup-host:
-	@$(CLI) setup-host
 
 verify-model:
 	@$(CLI) verify-model
