@@ -34,7 +34,7 @@ return {
       -- Debug menu (lua/turbo/menus.lua). TP's F4/F7/F8 stay; its Ctrl+ and
       -- Alt+F-keys move to Shift, since GNOME and KDE take those (Ctrl+F1-F4
       -- switch desktops, Ctrl+F7-F10 Present Windows, Alt+F5-F10 move/resize
-      -- the window). F5 toggles breakpoints (Delphi), Shift+F5 stops (VS Code).
+      -- the window). F5 toggles breakpoints (Delphi), Shift+F5 stops.
       { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Run to Cursor" },
       { "<S-F4>", function() require("turbo.menus").evaluate() end, desc = "Evaluate", mode = { "n", "v" } },
       { "<F5>",   function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
