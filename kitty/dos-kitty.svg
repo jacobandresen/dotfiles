@@ -1,22 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <title>Kitty in a DOS terminal</title>
-  <!-- Hard edges and the 16-colour EGA palette echo Turbo Pascal's desktop. -->
-  <path fill="#000000" d="M20 20h104v104H20z" opacity=".5"/>
-  <path fill="#555555" d="M8 8h108v108H8z"/>
-  <path fill="#ffffff" d="M8 8h108v4H12v104H8z"/>
-  <path fill="#aaaaaa" d="M12 12h100v100H12z"/>
-  <path fill="#000000" d="M16 16h92v92H16z"/>
-  <path fill="#0000aa" d="M20 20h84v84H20z"/>
-  <path fill="#aaaaaa" d="M20 20h84v16H20z"/>
-  <path fill="#ffffff" d="M24 24h44v4H24z"/>
-  <path fill="#aa0000" d="M88 24h12v8H88z"/>
-  <path fill="#ffffff" d="M91 27h6v2h-6z"/>
-  <!-- Pixel cat with pointy ears, bright eyes, and a DOS prompt beneath it. -->
-  <path fill="#55ffff" d="M32 76V48h8v-8h8v8h28v-8h8v8h8v28h-8v8H40v-8z"/>
-  <path fill="#0000aa" d="M40 48h8v8h-8zm36 0h8v8h-8z"/>
-  <path fill="#ffff55" d="M44 60h12v8H44zm24 0h12v8H68z"/>
-  <path fill="#000000" d="M52 60h4v8h-4zm24 0h4v8h-4z"/>
-  <path fill="#aa0000" d="M60 72h8v4h-8z"/>
-  <path fill="#0000aa" d="M44 76h8v4h-8zm28 0h8v4h-8z"/>
-  <path fill="#ffff55" d="M28 88h4v4h-4zm4 4h4v4h-4zm4 4h4v4h-4zm-4 4h4v4h-4zm16 0h12v4H48z"/>
+  <title>Kitty as a zsh prompt</title>
+  <!-- Hard edges and the 16-colour EGA palette echo a VGA text-mode console. -->
+  <path fill="#000000" d="M8 116V4h8v4h4v4h4v4h4v4h4v4h60v-4h4v-4h4v-4h4v-4h4v-4h8v112z" transform="translate(12 12)" opacity=".5"/>
+  <path fill="#555555" d="M8 24h108v92H8z"/>
+  <path fill="#ffffff" d="M8 24h108v4H12v88H8z"/>
+  <path fill="#aaaaaa" d="M12 28h100v84H12z"/>
+  <!-- Pixel cat ears turn the terminal window into a kitty. -->
+  <path fill="#ffffff" d="M8 4h4v4h-4zM108 4h4v4h-4zM8 8h4v4h-4zM104 8h4v4h-4zM8 12h4v4h-4zM100 12h4v4h-4zM8 16h4v4h-4zM96 16h4v4h-4zM8 20h4v4h-4zM92 20h4v4h-4z"/>
+  <path fill="#aaaaaa" d="M12 8h4v4h-4zM108 8h4v4h-4zM12 12h4v4h-4zM108 12h4v4h-4zM16 12h4v4h-4zM104 12h4v4h-4zM12 16h4v4h-4zM108 16h4v4h-4zM20 16h4v4h-4zM100 16h4v4h-4zM12 20h4v4h-4zM108 20h4v4h-4zM24 20h4v4h-4zM96 20h4v4h-4z"/>
+  <path fill="#555555" d="M112 4h4v4h-4zM12 4h4v4h-4zM112 8h4v4h-4zM16 8h4v4h-4zM112 12h4v4h-4zM20 12h4v4h-4zM112 16h4v4h-4zM24 16h4v4h-4zM112 20h4v4h-4zM28 20h4v4h-4z"/>
+  <path fill="#ff55ff" d="M16 16h4v4h-4zM104 16h4v4h-4zM16 20h4v4h-4zM104 20h4v4h-4zM20 20h4v4h-4zM100 20h4v4h-4z"/>
+  <path fill="#aaaaaa" d="M12 24h20v4H12zm80 0h20v4H92z"/>
+  <path fill="#555555" d="M112 24h4v4h-4z"/>
+  <path fill="#000000" d="M16 32h92v76H16z"/>
+  <!-- The zsh lambda-theme prompt (λ ~/) in bold VGA-style glyphs, followed by the underline cursor. -->
+  <path fill="#aaaaaa" d="M21 52h5v4h-5zM23.5 56h5v4h-5zM26 60h5v4h-5zM26 64h7.5v4h-7.5zM23.5 68h5v4h-5zM31 68h5v4h-5zM23.5 72h5v4h-5zM31 72h5v4h-5zM21 76h5v4h-5zM33.5 76h5v4h-5zM46 60h7.5v4h-7.5zM61 60h5v4h-5zM43.5 64h5v4h-5zM51 64h5v4h-5zM58.5 64h5v4h-5zM53.5 68h7.5v4h-7.5zM78.5 52h5v4h-5zM78.5 56h5v4h-5zM76 60h5v4h-5zM73.5 64h5v4h-5zM71 68h5v4h-5zM68.5 72h5v4h-5zM68.5 76h5v4h-5z"/>
+  <path fill="#ffffff" d="M88.5 82h15v5h-15z"/>
 </svg>

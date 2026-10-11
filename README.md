@@ -39,8 +39,8 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
 - **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching Retrobox terminal
-  colors, a 120×40 kitty layout, a DOS-style prompt, and a Turbo Pascal style
-  launcher icon on Linux.
+  colors, a 120×40 kitty layout, a DOS-style prompt, and a cat-eared `λ ~/`
+  launcher icon (`kitty.app.png` on macOS).
 - **pi** — configured to use Ollama `ministral-3:3b`.
 
 ## Local model
