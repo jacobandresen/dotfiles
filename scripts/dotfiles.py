@@ -354,20 +354,20 @@ def install_compose(_):
 
 
 def install_fonts(_):
-    if shutil.which("fc-list") and "hack nerd font" in run("fc-list", check=False, capture_output=True, text=True).stdout.casefold():
-        print("  ✓ Hack Nerd Font already installed")
+    if shutil.which("fc-list") and "bigbluetermplus nerd font mono" in run("fc-list", check=False, capture_output=True, text=True).stdout.casefold():
+        print("  ✓ BigBlueTermPlus Nerd Font Mono already installed")
         return
     if platform.system() == "Darwin":
-        run("brew", "install", "--cask", "font-hack-nerd-font")
+        run("brew", "install", "--cask", "font-bigblue-terminal-nerd-font")
         return
-    destination = HOME / ".local/share/fonts/HackNerdFont"
+    destination = HOME / ".local/share/fonts/BigBlueTerminalNerdFont"
     with tempfile.TemporaryDirectory() as work:
-        archive = Path(work) / "Hack.tar.xz"
-        release_asset("ryanoasis/nerd-fonts", FONT_VERSION, "Hack.tar.xz", archive, FONT_SHA256)
+        archive = Path(work) / "BigBlueTerminal.tar.xz"
+        release_asset("ryanoasis/nerd-fonts", FONT_VERSION, "BigBlueTerminal.tar.xz", archive, FONT_SHA256)
         destination.mkdir(parents=True, exist_ok=True)
         run("tar", "-xJf", str(archive), "-C", str(destination))
     run("fc-cache", "-f", str(destination.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"  ✓ Hack Nerd Font -> {destination}")
+    print(f"  ✓ BigBlueTerminal Nerd Font -> {destination}")
 
 
 def install_ollama(_):

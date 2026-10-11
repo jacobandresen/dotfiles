@@ -12,7 +12,8 @@
           "input": ["text"],
           "reasoning": false,
           "contextWindow": 8192,
-          "maxTokens": 2048
+          "maxTokens": 2048,
+          "samplingParams": {"temperature": 0.15}
         }
       ]
     }

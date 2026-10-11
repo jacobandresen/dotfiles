@@ -61,7 +61,6 @@ function M.winbar()
   local line = active and "═" or "─"
   local buf = api.nvim_win_get_buf(win)
   local name = api.nvim_buf_get_name(buf)
-  -- non-file buffers (e.g. docker logs) can set their own title
   name = vim.b[buf].turbo_title or (name == "" and "NONAME00" or vim.fn.fnamemodify(name, ":~:."))
   local title = " " .. name .. " "
   local nr = " " .. api.nvim_win_get_number(win) .. " "
@@ -75,8 +74,8 @@ function M.winbar()
   end
   local free = width - 6 - 7 - #nr - vim.fn.strdisplaywidth(title)
   if free < 2 then
-    local short = vim.b[buf].turbo_title and vim.b[buf].turbo_title:gsub("%s.*[%s/]", " ")
-    title = " " .. (short or vim.fn.fnamemodify(name, ":t")) .. " "
+    local short = vim.b[buf].turbo_title and name or vim.fn.fnamemodify(name, ":t")
+    title = " " .. short .. " "
     free = math.max(2, width - 6 - 7 - #nr - vim.fn.strdisplaywidth(title))
   end
   local l = math.floor(free / 2)
@@ -197,15 +196,6 @@ function M.setup()
         active_win = win
       end
       update(win)
-    end,
-  })
-  -- the startup screen hides the tabline and statusline; TP always shows the
-  -- menu bar and hint line
-  api.nvim_create_autocmd("User", {
-    group = group,
-    pattern = "SnacksDashboardOpened",
-    callback = function()
-      vim.o.showtabline, vim.o.laststatus = 2, 3
     end,
   })
   api.nvim_create_autocmd({ "ModeChanged", "RecordingEnter", "RecordingLeave" }, {

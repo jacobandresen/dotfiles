@@ -23,10 +23,8 @@ map("n", "<C-u>", "<C-u>zzzv")
 map("n", "<leader>fI", function() Snacks.picker.files({ hidden = true, ignored = true }) end, { desc = "Find Files (incl. ignored)" })
 map("n", "<leader>sB", function() Snacks.picker.lines({ matcher = { fuzzy = false } }) end, { desc = "Buffer Lines (exact)" })
 
--- lazydocker and the Docker Compose explorer, next to LazyVim's <leader>gg (Lazygit)
+-- lazydocker, next to LazyVim's <leader>gg (Lazygit)
 map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { desc = "Lazydocker" })
-map("n", "<leader>gC", function() require("util.compose").open() end, { desc = "Docker Explorer" })
-map("n", "<leader>gO", function() require("util.compose.logs").pick() end, { desc = "Docker Logs" })
 
 -- Toggle the Snacks explorer from either its sidebar or the editing window.
 map("n", "<leader>e", function()
@@ -40,6 +38,7 @@ end, { desc = "Toggle File Explorer" })
 
 -- LSP restart next to LazyVim's <leader>cl (Lsp Info)
 map("n", "<leader>cL", "<cmd>lsp restart<cr>", { desc = "Restart LSP" })
+map("n", "<leader>cF", require("util.lsp").fix_all, { desc = "Fix All Diagnostics" })
 
 -- text transforms (JSON/URL/HTML/Base64) on the selection or whole buffer
 local transform = require("util.transform")

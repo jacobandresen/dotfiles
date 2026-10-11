@@ -1,13 +1,24 @@
 local M = {}
 
-local command = "pi"
+local command = {
+  "pi", "--theme", vim.fn.stdpath("config") .. "/themes/pi-turbopascal.json",
+  "--use-theme", "turbopascal",
+}
 
 local function opts()
-  return { cwd = LazyVim.root(), win = { position = "right", width = 0.4 } }
+  return {
+    cwd = LazyVim.root(),
+    win = {
+      position = "right",
+      width = 0.5,
+      on_buf = function(win) vim.b[win.buf].turbo_title = "Pi Agent" end,
+      wo = { number = false, relativenumber = false, signcolumn = "no" },
+    },
+  }
 end
 
 function M.toggle()
-  if vim.fn.executable(command) ~= 1 then
+  if vim.fn.executable("pi") ~= 1 then
     return vim.notify("pi is not installed", vim.log.levels.WARN)
   end
   Snacks.terminal.toggle(command, opts())

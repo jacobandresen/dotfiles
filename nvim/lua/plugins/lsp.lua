@@ -114,6 +114,11 @@ return {
     opts = {
       diagnostics = { virtual_text = false },
       servers = {
+        -- These servers expose file-wide fix actions. ESLint and Biome only
+        -- start in projects with their respective config files.
+        gopls = {},
+        eslint = {},
+        biome = {},
         clangd = {
           -- header-insertion=iwyu is already clangd's default; pinned here
           -- so it's documented. Only fires on completion accept, not for an

@@ -1,6 +1,6 @@
 -- The Turbo* groups (menu bar, hint line, dialogs, status messages, window
 -- frame icon) for colour schemes other than colors/turbopascal.lua, which
--- defines them itself. Retrobox (the default) gets a hand-tuned Turbo Vision
+-- defines them itself. Retrobox gets a hand-tuned Turbo Vision
 -- look in its gruvbox tones, matching ../mc/skins/retrobox.ini; any other
 -- scheme gets them derived from its Pmenu/StatusLine/float groups.
 local M = {}
@@ -40,12 +40,6 @@ local function palette_groups(c)
     TurboStatusMsgWarn = { fg = c.purple, bg = c.gray, bold = true },
     TurboStatusMsgError = { fg = c.white, bg = c.red },
     TurboStatusMsgErrorTitle = { fg = c.yellow, bg = c.red, bold = true },
-    -- Docker explorer container states
-    SnacksPickerDockerRunning = { fg = c.green },
-    SnacksPickerDockerPaused = { fg = c.aqua },
-    SnacksPickerDockerExited = { fg = c.gray },
-    SnacksPickerDockerDead = { fg = c.lightred, bold = true },
-    SnacksPickerToggleOnlyRunning = { fg = c.bg, bg = c.green },
   }
 end
 
@@ -84,11 +78,6 @@ local function derived_groups()
     TurboStatusMsgWarn = { fg = get("DiagnosticWarn").fg, bg = float.bg, bold = true },
     TurboStatusMsgError = { link = "ErrorMsg" },
     TurboStatusMsgErrorTitle = { link = "ErrorMsg" },
-    SnacksPickerDockerRunning = { link = "DiagnosticOk" },
-    SnacksPickerDockerPaused = { link = "DiagnosticInfo" },
-    SnacksPickerDockerExited = { link = "Comment" },
-    SnacksPickerDockerDead = { link = "DiagnosticError" },
-    SnacksPickerToggleOnlyRunning = { link = "PmenuSel" },
   }
 end
 

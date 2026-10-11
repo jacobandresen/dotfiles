@@ -18,11 +18,11 @@ Neovim equivalent (no greyed-out placeholders); every key shown in a menu
 exists as a keymap; an action used in the wrong context explains itself with a
 notification, not a raw Vim error. 
 
-Colours: the default scheme is Neovim's built-in `retrobox`;
-`lua/turbo/highlights.lua` gives the Turbo chrome gruvbox tones under it (and
-derives them for any other scheme). `colors/turbopascal.lua` is the full blue
-EGA screen. Matching Midnight Commander skins: `../mc/skins/retrobox.ini`
-(default) and `../mc/skins/turbopascal.ini`.
+Colours: the default scheme is `colors/turbopascal.lua`, the full blue EGA
+screen. `lua/turbo/highlights.lua` gives the Turbo chrome gruvbox tones under
+the optional built-in `retrobox` scheme (and derives them for other schemes).
+Matching Midnight Commander skins: `../mc/skins/retrobox.ini` (MC default)
+and `../mc/skins/turbopascal.ini`.
 
 ## AI
 

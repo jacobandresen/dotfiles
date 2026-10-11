@@ -30,7 +30,7 @@ endif
 deps-macos:
 	@$(CLI) install-homebrew
 	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
-	brew install --cask ollama kitty font-terminess-ttf-nerd-font
+	brew install --cask ollama kitty font-bigblue-terminal-nerd-font
 	@$(MAKE) deps-common
 	@echo "Docker Desktop is optional: make deps-docker-macos"
 
@@ -75,6 +75,9 @@ install-mc:
 
 install-kitty:
 	@$(CLI) install-link backup "$(CURDIR)/kitty" "$(HOME)/.config/kitty"
+	@if [ "$(OS)" = "Linux" ]; then \
+		$(CLI) install-link backup "$(CURDIR)/kitty/dos-kitty.svg" "$(HOME)/.local/share/icons/hicolor/scalable/apps/kitty.svg"; \
+	fi
 
 install-pi:
 	@$(PYTHON) ./scripts/pi_config.py

@@ -53,20 +53,8 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
   callback = stop_log_timer,
 })
 
--- <leader>cF next to LazyVim's <leader>ca (code action), only where LSP
--- offers code actions
-vim.api.nvim_create_autocmd("LspAttach", {
-  callback = function(args)
-    local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if client and client:supports_method("textDocument/codeAction") then
-      vim.keymap.set("n", "<leader>cF", require("util.lsp").fix_all, { buffer = args.buf, desc = "Fix All Diagnostics" })
-    end
-  end,
-})
-
--- only one sidebar at a time: the file explorer, the Docker explorer
--- (util/compose) or the Dadbod drawer - the one opened last stays open
-local sidebar_pickers = { explorer = true, compose = true }
+-- only one sidebar at a time: the file explorer or the Dadbod drawer
+local sidebar_pickers = { explorer = true }
 
 local function close_sidebars(keep)
   for _, picker in ipairs(Snacks.picker.get()) do
@@ -95,27 +83,6 @@ vim.api.nvim_create_autocmd("FileType", {
       for _, picker in ipairs(Snacks.picker.get()) do
         if sidebar_pickers[picker.opts.source] and picker.list.win.buf == ev.buf then
           return close_sidebars(picker.opts.source)
-        end
-      end
-    end)
-  end,
-})
-
--- Dadbod opens a new query in a split when the dashboard is the only editing
--- window. Remove that startup page once the database query buffer is ready.
-vim.api.nvim_create_autocmd("FileType", {
-  group = vim.api.nvim_create_augroup("turbo_dbui_hide_dashboard", { clear = true }),
-  pattern = "sql",
-  callback = function(args)
-    if not vim.b[args.buf].dbui_db_key_name then return end
-    vim.schedule(function()
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(win)
-        if vim.bo[buf].filetype == "snacks_dashboard" then
-          vim.api.nvim_win_close(win, true)
-          if vim.api.nvim_buf_is_valid(buf) and vim.fn.bufwinid(buf) == -1 then
-            vim.api.nvim_buf_delete(buf, { force = true })
-          end
         end
       end
     end)

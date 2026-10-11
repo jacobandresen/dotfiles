@@ -1,5 +1,5 @@
 -- Turbo Vim: Neovim dressed as the Borland Turbo Pascal 7.0 IDE.
---   colors/turbopascal.lua  EGA palette (the default scheme is retrobox)
+--   colors/turbopascal.lua  EGA palette (the default scheme)
 --   turbo/highlights.lua    the Turbo chrome's colours under other schemes
 --   turbo/menubar.lua       menu bar + drop-downs
 --   turbo/menus.lua         the menu tree

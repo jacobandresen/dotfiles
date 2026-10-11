@@ -28,7 +28,8 @@ Check the installed tools without making changes:
 make doctor
 ```
 
-The Neovim config needs Neovim 0.12+ and a Nerd Font. Plugins install on first
+The Neovim config needs Neovim 0.12+ and BigBlueTermPlus Nerd Font Mono,
+installed by `make deps` or `make install-fonts`. Plugins install on first
 launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 
 ## Included
@@ -37,8 +38,9 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
   and pi-agent. Use `:colorscheme turbopascal` for the blue TP7 palette.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty and zsh** — matching Retrobox terminal colors, a 120×40 kitty layout,
-  and a DOS-style prompt.
+- **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching Retrobox terminal
+  colors, a 120×40 kitty layout, a DOS-style prompt, and a Turbo Pascal style
+  launcher icon on Linux.
 - **pi** — configured to use Ollama `ministral-3:3b`.
 
 ## Local model

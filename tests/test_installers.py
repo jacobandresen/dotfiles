@@ -127,7 +127,7 @@ class InstallerTests(unittest.TestCase):
                             for call in command.call_args_list))
 
     def test_existing_font_skips_installation(self):
-        with patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0, "Hack Nerd Font Mono", "")) as command, \
+        with patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0, "BigBlueTermPlus Nerd Font Mono", "")) as command, \
              contextlib.redirect_stdout(io.StringIO()):
             dotfiles.install_fonts(None)
         command.assert_called_once()
@@ -137,7 +137,7 @@ class InstallerTests(unittest.TestCase):
              patch.object(dotfiles.shutil, "which", return_value=None), \
              patch.object(dotfiles, "run") as command:
             dotfiles.install_fonts(None)
-        command.assert_called_once_with("brew", "install", "--cask", "font-hack-nerd-font")
+        command.assert_called_once_with("brew", "install", "--cask", "font-bigblue-terminal-nerd-font")
 
 
 if __name__ == "__main__":

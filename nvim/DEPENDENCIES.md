@@ -9,28 +9,29 @@ adapters, formatters).
 - **Neovim** >= 0.12 (`vim.lsp.config`, `:lsp restart`)
 - **git** — plugin management, gitsigns
 - **ripgrep** (`rg`) — live grep / grep word
-- **A Nerd Font** — statusline/dashboard/explorer icons (e.g. `Terminess Nerd
-  Font`, set in `lua/config/options.lua`)
-- **A truecolor terminal** (`COLORTERM=truecolor`) — the retrobox / Turbo
-  Pascal colours in Neovim and the matching Midnight Commander skins
+- **BigBlueTermPlus Nerd Font Mono** — installed by `make install-fonts` for
+  Neovide and the configured kitty terminal; includes Nerd Font tool icons
+- **A truecolor terminal** (`COLORTERM=truecolor`) — the Turbo Pascal and
+  retrobox colours in Neovim and the matching Midnight Commander skins
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
-- **docker** — the Docker explorer (`<leader>gC`, Tools ► Docker ► Explorer:
-  containers by compose project/service, images, volumes, networks; `?` in
-  it lists the keys) and Docker logs (`<leader>gO`). The **docker compose**
-  plugin (`make deps-compose`, per user) is needed for up/down, services
-  without a container yet and service logs; the rest only needs the CLI.
 
 ## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
 - **pi-agent** with Ollama `ministral-3:3b` — `<leader>ap` toggles the terminal;
-  `<leader>as` sends the file or selection. Buffers reload on focus.
+  `<leader>as` sends the file or selection. Its Markdown output uses the
+  Turbo Pascal palette in `themes/pi-turbopascal.json`. Buffers reload on focus.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.
-`<leader>cF` requests server-provided `source.fixAll` actions, applying a single
-action or prompting for alternatives. Servers without this action report no
-available fixes.
+`<leader>cF` requests server-provided `source.fixAll` actions. For Go it also
+accepts `source.organizeImports` when no fix-all action is available. If the
+server has neither, it uses GCC fix-its for saved C/C++ files, Ruff for Python,
+goimports for Go, ESLint (in configured projects) or Biome for JS/TS, and
+machine-applicable `cargo clippy` suggestions for saved Rust files (or
+`cargo check` when Clippy is unavailable). CLI fallbacks
+edit the current buffer; Rust and C/C++ need the file saved first. ESLint and
+Biome LSP servers start only in projects with their respective config files.
 
 ## SDL game dev (`lua/plugins/lsp.lua`)
 
@@ -88,15 +89,15 @@ Not managed by Mason; install via the language's own tooling:
 
 - **Rust**: `cargo`/`rustc` (rustup), `rustfmt` — used by rustaceanvim and
   the `rust` formatter
-- **Go**: `go` toolchain — provides `gofmt`
+- **Go**: `go` toolchain — provides `gofmt` and supports `gopls`
 - **.NET SDK**: `dotnet` — required for C# projects (Roslyn/nvim-dap-cs debug
   and build)
 
 ## Mason-managed (auto-installed, see `lua/plugins/lsp.lua`)
 
-LSP servers configured under `nvim-lspconfig` (`clangd`, `helm-ls` and
-`docker-language-server`) are installed by LazyVim. Roslyn is installed by
-Mason when `roslyn-language-server` is not already executable; an existing
+LSP servers configured under `nvim-lspconfig` (`clangd`, `gopls`, `eslint`,
+`biome`, `helm-ls` and `docker-language-server`) are installed by LazyVim.
+Roslyn is installed by Mason when `roslyn-language-server` is not already executable; an existing
 executable from an older Mason `roslyn` package is reused to avoid the duplicate
 shim conflict. The rest are listed in the `mason.nvim` spec: `rust-analyzer`
 (run by rustaceanvim), `netcoredbg`, `codelldb`, `js-debug-adapter`, `prettier`,
@@ -122,9 +123,6 @@ to compose files (mapped in `lua/config/options.lua`).
 - Rust uses default Cargo features and `cargo check`; `<leader>rc` runs Clippy
   in a terminal. Configure additional Cargo features per project when needed.
 - Folding loads when opening a buffer, rather than on an empty startup.
-- Docker data loads asynchronously. Containers refresh every two seconds,
-  CPU/memory every four seconds, and image/volume disk usage every thirty seconds.
-  `R` forces a refresh in the Docker explorer.
 - One shared timer refreshes visible log/JSONL buffers; hidden logs refresh
   when displayed again.
 

@@ -32,6 +32,7 @@ class PiConfigTests(unittest.TestCase):
         self.assertEqual(json.loads((self.agent / "settings.json").read_text())["defaultModel"], "ministral-3:3b")
         models = json.loads((self.agent / "models.json").read_text())["providers"]["ollama"]["models"]
         self.assertEqual([model["id"] for model in models], ["ministral-3:3b"])
+        self.assertEqual(models[0]["samplingParams"]["temperature"], 0.15)
         self.assertTrue((self.agent / "AGENTS.md").is_symlink())
 
     def test_repo_or_legacy_symlink_is_rejected(self):

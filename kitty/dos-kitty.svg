@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <title>Kitty in a DOS terminal</title>
+  <!-- Hard edges and the 16-colour EGA palette echo Turbo Pascal's desktop. -->
+  <path fill="#000000" d="M20 20h104v104H20z" opacity=".5"/>
+  <path fill="#555555" d="M8 8h108v108H8z"/>
+  <path fill="#ffffff" d="M8 8h108v4H12v104H8z"/>
+  <path fill="#aaaaaa" d="M12 12h100v100H12z"/>
+  <path fill="#000000" d="M16 16h92v92H16z"/>
+  <path fill="#0000aa" d="M20 20h84v84H20z"/>
+  <path fill="#aaaaaa" d="M20 20h84v16H20z"/>
+  <path fill="#ffffff" d="M24 24h44v4H24z"/>
+  <path fill="#aa0000" d="M88 24h12v8H88z"/>
+  <path fill="#ffffff" d="M91 27h6v2h-6z"/>
+  <!-- Pixel cat with pointy ears, bright eyes, and a DOS prompt beneath it. -->
+  <path fill="#55ffff" d="M32 76V48h8v-8h8v8h28v-8h8v8h8v28h-8v8H40v-8z"/>
+  <path fill="#0000aa" d="M40 48h8v8h-8zm36 0h8v8h-8z"/>
+  <path fill="#ffff55" d="M44 60h12v8H44zm24 0h12v8H68z"/>
+  <path fill="#000000" d="M52 60h4v8h-4zm24 0h4v8h-4z"/>
+  <path fill="#aa0000" d="M60 72h8v4h-8z"/>
+  <path fill="#0000aa" d="M44 76h8v4h-8zm28 0h8v4h-8z"/>
+  <path fill="#ffff55" d="M28 88h4v4h-4zm4 4h4v4h-4zm4 4h4v4h-4zm-4 4h4v4h-4zm16 0h12v4H48z"/>
+</svg>

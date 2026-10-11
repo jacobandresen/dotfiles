@@ -1,33 +1,19 @@
 return {
   -- Turbo Pascal 7.0 look: lua/turbo/ (menu bar in the tabline, hint line in
-  -- the statusline) replaces lualine and bufferline. Colours: Neovim's
-  -- built-in retrobox, with the Turbo chrome in its tones (turbo/highlights.lua);
-  -- `:colorscheme turbopascal` for the full blue EGA screen.
+  -- the statusline) replaces lualine and bufferline. The default colours
+  -- come from colors/turbopascal.lua; retrobox is an optional alternative.
   {
     "LazyVim/LazyVim",
-    opts = { colorscheme = "retrobox" },
+    opts = { colorscheme = "turbopascal" },
   },
   { "nvim-lualine/lualine.nvim", enabled = false },
   { "akinsho/bufferline.nvim", enabled = false },
 
-  -- dashboard: keep the shortcuts and startup info without a logo
   {
     "folke/snacks.nvim",
-    init = function()
-      vim.api.nvim_create_autocmd("VimEnter", {
-        group = vim.api.nvim_create_augroup("turbo_startup_explorer", { clear = true }),
-        once = true,
-        callback = function()
-          if vim.fn.argc(-1) ~= 0 or vim.api.nvim_buf_get_name(0) ~= "" or #vim.api.nvim_list_uis() == 0 then
-            return
-          end
-          vim.schedule(function()
-            if vim.api.nvim_buf_get_name(0) == "" then Snacks.explorer() end
-          end)
-        end,
-      })
-    end,
     opts = function(_, opts)
+      -- Start in a plain editor window, like the Turbo Pascal IDE.
+      opts.dashboard = { enabled = false }
       -- opaque notifications (see fidget below)
       opts.styles = vim.tbl_deep_extend("force", opts.styles or {}, {
         notification = { wo = { winblend = 0 } },
@@ -49,8 +35,7 @@ return {
 
       -- explorer as a Turbo Vision window: one double frame with a centred
       -- title, a TP input line and no Nerd Font icons (colours: SnacksPicker*
-      -- in colors/turbopascal.lua). The Docker Compose explorer
-      -- (util/compose/) uses the same window.
+      -- in colors/turbopascal.lua).
       local sidebar = {
         prompt = "> ",
         icons = {
@@ -77,18 +62,9 @@ return {
       opts.picker = vim.tbl_deep_extend("force", opts.picker or {}, {
         sources = {
           explorer = sidebar,
-          -- a bit wider than the file explorer: CPU, sizes and counts on the right
-          compose = vim.tbl_deep_extend("force", sidebar, require("util.compose").source, {
-            layout = { layout = { width = 44, min_width = 44 } },
-          }),
         },
       })
 
-      opts.dashboard = opts.dashboard or {}
-      opts.dashboard.sections = {
-        { section = "keys", gap = 1, padding = 1 },
-        { section = "startup" },
-      }
       return opts
     end,
   },
@@ -110,7 +86,8 @@ return {
   },
 
   -- sign-column wand: shows when a quickfix is available at the cursor,
-  -- use normal code actions for individual fixes; <leader>cF requests source.fixAll
+  -- use normal code actions for individual fixes; <leader>cF handles
+  -- document-wide LSP, compiler and linter fixes.
   {
     "kosayoda/nvim-lightbulb",
     event = "LspAttach",

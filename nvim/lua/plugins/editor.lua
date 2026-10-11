@@ -121,10 +121,10 @@ return {
     },
   },
 
-  -- indent guides come from snacks.indent (LazyVim default); no scope line
+  -- TP's editor has no indentation guides.
   {
     "folke/snacks.nvim",
-    opts = { indent = { scope = { enabled = false } } },
+    opts = { indent = { enabled = false } },
   },
 
   -- ensure parsers for every language we debug/edit are installed
