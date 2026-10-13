@@ -11,8 +11,8 @@ adapters, formatters).
 - **ripgrep** (`rg`) — live grep / grep word
 - **BigBlueTermPlus Nerd Font Mono** — installed by `make install-fonts` for
   Neovide and the configured kitty terminal; includes Nerd Font tool icons
-- **A truecolor terminal** (`COLORTERM=truecolor`) — the Turbo Pascal and
-  retrobox colours in Neovim and the matching Midnight Commander skins
+- **A truecolor terminal** (`COLORTERM=truecolor`) — required by the configured
+  Neovim colours
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
 
@@ -20,7 +20,7 @@ adapters, formatters).
 
 - **pi-agent** with Ollama `ministral-3:3b` — `<leader>ap` toggles the terminal;
   `<leader>as` sends the file or selection. Its Markdown output uses the
-  Turbo Pascal palette in `themes/pi-turbopascal.json`. Buffers reload on focus.
+  Solarized palette in `themes/pi-solarized.json`. Buffers reload on focus.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.

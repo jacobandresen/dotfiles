@@ -1,8 +1,8 @@
 local M = {}
 
 local command = {
-  "pi", "--theme", vim.fn.stdpath("config") .. "/themes/pi-turbopascal.json",
-  "--use-theme", "turbopascal",
+  "pi", "--theme", vim.fn.stdpath("config") .. "/themes/pi-solarized.json",
+  "--use-theme", "solarized",
 }
 
 local function opts()
@@ -11,7 +11,6 @@ local function opts()
     win = {
       position = "right",
       width = 0.5,
-      on_buf = function(win) vim.b[win.buf].turbo_title = "Pi Agent" end,
       wo = { number = false, relativenumber = false, signcolumn = "no" },
     },
   }

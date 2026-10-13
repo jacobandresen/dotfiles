@@ -1,24 +1,60 @@
 return {
-  -- Turbo Pascal 7.0 look: lua/turbo/ (menu bar in the tabline, hint line in
-  -- the statusline) replaces lualine and bufferline. The default colours
-  -- come from colors/turbopascal.lua; retrobox is an optional alternative.
+  {
+    "lifepillar/vim-solarized8",
+  },
   {
     "LazyVim/LazyVim",
-    opts = { colorscheme = "turbopascal" },
+    opts = { colorscheme = "solarized8" },
   },
-  { "nvim-lualine/lualine.nvim", enabled = false },
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = {
+      options = {
+        theme = "auto",
+        globalstatus = true,
+        component_separators = { left = "│", right = "│" },
+        section_separators = { left = "", right = "" },
+      },
+      sections = {
+        lualine_a = { { "mode", separator = { left = "", right = "" } } },
+        lualine_b = { "branch", "diff", "diagnostics" },
+        lualine_c = { { "filename", path = 1 } },
+        lualine_x = { "encoding", "fileformat", "filetype" },
+        lualine_y = { "progress" },
+        lualine_z = { { "location", separator = { left = "", right = "" } } },
+      },
+    },
+  },
   { "akinsho/bufferline.nvim", enabled = false },
 
   {
     "folke/snacks.nvim",
+    init = function()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        group = vim.api.nvim_create_augroup("solarized_picker_highlights", { clear = true }),
+        callback = function()
+          local set = vim.api.nvim_set_hl
+          set(0, "SnacksPicker", { fg = "#657b83", bg = "#fdf6e3" })
+          set(0, "SnacksPickerBorder", { fg = "#93a1a1", bg = "#fdf6e3" })
+          set(0, "SnacksPickerTitle", { fg = "#268bd2", bg = "#fdf6e3", bold = true })
+          set(0, "SnacksPickerPrompt", { fg = "#268bd2", bg = "#eee8d5", bold = true })
+          set(0, "SnacksPickerInput", { fg = "#657b83", bg = "#eee8d5" })
+          set(0, "SnacksPickerList", { fg = "#657b83", bg = "#fdf6e3" })
+          set(0, "SnacksPickerCursorLine", { fg = "#586e75", bg = "#eee8d5" })
+          set(0, "SnacksPickerMatch", { fg = "#cb4b16", bold = true })
+          set(0, "SnacksPickerDir", { fg = "#2aa198" })
+          set(0, "SnacksPickerFile", { fg = "#657b83" })
+          set(0, "SnacksPickerTree", { fg = "#93a1a1" })
+        end,
+      })
+    end,
     opts = function(_, opts)
-      -- Start in a plain editor window, like the Turbo Pascal IDE.
+      -- Start in a plain editor window.
       opts.dashboard = { enabled = false }
       -- opaque notifications (see fidget below)
       opts.styles = vim.tbl_deep_extend("force", opts.styles or {}, {
         notification = { wo = { winblend = 0 } },
-        -- lazygit/lazydocker: Alt+X (or Shift+F3, File > Close) quits from any
-        -- lazygit panel, instead of hunting for the view where q works
+        -- Keep lazygit/lazydocker easy to close from any panel.
         lazygit = {
           border = "double",
           title = " Lazygit ",
@@ -26,16 +62,12 @@ return {
           footer = " Alt+X Close ",
           footer_pos = "center",
           keys = {
-            turbo_close = { "<M-x>", "hide", mode = { "t", "n" }, desc = "Close" },
-            turbo_close_f3 = { "<S-F3>", "hide", mode = { "t", "n" }, desc = "Close" },
-            turbo_close_f15 = { "<F15>", "hide", mode = { "t", "n" }, desc = "Close" }, -- Shift+F3, xterm style
+            close = { "<M-x>", "hide", mode = { "t", "n" }, desc = "Close" },
           },
         },
       })
 
-      -- explorer as a Turbo Vision window: one double frame with a centred
-      -- title, a TP input line and no Nerd Font icons (colours: SnacksPicker*
-      -- in colors/turbopascal.lua).
+      -- Compact explorer with a clear input line and no distracting icons.
       local sidebar = {
         prompt = "> ",
         icons = {

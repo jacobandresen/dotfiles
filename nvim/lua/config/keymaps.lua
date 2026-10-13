@@ -24,7 +24,7 @@ map("n", "<leader>fI", function() Snacks.picker.files({ hidden = true, ignored =
 map("n", "<leader>sB", function() Snacks.picker.lines({ matcher = { fuzzy = false } }) end, { desc = "Buffer Lines (exact)" })
 
 -- lazydocker, next to LazyVim's <leader>gg (Lazygit)
-map("n", "<leader>gd", function() require("turbo.menus").lazydocker() end, { desc = "Lazydocker" })
+map("n", "<leader>gd", "<cmd>lua Snacks.lazydocker()<cr>", { desc = "Lazydocker" })
 
 -- Toggle the Snacks explorer from either its sidebar or the editing window.
 map("n", "<leader>e", function()
@@ -44,6 +44,3 @@ map("n", "<leader>cF", require("util.lsp").fix_all, { desc = "Fix All Diagnostic
 local transform = require("util.transform")
 map("n", "<leader>ct", transform.pick, { desc = "Transform Buffer" })
 map("x", "<leader>ct", transform.pick, { desc = "Transform Selection" })
-
--- Turbo Pascal 7.0 keys: F10/Alt+letter menus, F2 save, F3 open, F9 make...
-require("turbo").keymaps()

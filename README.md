@@ -1,7 +1,7 @@
 # Dotfiles
 
-Turbo Pascal-inspired configuration for Neovim, Midnight Commander, kitty,
-zsh, and the [pi](https://pi.dev) coding agent with local Ollama `ministral-3:3b`.
+Retro terminal configuration for Neovim, Midnight Commander, kitty, zsh, and
+the [pi](https://pi.dev) coding agent with local Ollama `ministral-3:3b`.
 
 ## Install
 
@@ -34,11 +34,11 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 
 ## Included
 
-- **Neovim** — LazyVim with a Turbo Vision UI, LSP, debugging, database tools,
-  and pi-agent. Use `:colorscheme turbopascal` for the blue TP7 palette.
+- **Neovim** — LazyVim with a Solarized interface, LSP, debugging, database
+  tools, and pi-agent.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching Retrobox terminal
+- **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching retro terminal
   colors, a 120×40 kitty layout, a DOS-style prompt, and a cat-eared `λ ~/`
   launcher icon (`kitty.app.png` on macOS).
 - **pi** — configured to use Ollama `ministral-3:3b`.
