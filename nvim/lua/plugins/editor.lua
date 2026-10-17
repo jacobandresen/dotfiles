@@ -1,8 +1,4 @@
 return {
-  -- disable neo-tree: use the Snacks explorer instead (enabled via the
-  -- snacks_explorer extra in lazyvim.json, <leader>e)
-  { "nvim-neo-tree/neo-tree.nvim", enabled = false },
-
   -- tmux/nvim split navigation. Mapped via `keys` so LazyVim's own
   -- <C-h/j/k/l> window maps step aside (they'd otherwise override these).
   {
@@ -13,82 +9,6 @@ return {
       { "<C-j>", "<cmd>NvimTmuxNavigateDown<cr>", desc = "Go to Lower Window/Pane" },
       { "<C-k>", "<cmd>NvimTmuxNavigateUp<cr>", desc = "Go to Upper Window/Pane" },
       { "<C-l>", "<cmd>NvimTmuxNavigateRight<cr>", desc = "Go to Right Window/Pane" },
-    },
-  },
-
-  -- folding
-  {
-    "kevinhwang91/nvim-ufo",
-    event = { "BufReadPost", "BufNewFile" },
-    dependencies = { "kevinhwang91/promise-async" },
-    config = function()
-      local ufo = require("ufo")
-
-      local function fold_handler(virtText, lnum, endLnum, width, truncate)
-        local newVirtText = {}
-        local suffix = (" 󰁂 %d "):format(endLnum - lnum)
-        local sufWidth = vim.fn.strdisplaywidth(suffix)
-        if width <= sufWidth then
-          return { { truncate(tostring(endLnum - lnum), math.max(0, width)), "MoreMsg" } }
-        end
-        local targetWidth = width - sufWidth
-        local curWidth = 0
-        for _, chunk in ipairs(virtText) do
-          local chunkText = chunk[1]
-          local chunkWidth = vim.fn.strdisplaywidth(chunkText)
-          if targetWidth > curWidth + chunkWidth then
-            table.insert(newVirtText, chunk)
-          else
-            chunkText = truncate(chunkText, targetWidth - curWidth)
-            local hlGroup = chunk[2]
-            table.insert(newVirtText, { chunkText, hlGroup })
-            chunkWidth = vim.fn.strdisplaywidth(chunkText)
-            if curWidth + chunkWidth < targetWidth then
-              suffix = suffix .. (" "):rep(targetWidth - curWidth - chunkWidth)
-            end
-            break
-          end
-          curWidth = curWidth + chunkWidth
-        end
-        table.insert(newVirtText, { suffix, "MoreMsg" })
-        return newVirtText
-      end
-
-      ufo.setup({
-        provider_selector = function(_, _, _)
-          return { "treesitter", "indent" }
-        end,
-        fold_virt_text_handler = fold_handler,
-        close_fold_kinds_for_ft = { default = { "imports", "comments" } },
-      })
-
-      vim.keymap.set("n", "zR", ufo.openAllFolds, { desc = "Open All Folds" })
-      vim.keymap.set("n", "zM", ufo.closeAllFolds, { desc = "Close All Folds" })
-      vim.keymap.set("n", "zr", ufo.openFoldsExceptKinds, { desc = "Open Folds (except imports/comments)" })
-      vim.keymap.set("n", "zm", ufo.closeFoldsWith, { desc = "Close Folds With Level" })
-    end,
-  },
-
-  -- K peeks a closed fold, otherwise hovers. Must go through LazyVim's LSP
-  -- keys: a plain keymap would be shadowed by its buffer-local K on attach.
-  {
-    "neovim/nvim-lspconfig",
-    opts = {
-      servers = {
-        ["*"] = {
-          keys = {
-            {
-              "K",
-              function()
-                if not require("ufo").peekFoldedLinesUnderCursor() then
-                  vim.lsp.buf.hover()
-                end
-              end,
-              desc = "Peek Fold / Hover",
-            },
-          },
-        },
-      },
     },
   },
 
@@ -145,17 +65,9 @@ return {
       { "tpope/vim-dadbod", cmd = "DB" },
       { "kristijanhusak/vim-dadbod-completion", ft = { "sql", "mysql", "plsql" } },
     },
-    cmd = { "DBUI", "DBUIToggle", "DBUIClose", "DBUIAddConnection", "DBUIFindBuffer", "DBUIRenameBuffer", "DBUILastQueryInfo" },
+    cmd = { "DBUI", "DBUIToggle", "DBUIClose" },
     keys = {
-      { "<M-u>", "<cmd>DBUIToggle<cr>", desc = "Toggle Database UI" },
       { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
-      { "<leader>Da", "<cmd>DBUIAddConnection<cr>", desc = "DB Add Connection" },
-      { "<leader>Dc", function() require("util.db").edit_connections() end, desc = "DB Edit Connections" },
-      { "<leader>Df", function() require("util.db").in_query("DBUIFindBuffer")() end, desc = "DB Find Buffer" },
-      { "<leader>Dr", function() require("util.db").in_query("DBUIRenameBuffer")() end, desc = "DB Rename Buffer" },
-      { "<leader>Di", "<cmd>DBUILastQueryInfo<cr>", desc = "DB Last Query Info" },
-      { "<leader>Ds", function() require("util.db").query_action("<Plug>(DBUI_SaveQuery)")() end, desc = "DB Save Query" },
-      { "<leader>Db", function() require("util.db").query_action("<Plug>(DBUI_EditBindParameters)")() end, desc = "DB Edit Bind Parameters" },
       -- the selection, or the whole buffer, against the buffer's database
       { "<leader>De", function() require("util.db").execute("%") end, desc = "DB Execute Query" },
       { "<leader>De", function() require("util.db").execute("'<,'>") end, mode = "x", desc = "DB Execute Selection" },
@@ -166,8 +78,6 @@ return {
       vim.g.db_ui_show_help = 0
       -- Saving is separate from executing; avoid accidental duplicate writes.
       vim.g.db_ui_execute_on_save = 0
-      -- Keep SQL shortcuts in the Database (Space D) group.
-      vim.g.db_ui_disable_mappings_sql = 1
       vim.api.nvim_create_autocmd("FileType", {
         group = vim.api.nvim_create_augroup("dbui_keys", { clear = true }),
         pattern = "dbui",

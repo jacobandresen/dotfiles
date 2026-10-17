@@ -23,20 +23,10 @@ adapters, formatters).
   Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
+The generated `lazy-lock.json` is local and ignored by git.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.
-`<leader>cF` requests server-provided `source.fixAll` actions. For Go it also
-accepts `source.organizeImports` when no fix-all action is available. If the
-server has neither, it uses GCC fix-its for saved C/C++ files, Ruff for Python,
-goimports for Go, ESLint (in configured projects) or Biome for JS/TS, and
-machine-applicable `cargo clippy` suggestions for saved Rust files (or
-`cargo check` when Clippy is unavailable). CLI fallbacks
-edit the current buffer; Rust and C/C++ need the file saved first. ESLint and
+`<leader>cF` applies a server-provided `source.fixAll` action. ESLint and
 Biome LSP servers start only in projects with their respective config files.
-
-## SDL game dev (`lua/plugins/lsp.lua`)
-
-- **pkg-config** — used by `<leader>rr` to build and run the current SDL
-  C/C++ file
 
 ## Debugging (`lua/plugins/dap.lua`)
 
@@ -61,18 +51,18 @@ Install the client for the databases you use: **sqlite3** for SQLite, **psql**
 for PostgreSQL, or **mysql** for MySQL/MariaDB. Dadbod uses these executables;
 Mason does not install them.
 
-`Space D u` opens the drawer; `Space D a` adds a connection. Press `R` in the
-drawer after adding or editing connections. `Space D f` assigns an existing
-SQL buffer to a connection and locates it in the drawer.
+`Space D u` opens the drawer. Press `A` there to add a connection, and `R`
+after editing connections. Use `:DBUIFindBuffer` to assign an existing SQL
+buffer to a connection and locate it in the drawer.
 
 `Space D e` executes the whole query buffer, or selected lines in Visual mode.
-DBUI queries support `:parameters` and record the last query (`Space D i`).
-`Space D b` edits parameter values; `Space D s` saves a scratch query in its
-connection's saved queries. Saving SQL does **not** execute it. These replace
-Dadbod UI's default SQL shortcuts `Space S`, `Space E` and `Space W`.
+DBUI queries support `:parameters` and record the last query
+(`:DBUILastQueryInfo`). Dadbod UI's buffer-local `Space E` edits bind
+parameters and `Space W` saves a scratch query. Saving SQL does **not**
+execute it.
 
 Connections and saved queries live under `stdpath("data")/db_ui`, outside this
-repository. `Space D c` edits the saved connections JSON. Standalone SQL can
+repository. Standalone SQL can
 also use Dadbod's `b:db`, `g:db`, `w:db`, `t:db` or `DATABASE_URL` connection.
 
 Run `python3 nvim/tests/dadbod.py` from the repository root to check the real
@@ -121,8 +111,6 @@ to compose files (mapped in `lua/config/options.lua`).
 - Roslyn compiler/analyzer diagnostics cover open files; reference code lenses are off.
 - Rust uses default Cargo features and `cargo check`; `<leader>rc` runs Clippy
   in a terminal. Configure additional Cargo features per project when needed.
-- Folding loads when opening a buffer, rather than on an empty startup.
-- One shared timer refreshes visible log/JSONL buffers; hidden logs refresh
-  when displayed again.
+- LazyVim provides folding. Log/JSONL buffers reload on focus or buffer entry.
 
 Use `:Lazy profile` to inspect actual plugin load times and loading triggers.

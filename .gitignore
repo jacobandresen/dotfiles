@@ -20,6 +20,7 @@ pi/agent/install/
 go/telemetry/
 
 # Editor
+nvim/lazy-lock.json
 *.swp
 *.swo
 .viminfo

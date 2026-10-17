@@ -1,4 +1,4 @@
--- Dadbod helpers for the <leader>D keymaps in plugins/editor.lua.
+-- Execute SQL through Dadbod UI when possible to retain bind parameters and history.
 local M = {}
 
 local sql = { sql = true, mysql = true, plsql = true }
@@ -40,39 +40,6 @@ function M.execute(range)
     run_mapping(mapping)
   else
     vim.cmd(range .. "DB")
-  end
-end
-
-function M.query_action(plug)
-  return function()
-    if not query_buffer() then return end
-    local mapping = vim.fn.maparg(plug, "n", false, true)
-    if not vim.b.dbui_db_key_name or not mapping.rhs then
-      return vim.notify("This action needs a database UI query (Space D u); use :write for an existing SQL file", vim.log.levels.WARN)
-    end
-    run_mapping(mapping)
-  end
-end
-
--- the connections Space D a saved (db_ui_save_location, outside git)
-function M.edit_connections()
-  require("lazy").load({ plugins = { "vim-dadbod-ui" } })
-  local file = vim.g.db_ui_save_location .. "/connections.json"
-  if vim.fn.filereadable(file) == 0 then
-    return vim.notify("No saved connections yet - add one with Space D a", vim.log.levels.WARN)
-  end
-  vim.cmd.edit(vim.fn.fnameescape(file))
-  vim.notify("Press R in the database UI to reload it after saving")
-end
-
--- a DBUI command that needs a query buffer, e.g. M.in_query("DBUIRenameBuffer")
-function M.in_query(command)
-  return function()
-    if not query_buffer() then return end
-    if command == "DBUIRenameBuffer" and not vim.b.dbui_db_key_name then
-      return vim.notify("Open or assign this query in the database UI first (Space D f)", vim.log.levels.WARN)
-    end
-    vim.cmd(command)
   end
 end
 

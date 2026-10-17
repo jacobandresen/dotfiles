@@ -15,15 +15,11 @@ return {
     end,
   },
 
-  -- Markdown source in Edit mode, rendered text in View mode.
   {
     "MeanderingProgrammer/render-markdown.nvim",
     ft = { "markdown" },
-    init = function()
-      require("util.mdview").setup()
-    end,
     keys = {
-      { "<leader>um", function() require("util.mdview").toggle() end, ft = "markdown", desc = "Markdown View/Edit" },
+      { "<leader>um", "<cmd>RenderMarkdown buf_toggle<cr>", ft = "markdown", desc = "Toggle Markdown Rendering" },
     },
     opts = {
       enabled = false,

@@ -21,7 +21,7 @@ require("lazy").setup({
   },
   defaults = { lazy = false, version = false },
   install = { colorscheme = { "retrobox", "habamax" } },
-  -- Update explicitly with :Lazy update; startup keeps the locked versions.
+  -- Update plugins explicitly with :Lazy update.
   performance = {
     rtp = {
       disabled_plugins = {

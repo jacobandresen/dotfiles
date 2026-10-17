@@ -38,7 +38,9 @@ end, { desc = "Toggle File Explorer" })
 
 -- LSP restart next to LazyVim's <leader>cl (Lsp Info)
 map("n", "<leader>cL", "<cmd>lsp restart<cr>", { desc = "Restart LSP" })
-map("n", "<leader>cF", require("util.lsp").fix_all, { desc = "Fix All Diagnostics" })
+map("n", "<leader>cF", function()
+  vim.lsp.buf.code_action({ context = { only = { "source.fixAll" } }, apply = true })
+end, { desc = "Fix All Diagnostics" })
 
 -- text transforms (JSON/URL/HTML/Base64) on the selection or whole buffer
 local transform = require("util.transform")

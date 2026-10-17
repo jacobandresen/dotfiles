@@ -1,89 +1,7 @@
--- classic `#include <SDL.h>` needs an explicit -I into SDL2's headers; SDL3
--- resolves via the default path. Only matters with no compile_commands.json.
-local function clangd_fallback_flags()
-  local extra = {}
-  for _, dir in ipairs({ "/usr/include/SDL2", "/usr/local/include/SDL2", "/opt/homebrew/include/SDL2" }) do
-    if vim.fn.isdirectory(dir) == 1 then
-      table.insert(extra, "-I" .. dir)
-      break
-    end
-  end
-  return extra
-end
-
 local function roslyn_needs_mason()
   local mason_bin = vim.fn.stdpath("data") .. "/mason/bin/roslyn-language-server"
   return vim.fn.executable("roslyn-language-server") ~= 1 and vim.fn.executable(mason_bin) ~= 1
 end
-
--- SDL build & run: <leader>rr compiles the current C/C++ file against
--- whichever SDL version it #includes, then runs the binary in a terminal.
--- For quick experiments; real projects should use their own build system.
-local function sdl_run()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local file = vim.api.nvim_buf_get_name(bufnr)
-  if file == "" then
-    vim.notify("Save the file first", vim.log.levels.WARN)
-    return
-  end
-  vim.cmd("write")
-
-  local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-  local pc_cache = {}
-  local function pc_exists(pkg)
-    if pc_cache[pkg] == nil then
-      pc_cache[pkg] = vim.system({ "pkg-config", "--exists", pkg }):wait().code == 0
-    end
-    return pc_cache[pkg]
-  end
-
-  local pkgs = {}
-  if text:match("#include%s*<SDL3/") and pc_exists("sdl3") then
-    table.insert(pkgs, "sdl3")
-    for _, extra in ipairs({ "SDL3_image", "SDL3_ttf", "SDL3_mixer" }) do
-      if text:match("#include%s*<" .. extra .. "/") and pc_exists(extra) then
-        table.insert(pkgs, extra)
-      end
-    end
-  elseif (text:match("#include%s*<SDL2/") or text:match("#include%s*<SDL%.h>")) and pc_exists("sdl2") then
-    table.insert(pkgs, "sdl2")
-    for _, extra in ipairs({ "SDL2_image", "SDL2_ttf", "SDL2_mixer" }) do
-      if text:match("#include%s*<" .. extra .. "%.h>") and pc_exists(extra) then
-        table.insert(pkgs, extra)
-      end
-    end
-  end
-
-  if #pkgs == 0 then
-    vim.notify("No SDL #include found (or its pkg-config file is missing)", vim.log.levels.WARN)
-    return
-  end
-
-  local function pc_flags(mode)
-    local cmd = { "pkg-config", mode }
-    vim.list_extend(cmd, pkgs)
-    return vim.split(vim.trim(vim.fn.system(cmd)), "%s+", { trimempty = true })
-  end
-
-  local cxx = vim.bo[bufnr].filetype == "cpp"
-  local compiler = cxx and "c++" or "cc"
-  local out = vim.fn.tempname()
-  local cmd = { compiler, "-std=" .. (cxx and "c++17" or "c11"), "-Wall", "-Wextra", "-g", file }
-  vim.list_extend(cmd, pc_flags("--cflags"))
-  vim.list_extend(cmd, { "-o", out })
-  vim.list_extend(cmd, pc_flags("--libs"))
-
-  local shell_cmd = table.concat(vim.tbl_map(vim.fn.shellescape, cmd), " ") .. " && " .. vim.fn.shellescape(out)
-  -- auto_close = false keeps compiler errors and program output on screen
-  require("snacks").terminal.open(shell_cmd, { auto_close = false, win = { position = "bottom" } })
-end
-
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = { "c", "cpp" },
-  callback = function(args)
-    vim.keymap.set("n", "<leader>rr", sdl_run, { buffer = args.buf, desc = "SDL Build & Run" })
-  end,
-})
 
 return {
   -- mason: non-LSP tools. LSP servers listed under nvim-lspconfig below are
@@ -125,9 +43,6 @@ return {
           -- identifier already typed - clangd has no code action for that.
           cmd = { "clangd", "--offset-encoding=utf-16", "--header-insertion=iwyu",
             "--background-index", "--clang-tidy", "--completion-style=detailed" },
-          init_options = {
-            fallbackFlags = clangd_fallback_flags(),
-          },
         },
         helm_ls = {
           settings = {

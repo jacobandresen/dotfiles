@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="nvim-dadbod-") as tmp:
         if result.returncode:
             raise SystemExit(result.returncode)
 
-    for case in ("direct", "connections", "integration"):
+    for case in ("direct", "integration"):
         run_case(case)
 
     if "--postgres" in sys.argv:
@@ -66,7 +66,6 @@ with tempfile.TemporaryDirectory(prefix="nvim-dadbod-") as tmp:
                            check=True, stdout=subprocess.DEVNULL)
             # Reuse the same UI tests with fresh connection persistence.
             (root / "data/nvim/db_ui/connections.json").unlink()
-            (root / "data/nvim/db_ui/fixture/saved-query.sql").unlink()
             run_case("integration")
         finally:
             subprocess.run(["pg_ctl", "-D", str(cluster), "-m", "immediate", "-w", "stop"],

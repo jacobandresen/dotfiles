@@ -57,9 +57,8 @@ Reapply Ollama settings with `make install-ollama`.
 
 ## Shared configuration and host state
 
-Neovim's `nvim/lazy-lock.json` is tracked so new installations use the same
-plugin versions. Update deliberately with `:Lazy update` and commit the
-resulting lockfile changes.
+Neovim plugins are managed by lazy.nvim without a tracked lockfile. Update
+them deliberately with `:Lazy update`.
 
 `make install-pi` writes only `~/.pi/agent/settings.json` and `models.json` and
 links the short shared instructions. Sessions and authentication stay in place.

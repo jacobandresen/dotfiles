@@ -45,12 +45,6 @@ if vim.env.DADBOD_TEST_CASE == "direct" then
   print("PASS: cold-start :DB")
   vim.cmd("qa!")
   return
-elseif vim.env.DADBOD_TEST_CASE == "connections" then
-  db.edit_connections()
-  check(notifications[#notifications]:find("No saved connections", 1, true), "Cold-start edit connections guard")
-  print("PASS: cold-start edit connections")
-  vim.cmd("qa!")
-  return
 end
 
 check(not require("lazy.core.config").plugins["vim-dadbod-ui"]._.loaded, "UI should be lazy")
@@ -62,18 +56,12 @@ check(notifications[#notifications]:find("No database", 1, true), "Unconnected S
 vim.cmd.enew()
 db.execute("%")
 check(notifications[#notifications]:find("Not a query buffer", 1, true), "Non-query guard")
-query({ "SELECT 1;" })
-db.in_query("DBUIRenameBuffer")()
-check(notifications[#notifications]:find("assign", 1, true), "Rename must reject unassigned SQL")
-db.edit_connections()
-check(notifications[#notifications]:find("No saved connections", 1, true), "Missing connections guard")
-
 local url = vim.env.DADBOD_TEST_URL or ("sqlite:" .. vim.env.DADBOD_TEST_DB)
 vim.g.dbs = { fixture = url }
 vim.cmd.DBUI()
 check(vim.bo.filetype == "dbui", "Drawer opens")
 local drawer = api.nvim_get_current_buf()
-for _, key in ipairs({ "Du", "Da", "Dc", "Df", "Dr", "Di", "Ds", "Db", "De" }) do
+for _, key in ipairs({ "Du", "De" }) do
   check(vim.fn.maparg("<Space>" .. key, "n") ~= "", "Database shortcut must exist: " .. key)
 end
 local function activate(text)
@@ -92,15 +80,14 @@ activate("New query")
 local buf = api.nvim_get_current_buf()
 check(vim.bo.filetype == "sql" and vim.b.dbui_db_key_name, "New query is connected")
 check(vim.fn.maparg("<Plug>(DBUI_ExecuteQuery)", "n") ~= "", "Native query mapping")
-check(vim.fn.maparg("<leader>S", "n", false, true).buffer ~= 1, "No conflicting default SQL mapping")
+check(vim.fn.maparg("<leader>W", "n", false, true).buffer == 1, "Native SQL save mapping")
+check(vim.fn.maparg("<leader>E", "n", false, true).buffer == 1, "Native bind parameter mapping")
 execute(buf, { "SELECT name FROM people WHERE id = 1;" }, "Ada")
 api.nvim_set_current_buf(result("Ada"))
 check(vim.fn["db_ui#statusline"]() ~= nil, "Result metadata")
 db.execute("%")
 check(notifications[#notifications]:find("Not a query buffer", 1, true), "Results must not be executable")
 api.nvim_set_current_buf(buf)
--- Editing an empty parameter set must explain itself without an exception.
-db.query_action("<Plug>(DBUI_EditBindParameters)")()
 vim.b.dbui_bind_params = { [":id"] = "2" }
 execute(buf, { "SELECT name FROM people WHERE id = :id;" }, "Grace")
 vim.cmd.DBUILastQueryInfo()
@@ -124,15 +111,6 @@ api.nvim_buf_set_lines(buf, 0, -1, false, { "INSERT INTO people VALUES (5, 'Save
 vim.cmd.write()
 vim.wait(100)
 check(scalar("SELECT count(*) FROM people;") == "3", "Saving must not execute")
--- Answer the real save prompt, then verify disk content and reassignment.
-vim.fn.feedkeys("saved-query.sql\r", "nt")
-db.query_action("<Plug>(DBUI_SaveQuery)")()
-check(vim.fn.expand("%:t") == "saved-query.sql", "Save query opens the saved file")
-check(vim.fn.readfile(vim.fn.expand("%"))[1]:find("Save only", 1, true), "Saved SQL content")
-check(vim.b.dbui_db_key_name ~= nil, "Saved query retains its connection")
-check(scalar("SELECT count(*) FROM people;") == "3", "Save query must not execute")
-buf = api.nvim_get_current_buf()
-
 -- Real Blink provider: verify schema/table and column completions.
 require("lazy").load({ plugins = { "blink.cmp" } })
 local source = require("vim_dadbod_completion.blink").new()
@@ -166,7 +144,7 @@ vim.fn.feedkeys("sqlite:" .. vim.env.DADBOD_TEST_SECOND_DB .. "\r\21persisted\r"
 vim.cmd.DBUIAddConnection()
 local persisted = vim.json.decode(table.concat(vim.fn.readfile(vim.g.db_ui_save_location .. "/connections.json"), "\n"))
 check(persisted[1].name == "persisted", "Add connection persists its name")
-db.edit_connections()
+vim.cmd.edit(vim.fn.fnameescape(vim.g.db_ui_save_location .. "/connections.json"))
 check(vim.fn.expand("%:t") == "connections.json", "Edit saved connections")
 vim.cmd.DBUIClose()
 vim.cmd.DBUIToggle()
@@ -174,5 +152,5 @@ check(vim.bo.filetype == "dbui", "Toggle reopens drawer")
 vim.cmd("normal R")
 local connections = vim.fn["db_ui#connections_list"]()
 check(vim.iter(connections):any(function(connection) return connection.name == "persisted" end), "Saved connections reload into the drawer: " .. vim.inspect(connections))
-print("PASS: Dadbod real database queries, visual selection, bind parameters, history, completion, persistence, guards and drawer")
+print("PASS: Dadbod queries, visual selection, bind parameters, history, completion, connections, guards and drawer")
 vim.cmd("qa!")

@@ -21,21 +21,6 @@ local function add_watch()
   end)
 end
 
--- Some terminals report Shift+F-keys as F13-F24.
-local function fkey_specs(specs)
-  local out = {}
-  for _, spec in ipairs(specs) do
-    out[#out + 1] = spec
-    local number = spec[1]:match("^<S%-F(%d+)>$")
-    if number then
-      local alias = vim.deepcopy(spec)
-      alias[1] = ("<F%d>"):format(tonumber(number) + 12)
-      out[#out + 1] = alias
-    end
-  end
-  return out
-end
-
 local function lldb_launch(name, dir)
   return {
     name = name,
@@ -63,7 +48,7 @@ return {
     dependencies = {
       { "rcarriga/nvim-dap-ui", dependencies = { "nvim-neotest/nvim-nio" } },
     },
-    keys = fkey_specs({
+    keys = {
       { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Run to Cursor" },
       { "<S-F4>", evaluate, desc = "Evaluate", mode = { "n", "v" } },
       { "<F5>",   function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
@@ -86,51 +71,10 @@ return {
       { "<leader>ds",  function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
       { "<leader>de",  evaluate, desc = "Eval", mode = { "n", "v" } },
       { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
-    }),
+    },
     config = function()
       local dap, dapui = require("dap"), require("dapui")
-      dapui.setup({
-        icons = { expanded = "▾", collapsed = "▸", current_frame = "▸" },
-        mappings = {
-          expand = { "<CR>", "<2-LeftMouse>" },
-          open = "o",
-          remove = "d",
-          edit = "e",
-          repl = "r",
-          toggle = "t",
-        },
-        layouts = {
-          {
-            elements = {
-              { id = "scopes",      size = 0.35 },
-              { id = "breakpoints", size = 0.20 },
-              { id = "stacks",      size = 0.25 },
-              { id = "watches",     size = 0.20 },
-            },
-            size = 45,
-            position = "left",
-          },
-          {
-            elements = {
-              { id = "repl",    size = 0.5 },
-              { id = "console", size = 0.5 },
-            },
-            size = 12,
-            position = "bottom",
-          },
-        },
-        floating = {
-          max_height = 0.9,
-          max_width = 0.9,
-          border = "rounded",
-          mappings = { close = { "q", "<Esc>" } },
-        },
-      })
-      -- TP marks breakpoint lines red and the execution point with a cyan bar
-      vim.fn.sign_define("DapBreakpoint", { text = "●", texthl = "DiagnosticError", linehl = "DapBreakpointLine" })
-      vim.fn.sign_define("DapBreakpointCondition", { text = "◆", texthl = "DiagnosticError", linehl = "DapBreakpointLine" })
-      vim.fn.sign_define("DapLogPoint", { text = "◉", texthl = "DiagnosticInfo" })
-      vim.fn.sign_define("DapStopped", { text = "▶", texthl = "DiagnosticHint", linehl = "DapStoppedLine" })
+      dapui.setup()
 
       dap.listeners.after.event_initialized["dapui_config"] = function() dapui.open() end
       dap.listeners.before.event_terminated["dapui_config"] = function() dapui.close() end
