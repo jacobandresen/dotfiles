@@ -1,7 +1,7 @@
 -- Only deviations from LazyVim's defaults (lazyvim/config/options.lua).
 local opt = vim.opt
 
-opt.background = "light"
+opt.background = "dark"
 opt.relativenumber = false
 opt.number = true
 opt.cursorline = false

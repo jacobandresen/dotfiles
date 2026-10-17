@@ -7,4 +7,4 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 ## AI
 
 Only pi-agent is available in a terminal split. It uses Ollama's
-`ministral-3:3b` model. Keep the AI menu and keymaps limited to pi.
+`qwen3.5-coding:4b` model. Keep the AI menu and keymaps limited to pi.

@@ -21,7 +21,7 @@ import urllib.request
 
 import pi_config
 import hashes
-from host_tools import HOME, ROOT, api_json, api_ready, coding_model, has_model, ollama_api, ram_profile, run
+from host_tools import HOME, ROOT, api_json, api_ready, coding_base_model, coding_model, has_model, ollama_api, ram_profile, run
 
 DOCKER_APP = Path("/Applications/Docker.app")
 OLLAMA_APP = Path("/Applications/Ollama.app")
@@ -453,7 +453,8 @@ def start_ollama():
 
 def use_model(args):
     model = coding_model()
-    keepalive = "4h"
+    base_model = coding_base_model()
+    keepalive = -1
     print(f"Setting up Ollama and pi-agent: {model}")
     if not shutil.which("ollama"):
         fail("Ollama not found — install it first.")
@@ -462,7 +463,7 @@ def use_model(args):
             print(f"  [DRY-RUN] Would start Ollama at {ollama_api()}")
             print(f"  [DRY-RUN] Would ensure {model} is pulled and loaded (keep-alive {keepalive})")
         else:
-            print(f"  {model} is present" if has_model(model) else f"  [DRY-RUN] Would pull {model}")
+            print(f"  {model} is present" if has_model(model) else f"  [DRY-RUN] Would pull {base_model} and create {model}")
             print(f"  [DRY-RUN] Would load {model} (keep-alive {keepalive})")
         print(f"  [DRY-RUN] Would configure pi-agent for {model}")
         return
@@ -476,13 +477,19 @@ def use_model(args):
     if not api_ready():
         fail(f"Ollama unreachable at {ollama_api()}")
     print(f"  Ollama responding at {ollama_api()}")
-    if has_model(model):
-        print(f"  {model} is present")
-    else:
-        print(f"  pulling {model}...")
-        run("ollama", "pull", model)
+    if not has_model(base_model):
+        print(f"  pulling {base_model}...")
+        run("ollama", "pull", base_model)
+    print(f"  updating {model} from the Modelfile...")
+    run("ollama", "create", model, "-f", str(ROOT / "ollama/Coding.Modelfile"))
     print(f"  loading {model} (keep-alive {keepalive})...")
-    response = api_json("/api/generate", {"model": model, "prompt": "hi", "stream": False, "think": False, "keep_alive": keepalive}, timeout=900)
+    response = api_json("/api/chat", {
+        "model": model,
+        "messages": [{"role": "user", "content": "hi"}],
+        "stream": False,
+        "think": False,
+        "keep_alive": keepalive,
+    }, timeout=900)
     if response.get("error"):
         fail(response["error"])
     print(f"  {model} loaded")
@@ -497,9 +504,15 @@ def verify_model(args):
     failed = False
     for model in models:
         if not has_model(model):
-            print(f"  pulling {model}...", file=sys.stderr)
-            if run("ollama", "pull", model, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+            print(f"  creating {model}...", file=sys.stderr)
+            if not has_model(coding_base_model()) and run("ollama", "pull", coding_base_model(), check=False,
+                                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
                 print(f"{model:22} {'-':8} {'-':10} {'-':9} PULL FAILED")
+                failed = True
+                continue
+            if run("ollama", "create", model, "-f", str(ROOT / "ollama/Coding.Modelfile"), check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                print(f"{model:22} {'-':8} {'-':10} {'-':9} CREATE FAILED")
                 failed = True
                 continue
         work = Path(tempfile.mkdtemp())

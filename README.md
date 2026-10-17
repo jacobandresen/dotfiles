@@ -1,7 +1,7 @@
 # Dotfiles
 
 Retro terminal configuration for Neovim, Midnight Commander, kitty, zsh, and
-the [pi](https://pi.dev) coding agent with local Ollama `ministral-3:3b`.
+the [pi](https://pi.dev) coding agent with local Ollama `qwen3.5-coding:4b`.
 
 ## Install
 
@@ -12,7 +12,7 @@ make install
 ```
 
 This installs dependencies, links configs, and configures Ollama and pi-agent
-for `ministral-3:3b`. On macOS,
+for `qwen3.5-coding:4b`. On macOS,
 Docker Desktop is optional:
 
 ```sh
@@ -34,21 +34,24 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 
 ## Included
 
-- **Neovim** — LazyVim with a Solarized interface, LSP, debugging, database
-  tools, and pi-agent.
+- **Neovim** — LazyVim with the dark Retrobox theme, LSP, debugging,
+  database tools, and a matching pi-agent terminal.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
 - **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching retro terminal
   colors, a 120×40 kitty layout, a DOS-style prompt, and a cat-eared `λ ~/`
   launcher icon (`kitty.app.png` on macOS).
-- **pi** — configured to use Ollama `ministral-3:3b`.
+- **pi** — configured to use Ollama `qwen3.5-coding:4b`.
 
 ## Local model
 
 ```sh
-make use-model      # pull and load ministral-3:3b; configure pi-agent
+make use-model      # pull Qwen 3.5 4B Q4, create the 16K coding model, configure pi
 make verify-model   # check that pi writes and runs a C program
 ```
+
+`make use-model` keeps the 16K coding model loaded for quick replies, using about
+3.5 GB of VRAM until Ollama stops or loads another model.
 
 Reapply Ollama settings with `make install-ollama`.
 

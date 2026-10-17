@@ -1,5 +1,4 @@
--- Dadbod helpers for the Database menu (turbo/menus.lua) and the <leader>D
--- keymaps (plugins/editor.lua).
+-- Dadbod helpers for the <leader>D keymaps in plugins/editor.lua.
 local M = {}
 
 local sql = { sql = true, mysql = true, plsql = true }

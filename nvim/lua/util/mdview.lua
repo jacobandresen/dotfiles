@@ -1,7 +1,6 @@
 -- Markdown View/Edit modes. Edit shows the source; View renders it with
 -- render-markdown.nvim (every line, the cursor line too), read-only and
--- soft-wrapped like a document. Switch with the [ View ]/[ Edit ] button in
--- the window frame (turbo/chrome.lua), <leader>um or the Shift+F10 local menu.
+-- soft-wrapped like a document. Toggle with <leader>um.
 local M = {}
 
 -- window options View changes, restored when going back to Edit
@@ -53,7 +52,7 @@ function M.set(buf, view)
   end
   if view and vim.bo[buf].modified then
     -- View is read-only; keep the unsaved edits visible but say so
-    vim.notify("Unsaved changes - they are shown, save with F2 in Edit mode")
+    vim.notify("Unsaved changes are shown; save before switching to View mode")
   end
   vim.b[buf].md_view = view
   vim.bo[buf].modifiable = not view
@@ -71,32 +70,8 @@ function M.toggle(buf)
   M.set(buf, not M.is_view(buf))
 end
 
--- the Edit/View switch in the window frame; minwid is win * 2 + (1 for View)
-function _G.TurboMarkdownSet(n)
-  local win, view = math.floor(n / 2), n % 2 == 1
-  vim.schedule(function()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_set_current_win(win)
-      local buf = vim.api.nvim_win_get_buf(win)
-      if M.is_view(buf) ~= view then
-        M.set(buf, view)
-      end
-    end
-  end)
-end
-
--- statusline markup for the switch, the active mode drawn as a TP button
-function M.switch(win, buf)
-  local view = M.is_view(buf)
-  local function seg(label, is_view)
-    local hl = view == is_view and "%#TurboButton#" or "%#WinBar#"
-    return ("%%%d@v:lua.TurboMarkdownSet@%s %s %%#WinBar#%%X"):format(win * 2 + (is_view and 1 or 0), hl, label)
-  end
-  return seg("Edit", false) .. seg("View", true), 12
-end
-
 function M.setup()
-  local group = vim.api.nvim_create_augroup("turbo_mdview", { clear = true })
+  local group = vim.api.nvim_create_augroup("mdview", { clear = true })
   -- a View buffer shown in another window gets the View window options there too,
   -- and a window that switches to another buffer gets its own options back
   vim.api.nvim_create_autocmd("BufWinEnter", {

@@ -1,6 +1,6 @@
 {
   "defaultProvider": "ollama",
-  "defaultModel": "ministral-3:3b",
+  "defaultModel": "qwen3.5-coding:4b",
   "defaultThinkingLevel": "off",
-  "enabledModels": ["ollama/ministral-3:3b"]
+  "enabledModels": ["ollama/qwen3.5-coding:4b"]
 }

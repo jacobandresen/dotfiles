@@ -1,8 +1,8 @@
 local M = {}
 
 local command = {
-  "pi", "--theme", vim.fn.stdpath("config") .. "/themes/pi-solarized.json",
-  "--use-theme", "solarized",
+  "pi", "--theme", vim.fn.stdpath("config") .. "/themes/pi-retrobox.json",
+  "--use-theme", "retrobox",
 }
 
 local function opts()

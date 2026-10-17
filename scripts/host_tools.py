@@ -27,7 +27,11 @@ def ram_profile():
 
 
 def coding_model():
-    return "ministral-3:3b"
+    return "qwen3.5-coding:4b"
+
+
+def coding_base_model():
+    return "qwen3.5:4b-q4_K_M"
 
 
 def ollama_api():

@@ -169,7 +169,7 @@ return {
       -- Keep SQL shortcuts in the Database (Space D) group.
       vim.g.db_ui_disable_mappings_sql = 1
       vim.api.nvim_create_autocmd("FileType", {
-        group = vim.api.nvim_create_augroup("turbo_dbui_keys", { clear = true }),
+        group = vim.api.nvim_create_augroup("dbui_keys", { clear = true }),
         pattern = "dbui",
         callback = function(args)
           vim.keymap.set("n", "<Esc>", "<cmd>DBUIClose<cr>", {

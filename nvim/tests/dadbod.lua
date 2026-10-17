@@ -73,11 +73,8 @@ vim.g.dbs = { fixture = url }
 vim.cmd.DBUI()
 check(vim.bo.filetype == "dbui", "Drawer opens")
 local drawer = api.nvim_get_current_buf()
-for _, item in ipairs(require("turbo.menus").db) do
-  if type(item) == "table" and item.key then
-    local key = " " .. item.key:gsub("^Space ", ""):gsub(" ", "")
-    check(vim.fn.maparg(key, "n") ~= "", "Menu shortcut must exist: " .. item.key)
-  end
+for _, key in ipairs({ "Du", "Da", "Dc", "Df", "Dr", "Di", "Ds", "Db", "De" }) do
+  check(vim.fn.maparg("<Space>" .. key, "n") ~= "", "Database shortcut must exist: " .. key)
 end
 local function activate(text)
   api.nvim_set_current_buf(drawer)

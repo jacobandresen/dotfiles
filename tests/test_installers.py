@@ -75,15 +75,32 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(json.loads(settings.read_text())["memoryMiB"], 8192)
         self.assertEqual(json.loads((settings.parent / "settings-store.json.bak").read_text())["memoryMiB"], 4096)
 
-    def test_use_model_configures_pi_without_reprobing(self):
+    def test_use_model_refreshes_existing_variant_and_configures_pi(self):
         args = dotfiles.argparse.Namespace(dry_run=False)
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
              patch.object(dotfiles, "has_model", return_value=True), \
              patch.object(dotfiles, "api_json", return_value={}), \
+             patch.object(dotfiles, "run") as command, \
              patch.object(dotfiles.pi_config, "main") as install, contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
+        command.assert_called_once_with("ollama", "create", "qwen3.5-coding:4b", "-f",
+                                        str(REPO / "ollama/Coding.Modelfile"))
         install.assert_called_once_with([])
+
+    def test_use_model_pulls_missing_base_before_creating_variant(self):
+        args = dotfiles.argparse.Namespace(dry_run=False)
+        with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
+             patch.object(dotfiles, "api_ready", return_value=True), \
+             patch.object(dotfiles, "has_model", return_value=False), \
+             patch.object(dotfiles, "api_json", return_value={}), \
+             patch.object(dotfiles, "run") as command, \
+             patch.object(dotfiles.pi_config, "main"), contextlib.redirect_stdout(io.StringIO()):
+            dotfiles.use_model(args)
+        self.assertEqual([call.args for call in command.call_args_list], [
+            ("ollama", "pull", "qwen3.5:4b-q4_K_M"),
+            ("ollama", "create", "qwen3.5-coding:4b", "-f", str(REPO / "ollama/Coding.Modelfile")),
+        ])
 
     def test_matching_ollama_profile_keeps_app_running(self):
         home = self.root / "home"

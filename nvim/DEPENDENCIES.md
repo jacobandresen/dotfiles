@@ -18,9 +18,9 @@ adapters, formatters).
 
 ## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
-- **pi-agent** with Ollama `ministral-3:3b` — `<leader>ap` toggles the terminal;
+- **pi-agent** with Ollama `qwen3.5-coding:4b` (derived from Qwen 3.5 4B Q4) — `<leader>ap` toggles the terminal;
   `<leader>as` sends the file or selection. Its Markdown output uses the
-  Solarized palette in `themes/pi-solarized.json`. Buffers reload on focus.
+  Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 `<leader>ff` respects ignore rules; `<leader>fI` includes ignored files.
@@ -118,7 +118,6 @@ to compose files (mapped in `lua/config/options.lua`).
 
 ## Performance defaults
 
-- Reference counts are off until toggled for the current buffer with `<leader>uR`.
 - Roslyn compiler/analyzer diagnostics cover open files; reference code lenses are off.
 - Rust uses default Cargo features and `cargo check`; `<leader>rc` runs Clippy
   in a terminal. Configure additional Cargo features per project when needed.

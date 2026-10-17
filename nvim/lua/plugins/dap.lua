@@ -2,6 +2,40 @@
 -- (js-debug) live here; C# is handled by nvim-dap-cs below.
 local mason = vim.fn.stdpath("data") .. "/mason"
 
+local function evaluate()
+  local mode = vim.fn.mode()
+  if not mode:match("^[vV\22]") then
+    return require("dapui").eval(nil, { enter = true })
+  end
+  vim.cmd("normal! \27")
+  local expression = table.concat(vim.fn.getregion(vim.fn.getpos("'<"), vim.fn.getpos("'>"), {
+    type = mode,
+    exclusive = vim.o.selection == "exclusive",
+  }), "\n")
+  if expression ~= "" then require("dapui").eval(expression, { enter = true }) end
+end
+
+local function add_watch()
+  vim.ui.input({ prompt = "Add watch: ", default = vim.fn.expand("<cword>") }, function(value)
+    if value and value ~= "" then require("dapui").elements.watches.add(value) end
+  end)
+end
+
+-- Some terminals report Shift+F-keys as F13-F24.
+local function fkey_specs(specs)
+  local out = {}
+  for _, spec in ipairs(specs) do
+    out[#out + 1] = spec
+    local number = spec[1]:match("^<S%-F(%d+)>$")
+    if number then
+      local alias = vim.deepcopy(spec)
+      alias[1] = ("<F%d>"):format(tonumber(number) + 12)
+      out[#out + 1] = alias
+    end
+  end
+  return out
+end
+
 local function lldb_launch(name, dir)
   return {
     name = name,
@@ -29,18 +63,13 @@ return {
     dependencies = {
       { "rcarriga/nvim-dap-ui", dependencies = { "nvim-neotest/nvim-nio" } },
     },
-    -- fkeys: also bind the F13-F60 names some terminals send (turbo/init.lua)
-    keys = require("turbo").fkey_specs({
-      -- Debug menu (lua/turbo/menus.lua). TP's F4/F7/F8 stay; its Ctrl+ and
-      -- Alt+F-keys move to Shift, since GNOME and KDE take those (Ctrl+F1-F4
-      -- switch desktops, Ctrl+F7-F10 Present Windows, Alt+F5-F10 move/resize
-      -- the window). F5 toggles breakpoints (Delphi), Shift+F5 stops.
+    keys = fkey_specs({
       { "<F4>",   function() require("dap").run_to_cursor() end,         desc = "Run to Cursor" },
-      { "<S-F4>", function() require("turbo.menus").evaluate() end, desc = "Evaluate", mode = { "n", "v" } },
+      { "<S-F4>", evaluate, desc = "Evaluate", mode = { "n", "v" } },
       { "<F5>",   function() require("dap").toggle_breakpoint() end,     desc = "Toggle Breakpoint" },
       { "<S-F5>", function() require("dap").terminate() end,             desc = "Stop" },
       { "<F7>",   function() require("dap").step_into() end,             desc = "Step Into" },
-      { "<S-F7>", function() require("turbo.menus").add_watch() end, desc = "Add Watch" },
+      { "<S-F7>", add_watch, desc = "Add Watch" },
       { "<F8>",   function() require("dap").step_over() end,             desc = "Step Over" },
       { "<S-F8>", function() require("dap").step_out() end,              desc = "Step Out" },
       { "<S-F9>", function() require("dap").continue() end,              desc = "Start / Continue" },
@@ -55,7 +84,7 @@ return {
       { "<leader>dr",  function() require("dap").restart() end,          desc = "Restart" },
       { "<leader>du",  function() require("dapui").toggle() end,         desc = "Toggle UI" },
       { "<leader>ds",  function() require("dapui").float_element("stacks", { enter = true }) end, desc = "Call Stack" },
-      { "<leader>de",  function() require("turbo.menus").evaluate() end, desc = "Eval", mode = { "n", "v" } },
+      { "<leader>de",  evaluate, desc = "Eval", mode = { "n", "v" } },
       { "<leader>dR",  function() require("dap").repl.open() end,        desc = "REPL" },
     }),
     config = function()

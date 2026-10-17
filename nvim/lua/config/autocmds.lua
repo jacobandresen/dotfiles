@@ -73,7 +73,7 @@ local function close_sidebars(keep)
 end
 
 vim.api.nvim_create_autocmd("FileType", {
-  group = vim.api.nvim_create_augroup("turbo_one_sidebar", { clear = true }),
+  group = vim.api.nvim_create_augroup("one_sidebar", { clear = true }),
   pattern = { "snacks_picker_list", "dbui" },
   callback = function(ev)
     vim.schedule(function()
@@ -92,7 +92,7 @@ vim.api.nvim_create_autocmd("FileType", {
 -- Agents edit files on disk from their terminal; pick the changes up when
 -- focus comes back to a buffer.
 vim.api.nvim_create_autocmd({ "FocusGained", "TermLeave", "BufEnter" }, {
-  group = vim.api.nvim_create_augroup("turbo_agent_reload", { clear = true }),
+  group = vim.api.nvim_create_augroup("agent_reload", { clear = true }),
   callback = function()
     if vim.fn.mode() ~= "c" and vim.bo.buftype == "" then vim.cmd("checktime") end
   end,

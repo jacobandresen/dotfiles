@@ -4,16 +4,16 @@
       "baseUrl": "http://127.0.0.1:11434/v1",
       "api": "openai-completions",
       "apiKey": "not-needed",
-      "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": false},
+      "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": false, "thinkingFormat": "qwen-chat-template"},
       "models": [
         {
-          "id": "ministral-3:3b",
-          "name": "Ministral 3B",
+          "id": "qwen3.5-coding:4b",
+          "name": "Qwen 3.5 4B Coding",
           "input": ["text"],
-          "reasoning": false,
-          "contextWindow": 8192,
-          "maxTokens": 2048,
-          "samplingParams": {"temperature": 0.15}
+          "reasoning": true,
+          "contextWindow": 16384,
+          "maxTokens": 4096,
+          "samplingParams": {"temperature": 0.6}
         }
       ]
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the local pi-agent configuration for Ministral 3B."""
+"""Install the local pi-agent configuration for Qwen 3.5 4B."""
 
 import argparse
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = "ministral-3:3b"
+MODEL = "qwen3.5-coding:4b"
 
 
 def write_json(path, value):

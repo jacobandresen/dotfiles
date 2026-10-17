@@ -194,7 +194,7 @@ return {
         require("snacks").terminal.open({ "cargo", "clippy" }, { cwd = LazyVim.root(), auto_close = false })
       end, ft = "rust", desc = "Cargo Clippy" },
     },
-    ft = { "rust" }, -- build with F9 / Compile > Make (turbo/menus.lua)
+    ft = { "rust" },
     config = function()
       vim.g.rustaceanvim = {
         server = {

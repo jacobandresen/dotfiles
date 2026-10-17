@@ -29,10 +29,11 @@ class PiConfigTests(unittest.TestCase):
         self.assertEqual(before, (self.agent / "models.json").stat().st_mtime_ns)
         self.assertEqual((self.agent / "auth.json").read_text(), '{"private": true}')
         self.assertEqual((self.agent / "sessions/history.jsonl").read_text(), "history")
-        self.assertEqual(json.loads((self.agent / "settings.json").read_text())["defaultModel"], "ministral-3:3b")
+        self.assertEqual(json.loads((self.agent / "settings.json").read_text())["defaultModel"], "qwen3.5-coding:4b")
         models = json.loads((self.agent / "models.json").read_text())["providers"]["ollama"]["models"]
-        self.assertEqual([model["id"] for model in models], ["ministral-3:3b"])
-        self.assertEqual(models[0]["samplingParams"]["temperature"], 0.15)
+        self.assertEqual([model["id"] for model in models], ["qwen3.5-coding:4b"])
+        self.assertEqual(models[0]["contextWindow"], 16384)
+        self.assertEqual(models[0]["samplingParams"]["temperature"], 0.6)
         self.assertTrue((self.agent / "AGENTS.md").is_symlink())
 
     def test_repo_or_legacy_symlink_is_rejected(self):

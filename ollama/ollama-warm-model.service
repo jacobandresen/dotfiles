@@ -1,5 +1,5 @@
 [Unit]
-Description=Load Ministral 3B into Ollama
+Description=Load Qwen 3.5 4B into Ollama
 After=ollama.service
 Requires=ollama.service
 PartOf=ollama.service
