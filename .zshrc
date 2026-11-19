@@ -1,5 +1,5 @@
 export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="lambda"
+ZSH_THEME="awesomepanda"
 zstyle ':omz:update' mode disabled # disable automatic updates
 plugins=(git)
 if [ -r "$ZSH/oh-my-zsh.sh" ]; then

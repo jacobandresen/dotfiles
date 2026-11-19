@@ -24,7 +24,7 @@ map("n", "<leader>fI", function() Snacks.picker.files({ hidden = true, ignored =
 map("n", "<leader>sB", function() Snacks.picker.lines({ matcher = { fuzzy = false } }) end, { desc = "Buffer Lines (exact)" })
 
 -- lazydocker, next to LazyVim's <leader>gg (Lazygit)
-map("n", "<leader>gd", "<cmd>lua Snacks.lazydocker()<cr>", { desc = "Lazydocker" })
+map("n", "<leader>gd", function() Snacks.lazydocker() end, { desc = "Lazydocker" })
 
 -- Toggle the Snacks explorer from either its sidebar or the editing window.
 map("n", "<leader>e", function()

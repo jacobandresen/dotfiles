@@ -12,10 +12,7 @@ return {
     },
   },
 
-  -- formatting with conform.nvim
-  -- NOTE: LazyVim owns conform's `config` and drives format-on-save itself, so
-  -- this spec must only contribute `opts` (deep-merged into LazyVim's defaults).
-  -- Setting `config` or `format_on_save` here breaks LazyVim formatting.
+  -- formatters; LazyVim owns conform's config and format-on-save, so only opts here
   {
     "stevearc/conform.nvim",
     opts = {
@@ -39,12 +36,6 @@ return {
         go = { "goimports" }, -- goimports also does gofmt's formatting
       },
     },
-  },
-
-  -- TP's editor has no indentation guides.
-  {
-    "folke/snacks.nvim",
-    opts = { indent = { enabled = false } },
   },
 
   -- ensure parsers for every language we debug/edit are installed

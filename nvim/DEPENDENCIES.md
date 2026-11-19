@@ -111,6 +111,7 @@ to compose files (mapped in `lua/config/options.lua`).
 - Roslyn compiler/analyzer diagnostics cover open files; reference code lenses are off.
 - Rust uses default Cargo features and `cargo check`; `<leader>rc` runs Clippy
   in a terminal. Configure additional Cargo features per project when needed.
+- Inlay hints are off by default (`<leader>uh` toggles them).
 - LazyVim provides folding. Log/JSONL buffers reload on focus or buffer entry.
 
 Use `:Lazy profile` to inspect actual plugin load times and loading triggers.

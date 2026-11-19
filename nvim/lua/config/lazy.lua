@@ -22,10 +22,13 @@ require("lazy").setup({
   defaults = { lazy = false, version = false },
   install = { colorscheme = { "retrobox", "habamax" } },
   -- Update plugins explicitly with :Lazy update.
+  change_detection = { notify = false },
+  ui = { border = "rounded", backdrop = 100 },
   performance = {
     rtp = {
       disabled_plugins = {
         "gzip", "netrwPlugin", -- netrw: the Snacks explorer replaces it
+        "rplugin", -- remote-plugin providers are disabled in options.lua
         "tarPlugin", "tohtml", "tutor", "zipPlugin",
       },
     },
