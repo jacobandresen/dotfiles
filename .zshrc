@@ -11,6 +11,10 @@ fi
 # PATH (most-specific user bins first)
 export PATH="$HOME/.local/bin:$PATH"
 
+# Issue worktrees + pi. Use `git-pi start <issue>` in one terminal tab per issue.
+alias gdiff='git-pi diff'
+alias gwt='git-pi list'
+
 # Per-host development settings
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
 

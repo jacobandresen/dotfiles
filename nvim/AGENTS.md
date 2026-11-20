@@ -6,5 +6,6 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ## AI
 
-Only pi-agent is available in a terminal split. It uses Ollama's
-`qwen3.5-coding:4b` model. Keep the AI menu and keymaps limited to pi.
+Only pi-agent is available in a terminal split. Managed issue tabs use
+GitHub Copilot's `gpt-5.6-luna`, with the pinned pi-subagents extension for
+foreground delegation. Keep the AI menu and keymaps limited to pi.

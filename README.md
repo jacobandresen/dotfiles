@@ -42,6 +42,10 @@ launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
   colors, a 120×40 kitty layout, a DOS-style prompt, and a cat-eared `λ ~/`
   launcher icon (`kitty.app.png` on macOS).
 - **pi** — configured to use Ollama `qwen3.5-coding:4b`.
+- **Issue worktrees** — `git-pi start <issue>` creates an isolated worktree
+  and starts pi in it. Run the command in separate terminal tabs for several
+  issues; `git-pi list` shows them and `git-pi diff` gives a compact change
+  summary.
 
 ## Local model
 

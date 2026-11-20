@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  git-pi start <issue-or-name> [pi prompt...]
+  git-pi diff [base]
+  git-pi list
+
+start creates ../<repo>-worktrees/<name>, checks out issue/<name>, and runs pi
+inside that worktree. Run it once per issue in separate terminal tabs/panes.
+EOF
+  exit 2
+}
+
+repo_root() {
+  git rev-parse --show-toplevel
+}
+
+slugify() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//'
+}
+
+start_issue() {
+  local requested="${1:?issue or name is required}"
+  shift
+  local root name worktree branch repo_name prompt
+  root="$(repo_root)"
+  name="$(slugify "$requested")"
+  [ -n "$name" ] || { echo "Invalid issue name: $requested" >&2; exit 2; }
+  repo_name="$(basename "$root")"
+  worktree="$(dirname "$root")/${repo_name}-worktrees/$name"
+  branch="issue/$name"
+
+  if [ -e "$worktree" ]; then
+    echo "Worktree already exists: $worktree" >&2
+    exit 1
+  fi
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git worktree add "$worktree" "$branch"
+  else
+    git worktree add -b "$branch" "$worktree" HEAD
+  fi
+
+  prompt="${*:-Work on issue $requested. Inspect the repository, implement the change, and run the relevant tests.}"
+  printf 'Starting pi in %s\n' "$worktree"
+  cd "$worktree"
+  exec pi "$prompt"
+}
+
+compact_diff() {
+  local base="${1:-HEAD}" root
+  root="$(repo_root)"
+  printf '## %s (%s)\n' "$(basename "$root")" "$(git branch --show-current)"
+  git status --short
+  printf '\n'
+  if git diff --quiet "$base" --; then
+    echo "No tracked changes against $base."
+  else
+    git diff --shortstat "$base" --
+    git diff --name-status "$base" -- | while IFS=$'\t' read -r status path; do
+      printf '  %s %s\n' "$status" "$path"
+    done
+  fi
+}
+
+list_worktrees() {
+  git worktree list
+}
+
+case "${1:-}" in
+  start) shift; start_issue "$@" ;;
+  diff) shift; compact_diff "${1:-HEAD}" ;;
+  list) list_worktrees ;;
+  *) usage ;;
+esac

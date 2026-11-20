@@ -1,6 +1,6 @@
 {
-  "defaultProvider": "ollama",
-  "defaultModel": "qwen3.5-coding:4b",
-  "defaultThinkingLevel": "off",
-  "enabledModels": ["ollama/qwen3.5-coding:4b"]
+  "defaultProvider": "github-copilot",
+  "defaultModel": "gpt-5.6-luna",
+  "defaultThinkingLevel": "low",
+  "enabledModels": ["github-copilot/gpt-5.6-luna"]
 }

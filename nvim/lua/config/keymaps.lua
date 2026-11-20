@@ -25,6 +25,12 @@ map("n", "<leader>sB", function() Snacks.picker.lines({ matcher = { fuzzy = fals
 
 -- lazydocker, next to LazyVim's <leader>gg (Lazygit)
 map("n", "<leader>gd", function() Snacks.lazydocker() end, { desc = "Lazydocker" })
+map(
+  "n",
+  "<leader>gD",
+  function() require("util.pi_issues_ui").review(require("util.pi_issues").current()) end,
+  { desc = "Changed Files (Diff)" }
+)
 
 -- Toggle the Snacks explorer from either its sidebar or the editing window.
 map("n", "<leader>e", function()

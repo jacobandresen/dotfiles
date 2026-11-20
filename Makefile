@@ -1,5 +1,5 @@
 .PHONY: install deps doctor ram-profile use-model verify-model
-.PHONY: install-nvim install-zsh install-mc install-kitty install-pi update-pi install-ollama install-docker install-fonts
+.PHONY: install-nvim install-zsh install-mc install-kitty install-pi install-workflow update-pi install-ollama install-docker install-fonts
 .PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
 
 OS := $(shell uname -s)
@@ -8,7 +8,7 @@ CLI := $(PYTHON) "$(CURDIR)/scripts/dotfiles.py"
 DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
 
 install: deps
-	@$(MAKE) install-nvim install-zsh install-mc install-kitty
+	@$(MAKE) install-nvim install-zsh install-mc install-kitty install-workflow
 	@$(MAKE) install-ollama
 	@$(MAKE) install-docker
 	@$(MAKE) use-model
@@ -81,6 +81,11 @@ install-kitty:
 
 install-pi:
 	@$(PYTHON) ./scripts/pi_config.py
+
+install-workflow:
+	@mkdir -p "$(HOME)/.local/bin"
+	@ln -sfn "$(CURDIR)/scripts/git-pi" "$(HOME)/.local/bin/git-pi"
+	@echo "  ✓ ~/.local/bin/git-pi -> $(CURDIR)/scripts/git-pi"
 
 update-pi:
 	@pi update --all

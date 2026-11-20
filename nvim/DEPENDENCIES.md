@@ -15,12 +15,75 @@ adapters, formatters).
   Neovim colours
 - **[lazydocker](https://github.com/jesseduffield/lazydocker)** — `<leader>gd`
   opens it for containers/images/compose stacks. Installed by `make deps`.
+- **git-pi** — installed by `make install`; `git-pi start <issue>` creates an
+  isolated worktree and starts pi, while `<leader>gD` shows a compact diff.
 
 ## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
-- **pi-agent** with Ollama `qwen3.5-coding:4b` (derived from Qwen 3.5 4B Q4) — `<leader>ap` toggles the terminal;
+- **pi-agent** with GitHub Copilot `gpt-5.6-luna` — `<leader>ap` toggles the terminal;
   `<leader>as` sends the file or selection. Its Markdown output uses the
   Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.
+- **gh**, authenticated for the issue repository — issue selection and task bodies.
+- **Node.js/npm** — the pinned `pi-subagents@0.89.1` dependency. Run
+  `:PiIssuesSetup` once after installing this configuration. No package installation,
+  issue requests, or model calls run on editor startup. Pi 1.5.2 is integration-tested.
+
+### Daily issue workflow
+
+| Key | Action |
+| --- | --- |
+| `Space a i` | Pick issues; Tab selects several, Enter reviews the launch |
+| `Space a w` | Compact workspace panel; Enter opens code, `p` starts/focuses pi |
+| `Space a p` | Hide/show the issue's pi split without stopping it |
+| `Space a s` | Paste file/selection context into that issue's pi; Enter submits |
+| `Space a r` | Paste a foreground reviewer request using the existing extension |
+| `Space g D` | Wide diff left, changed files right |
+| `Space a q` | Confirm stopping owned agents and quit (`:PiQuit`) |
+
+The launch review shows repository, base commit, branches and paths. Press `s`
+to prepare and start, Enter to prepare without model calls, or `q` to cancel.
+Workspaces use sibling `<repo>-worktrees/<issue>/` directories and `issue/<number>`
+branches. Matching branches are reused only after this confirmation. Uncommitted
+changes in the main checkout are not copied. The initial limit is three live
+issue agents; extra issues are prepared, not queued for automatic execution.
+Override it explicitly with `vim.g.pi_issues = { max_agents = 2 }` in your options.
+
+The panel uses restrained status accents and cached file counts. `x` confirms
+stopping one agent, `r` refreshes, and `?` shows help. State describes the agent,
+not whether tests passed. Existing workspaces restore without starting agents;
+`p` resumes the exact saved conversation, without repeating the issue prompt.
+Files, branches and sessions are never automatically removed or published.
+
+Diff labels separate staged, unstaged and untracked files. `Ctrl-g` switches
+between working changes and all changes since the recorded issue base;
+`Ctrl-r` refreshes, `Ctrl-f`/`Ctrl-b` scroll the preview, and `Alt-w` cycles windows.
+Use the picker's `?` help for its preview-only/maximize controls. Binary files
+show Git's binary summary; untracked text gets a real addition diff.
+
+Context is a labeled buffer snapshot, including unsaved edits, bounded to 100 KB.
+Sending refuses files (including symlinks) outside the selected worktree and never
+starts another agent. Use `Ctrl-\ Ctrl-n` to leave terminal input for Neovim keys.
+Use `:PiQuit` for cancellable bulk shutdown: modified files and Cancel keep agents
+running. Ordinary/forced Neovim exits retain their normal semantics and stop owned
+jobs on actual exit, not during a failed quit attempt. After a crash, the next
+start offers lock recovery only if both recorded processes have exited.
+
+**Extension reuse:** pi-subagents supplies the foreground reviewer/scout/worker,
+tool execution, and result rendering. Neovim owns persistent issue tabs and
+top-level interactive pi processes because the extension's child inspectors are
+not attachable Neovim terminals. Managed tabs intentionally expose only direct,
+foreground, explicit-model delegation, not its detached/workflow launchers or
+inspector shortcuts. Existing personal pi settings/authentication are untouched.
+These workflow checks and worktrees are **not a permissions sandbox**; commands
+still have the user's filesystem, credentials, network and shared-service access.
+
+Focused checks, from the repository root (no hosted model requests):
+
+```sh
+timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issues.lua
+timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_layout.lua
+python3 nvim/tests/pi_extension.py
+```
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 The generated `lazy-lock.json` is local and ignored by git.
