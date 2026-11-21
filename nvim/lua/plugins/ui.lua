@@ -39,6 +39,7 @@ return {
       opts.sections.lualine_y = { "location" }
       opts.sections.lualine_z = {}
       table.insert(opts.sections.lualine_c, function() return require("util.pi_issues_ui").statusline() end)
+      table.insert(opts.sections.lualine_c, function() return require("util.testing").statusline() end)
     end,
   },
 
@@ -63,6 +64,7 @@ return {
       spec = {
         { "<leader>a", group = "ai" },
         { "<leader>D", group = "database" },
+        { "<leader>t", group = "tests" },
       },
     },
   },

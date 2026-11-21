@@ -58,7 +58,14 @@ return {
     },
     cmd = { "DBUI", "DBUIToggle", "DBUIClose" },
     keys = {
-      { "<leader>Du", "<cmd>DBUIToggle<cr>",        desc = "DB Toggle UI" },
+      {
+        "<leader>Du",
+        function()
+          require("util.sidebars").keep("database")
+          vim.cmd.DBUIToggle()
+        end,
+        desc = "DB Toggle UI",
+      },
       -- the selection, or the whole buffer, against the buffer's database
       { "<leader>De", function() require("util.db").execute("%") end, desc = "DB Execute Query" },
       { "<leader>De", function() require("util.db").execute("'<,'>") end, mode = "x", desc = "DB Execute Selection" },

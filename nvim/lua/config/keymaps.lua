@@ -38,6 +38,7 @@ map("n", "<leader>e", function()
   if #explorers > 0 then
     for _, picker in ipairs(explorers) do picker:close() end
   else
+    require("util.sidebars").keep("files")
     Snacks.explorer({ cwd = LazyVim.root() })
   end
 end, { desc = "Toggle File Explorer" })

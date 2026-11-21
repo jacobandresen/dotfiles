@@ -95,6 +95,113 @@ Biome LSP servers start only in projects with their respective config files.
 
 - **node** — runs Mason's `js-debug-adapter` for JS/TS debugging
 
+## Test Explorer (`lua/plugins/testing.lua`)
+
+[Neotest](https://github.com/nvim-neotest/neotest) provides an extensible,
+VS Code-style test sidebar on the left, status signs beside test definitions,
+and an output panel below the code on the right. The full-height sidebar uses
+subtle background contrast, compact headers and native status highlights.
+Only one sidebar is open per tab: opening Test Explorer, File Explorer or Dadbod
+closes the other two. Other tabs, running tests and SQL query buffers are
+unaffected. Neotest loads only when a test command is used.
+Opening the view discovers tests; it does not execute them or enable watch mode.
+Discovery searches test files recursively and resolves their project manifests,
+including separate backend and frontend repositories below one workspace.
+C# solutions, JS/TS runner roots, Python projects and Cargo crates
+appear together in the same tree; individual test files do not need to be open.
+For example, `:TestView ~/Projects/KAS` includes deeply nested backend unit
+projects and frontend packages. `:TestView!` rescans the current directory for
+new projects; `:TestView! ~/Projects/KAS` rescans that workspace.
+C# discovery reads source attributes through Treesitter; no discovery host or
+additional C# helper program is installed.
+
+| Key | Action |
+| --- | --- |
+| `Space t s` / `:TestView` | Toggle the test tree and output panel |
+| `Space t r` | Run the selected tree row, or the nearest test in code |
+| `Space t t` | Run the current file and show the view |
+| `Space t T` | Run tests in the current file's directory |
+| `Space t l` | Rerun the last selection |
+| `Space t S` | Stop the selected running test |
+| `Space t a` | Attach to the running test's live process output |
+| `Space t o` | Open the selected test's output and failure details |
+| `Space t O` | Toggle the bottom output panel |
+| `Space t w` | Explicitly toggle watch mode for this test file |
+
+In the tree, Enter expands a group; `r` or `Space t r` runs it, `u` or
+`Space t S` stops it, `i` opens its
+source, `o` shows its output, `a` attaches to a running process, and `?` shows
+all controls. `m` marks tests and `R` runs the marked selection. Running,
+passed, failed, and skipped tests use Neotest's native VS Code-style symbols
+and highlights. The statusline shows event-backed running/failure/pass counts.
+The bottom panel follows live stdout for CLI test runs and retains the final
+output. `a` focuses the selected running test's output; `o` shows results.
+It is a normal read-only text buffer, not a terminal; ANSI controls are removed,
+and output is bounded to the last 1 MiB with an explicit truncation marker.
+This avoids a crash in terminal output on the installed Neovim development
+build. No plugin library files are patched. Neither hiding the view nor
+switching tabs cancels a test.
+
+Project headers and directory rows are runnable, not just individual tests.
+Selecting `KAS` and pressing `r` or `Space t r` runs all discovered unit tests
+below that folder across C# and JavaScript/TypeScript adapters. Selecting a
+nested folder limits execution to that folder. Discovery finishes before a
+folder run starts; roots without tests are skipped. Language/project roots
+run sequentially, while each runner retains its own internal parallelism.
+`Space t l` repeats the whole folder selection. Stopping the selected folder
+stops its active tests and prevents remaining roots from starting.
+
+| Language | Adapter | External tools |
+| --- | --- | --- |
+| C# | `Issafalcon/neotest-dotnet` | Existing .NET SDK; MSTest/xUnit/NUnit |
+| Python | `nvim-neotest/neotest-python` | Python and pytest, or Python's unittest runner; local virtual environments are detected |
+| JavaScript / TypeScript | `marilari88/neotest-vitest`, `nvim-neotest/neotest-jest` | Node and the project's installed Vitest/Jest |
+| Rust | Existing `mrcjkb/rustaceanvim` Neotest adapter | Cargo, rustc and rust-analyzer; no separate adapter or cargo-nextest is required |
+
+Rust reuses rustaceanvim's discovery, Cargo commands and result parsing.
+Discovery loads Rust sources in hidden buffers and starts the existing language
+server when needed; opening each source file manually is unnecessary.
+
+The Python, C#, JavaScript, TypeScript and TSX Treesitter parsers are managed
+by the existing language configuration. JS/TS roots follow the closest runner
+configuration, including parent monorepo configurations instead of a package's
+unrelated `package.json`. Dependencies must already be installed; test commands
+do not invoke `npx` downloads. Generated files, virtual environments and
+directories named `e2e`, `integration` or ending in `IntegrationTests` are
+excluded from automatic discovery. This is a unit-test view, not an E2E runner.
+
+The community .NET adapter is extended in Lua to run the selected test methods
+with the existing `dotnet test` CLI, including the platform runner selected in
+KAS' `global.json`. Results are read from TRX files. No Microsoft source code,
+SDK helpers, or additional C# programs are added. Each command uses the captured
+test project, independently of Roslyn's selected solution or another issue tab.
+Watch is adapter-dependent. Use the existing project DAP workflow for debugging.
+Standalone scripts and Node's builtin `node --test` runner are not converted
+into Vitest/pytest tests.
+
+To extend this view, add a Neotest adapter dependency and an adapter entry in
+`lua/plugins/testing.lua`; the same tree, statusline, output and controls apply.
+
+Run the attached-UI integration checks from the repository root:
+
+```sh
+timeout 160 nvim --headless -u NONE -i NONE -l nvim/tests/testing.lua
+NVIM_TEST_KAS="$HOME/Projects/KAS" timeout 360 nvim --headless -u NONE -i NONE -l nvim/tests/testing.lua
+```
+
+The first command uses disposable Python tests, including a deliberate failure,
+skip, unittest case and cancellation, plus two dependency-free Rust crates,
+including sibling test modules and a deliberate Rust failure.
+It exercises all six sidebar transitions, reused buffers and unsaved SQL.
+It also runs selected tree tests, project headers and a mixed Python/Rust
+folder, including whole-folder rerun and cancellation.
+The second additionally discovers KAS' backend/frontend tests together and runs
+existing JavaScript, TypeScript and C# unit tests through the real adapters.
+The KAS-folder shortcut is checked against every discovered C#/JS/TS test
+with an execution recorder; the full KAS suite is not launched by this check.
+KAS sources are not changed; runners may update their usual build/cache files.
+No integration/E2E tests, database services or application servers are started.
+
 ## Text transforms (`lua/util/transform.lua`, `<leader>ct`)
 
 - **jq** — JSON prettify/minify/escape/unescape
