@@ -8,7 +8,7 @@ import { registerRequiredChildExtensions } from "pi-subagents/required-child-ext
 export default async function (pi: ExtensionAPI) {
   const file = process.env.NVIM_PI_STATUS;
   const run = process.env.NVIM_PI_RUN;
-  const expectedModel = process.env.NVIM_PI_MODEL;
+  let expectedModel: string | undefined;
   let sequence = 0;
   if (file && existsSync(file)) {
     const previous = JSON.parse(readFileSync(file, "utf8"));
@@ -20,13 +20,14 @@ export default async function (pi: ExtensionAPI) {
   let registration: { dispose(): void } | undefined;
 
   function publish(ctx: ExtensionContext, model = ctx.model) {
+    expectedModel = model ? `${model.provider}/${model.id}` : undefined;
     if (!file || !run) return;
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     const snapshot = {
       version: 1, run, sequence: ++sequence, activity: waiting ? "waiting" : activity,
       outcome, cwd: ctx.cwd, session: ctx.sessionManager.getSessionId(),
       session_file: ctx.sessionManager.getSessionFile(),
-      model: model ? `${model.provider}/${model.id}` : "unavailable",
+      model: expectedModel ?? "unavailable",
     };
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, JSON.stringify(snapshot), { mode: 0o600 });
@@ -77,6 +78,9 @@ export default async function (pi: ExtensionAPI) {
       || input.parallel !== undefined || (input.worktree !== undefined && input.worktree !== false)
       || input.machine !== undefined || (input.cwd !== undefined && input.cwd !== ctx.cwd)) {
       return { block: true, reason: "Issue tabs support one foreground subagent per call: set agent, async: false, the current cwd, and an explicit model. No workflow scripts, background jobs, nested launches, or managed worktrees." };
+    }
+    if (!expectedModel) {
+      return { block: true, reason: "No active session model is available; select a model before delegating." };
     }
     if (input.model !== expectedModel) {
       return { block: true, reason: `Set model explicitly to ${expectedModel} for this issue's subagent.` };

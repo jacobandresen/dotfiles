@@ -6,18 +6,42 @@ return {
       { "<leader>aq", function() require("util.pi_issues").quit() end, desc = "Stop Pi Agents and Quit" },
       {
         "<leader>ai",
-        function() require("util.pi_issues_ui").issues() end,
-        desc = "Choose Issues for Pi",
+        function() require("util.pi_issues_ui").tasks() end,
+        desc = "Choose Local Tasks for Pi",
+      },
+      {
+        "<leader>an",
+        function() require("util.pi_issues_ui").new_task() end,
+        desc = "Write a New Local Task",
       },
       {
         "<leader>aw",
         function() require("util.pi_issues_ui").dashboard() end,
-        desc = "Pi Issue Workspaces",
+        desc = "Pi Task Workspaces",
+      },
+      {
+        "<leader>av",
+        function() require("util.pi_issue_edit").open() end,
+        desc = "View / Edit Active Task",
+      },
+      {
+        "<leader>ae",
+        function() require("util.pi_issue_edit").edit() end,
+        desc = "Edit Active Task with Pi",
       },
       {
         "<leader>ap",
         function() require("util.agents").toggle() end,
         desc = "Pi Agent",
+      },
+      {
+        "<F6>",
+        function()
+          vim.cmd.stopinsert()
+          require("util.agents").toggle()
+        end,
+        mode = { "n", "t" },
+        desc = "Hide / Show Pi Agent",
       },
       {
         "<leader>as",
@@ -33,7 +57,7 @@ return {
       {
         "<leader>ar",
         function() require("util.agents").review() end,
-        desc = "Review Issue with Pi Subagent",
+        desc = "Review Task with Pi Subagent",
       },
     },
   },

@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import platform
 import re
-import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -144,7 +143,6 @@ def main():
         hashes_file.write_text(json.dumps(hashes, indent=2) + "\n")
 
     print("\n".join(report))
-    summary(report)
     log("dependency update complete")
 
 

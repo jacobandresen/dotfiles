@@ -18,11 +18,8 @@ alias gwt='git-pi list'
 # Per-host development settings
 [ -r "$HOME/.zshrc.dev" ] && source "$HOME/.zshrc.dev"
 
-# Per-host Ollama tuning. `make install-ollama` writes ~/.ollama/dotfiles.env
-# from the RAM profile in ollama/launchd/ (machine-local, outside this repo) so
-# a shell-launched `ollama serve` gets the same limits as the menubar app.
+# On macOS, `make install-ollama` writes ~/.ollama/dotfiles.env from ollama/ollama.env.
 [ -r "$HOME/.ollama/dotfiles.env" ] && source "$HOME/.ollama/dotfiles.env"
-
 
 # Aliases
 alias vim="nvim"

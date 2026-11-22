@@ -1,5 +1,5 @@
 [Unit]
-Description=Load Qwen 3.5 4B into Ollama
+Description=Load JetBrains Mellum 2.1 into Ollama
 After=ollama.service
 Requires=ollama.service
 PartOf=ollama.service

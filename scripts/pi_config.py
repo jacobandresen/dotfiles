@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the local pi-agent configuration for Qwen 3.5 4B."""
+"""Install the local pi-agent configuration for Mellum 2.1."""
 
 import argparse
 import json
@@ -8,7 +8,6 @@ from pathlib import Path
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = "qwen3.5-coding:4b"
 
 
 def write_json(path, value):
@@ -29,8 +28,9 @@ def write_json(path, value):
 def install(agent_dir, dry_run=False):
     if agent_dir.resolve().is_relative_to(ROOT) or agent_dir.is_symlink() or agent_dir.parent.is_symlink():
         raise ValueError("pi config directory must be a real directory outside this repository")
+    settings = json.loads((ROOT / "pi/agent/settings.json.template").read_text())
     if dry_run:
-        print(f"Would configure {agent_dir} for {MODEL}")
+        print(f"Would configure {agent_dir} for {settings['defaultModel']}")
         return
     agent_dir.mkdir(parents=True, exist_ok=True)
     instructions = agent_dir / "AGENTS.md"
@@ -39,7 +39,6 @@ def install(agent_dir, dry_run=False):
     skills = agent_dir / "skills"
     if skills.is_symlink() and skills.resolve() == ROOT / "pi/agent/skills":
         skills.unlink()
-    settings = json.loads((ROOT / "pi/agent/settings.json.template").read_text())
     models = json.loads((ROOT / "pi/agent/models.json").read_text())
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
     if not host.startswith(("http://", "https://")):
@@ -47,7 +46,7 @@ def install(agent_dir, dry_run=False):
     models["providers"]["ollama"]["baseUrl"] = host.rstrip("/") + "/v1"
     write_json(agent_dir / "settings.json", settings)
     write_json(agent_dir / "models.json", models)
-    print(f"pi-agent: {MODEL}")
+    print(f"pi-agent: {settings['defaultModel']}")
 
 
 def main(argv=None):

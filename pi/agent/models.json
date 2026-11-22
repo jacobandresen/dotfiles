@@ -7,12 +7,21 @@
       "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": false, "thinkingFormat": "qwen-chat-template"},
       "models": [
         {
-          "id": "qwen3.5-coding:4b",
-          "name": "Qwen 3.5 4B Coding",
+          "id": "mellum",
+          "name": "JetBrains Mellum 2.1",
           "input": ["text"],
           "reasoning": true,
           "contextWindow": 16384,
-          "maxTokens": 4096,
+          "maxTokens": 8192,
+          "samplingParams": {"temperature": 0.2}
+        },
+        {
+          "id": "qwen3.5:9b",
+          "name": "Qwen 3.5 9B",
+          "input": ["text"],
+          "reasoning": true,
+          "contextWindow": 16384,
+          "maxTokens": 8192,
           "samplingParams": {"temperature": 0.6}
         }
       ]

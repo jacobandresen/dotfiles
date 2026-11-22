@@ -9,18 +9,24 @@ import unittest
 
 
 class PiExtensionTest(unittest.TestCase):
+    def configure_agent(self, directory, root):
+        source = root.parent / "pi/agent"
+        settings = json.loads((source / "settings.json.template").read_text())
+        (Path(directory) / "settings.json").write_text(json.dumps(settings))
+        (Path(directory) / "models.json").write_text((source / "models.json").read_text())
+        return f"{settings['defaultProvider']}/{settings['defaultModel']}"
+
     @unittest.skipUnless(shutil.which("pi"), "pi is not installed")
     def test_lifecycle_and_foreground_delegation_contract(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="pi-contract-test-") as directory:
+            self.configure_agent(directory, root)
             result = subprocess.run(
                 ["pi", "--mode", "rpc", "--offline", "-na", "-ne", "-ns", "-np",
-                 "--provider", "github-copilot", "--model", "gpt-5.6-luna",
                  "--no-mcp", "--no-session", "-e", str(root / "tests/fixtures/pi_extension_probe.ts")],
                 input='{"type":"get_commands","id":"probe"}\n', capture_output=True, text=True, timeout=30,
                 cwd=directory, env={**os.environ, "PI_CODING_AGENT_DIR": directory,
-                                   "NVIM_PI_STATUS": str(Path(directory) / "status.json"), "NVIM_PI_RUN": "contract",
-                                   "NVIM_PI_MODEL": "github-copilot/gpt-5.6-luna"},
+                                   "NVIM_PI_STATUS": str(Path(directory) / "status.json"), "NVIM_PI_RUN": "contract"},
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("Failed to load extension", result.stderr)
@@ -32,7 +38,7 @@ class PiExtensionTest(unittest.TestCase):
 
     def test_cancelled_editor_exit_preserves_jobs(self):
         repository = Path(__file__).resolve().parents[2]
-        for choice, dirty in [("1", "no"), ("2", "yes")]:
+        for choice, dirty in [("1", "no"), ("2", "yes"), ("2", "task")]:
             with self.subTest(choice=choice, dirty=dirty), tempfile.TemporaryDirectory(prefix="pi-exit-test-") as directory:
                 result = subprocess.run(
                     ["nvim", "--headless", "-u", "NONE", "-i", "NONE", "-l", "nvim/tests/pi_exit.lua"],
@@ -46,17 +52,16 @@ class PiExtensionTest(unittest.TestCase):
     def test_pinned_extension_loads_and_publishes_lifecycle(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="pi-extension-test-") as directory:
+            expected_model = self.configure_agent(directory, root)
             status = Path(directory) / "status.json"
             environment = {
                 **os.environ,
                 "PI_CODING_AGENT_DIR": directory,
                 "NVIM_PI_STATUS": str(status),
                 "NVIM_PI_RUN": "test-run",
-                "NVIM_PI_MODEL": "github-copilot/gpt-5.6-luna",
             }
             result = subprocess.run(
                 ["pi", "--mode", "rpc", "--offline", "-na", "-ne", "-ns", "-np",
-                 "--provider", "github-copilot", "--model", "gpt-5.6-luna",
                  "--session-id", "issue-offline-test", "--no-mcp", "-e", str(root / "pi/extension.ts")],
                 input='{"type":"get_commands","id":"probe"}\n',
                 text=True, capture_output=True, timeout=30, cwd=directory, env=environment,
@@ -73,7 +78,7 @@ class PiExtensionTest(unittest.TestCase):
             self.assertEqual(snapshot["run"], "test-run")
             self.assertEqual(snapshot["cwd"], directory)
             self.assertGreater(snapshot["sequence"], 0)
-            self.assertEqual(snapshot["model"], "github-copilot/gpt-5.6-luna")
+            self.assertEqual(snapshot["model"], expected_model)
             self.assertNotIn("prompt", snapshot)
             restarted = subprocess.run(
                 result.args, input='{"type":"get_commands","id":"probe"}\n',

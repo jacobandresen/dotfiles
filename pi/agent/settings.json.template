@@ -1,6 +1,14 @@
 {
-  "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.6-luna",
+  "defaultProvider": "ollama",
+  "defaultModel": "mellum",
   "defaultThinkingLevel": "low",
-  "enabledModels": ["github-copilot/gpt-5.6-luna"]
+  "modelThinkingLevels": {
+    "ollama/mellum": "high"
+  },
+  "enabledModels": [
+    "ollama/mellum",
+    "ollama/qwen3.5:9b",
+    "github-copilot/gpt-6.1-sol",
+    "github-copilot/claude-opus-5.5"
+  ]
 }

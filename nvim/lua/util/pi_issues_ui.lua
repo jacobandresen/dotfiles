@@ -1,5 +1,6 @@
 local M = {}
 local core = require("util.pi_issues")
+local tasks = require("util.pi_tasks")
 local dashboard
 local dashboard_rows = {}
 local accents = vim.api.nvim_create_namespace("pi_issues_dashboard")
@@ -30,6 +31,21 @@ local function resize_with_editor(win, max_width, desired_height, redraw)
   })
 end
 
+local function show_help(lines)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].modifiable = "wipe", "markdown", false
+  local win = vim.api.nvim_open_win(buf, true, vim.tbl_extend("force", geometry(72, #lines), {
+    style = "minimal", border = "rounded", title = " Task Help ", title_pos = "center",
+    footer = " q close ", footer_pos = "center",
+  }))
+  vim.wo[win].wrap, vim.wo[win].linebreak = true, true
+  resize_with_editor(win, 72, #lines)
+  for _, key in ipairs({ "q", "<Esc>" }) do
+    vim.keymap.set("n", key, function() vim.api.nvim_win_close(win, false) end, { buffer = buf, nowait = true })
+  end
+end
+
 local function clip(text, width)
   text = core.clean(text)
   if vim.fn.strdisplaywidth(text) <= width then return text end
@@ -47,7 +63,8 @@ function M.tabline()
   for i, tab in ipairs(vim.api.nvim_list_tabpages()) do
     local workspace = core.workspaces[vim.t[tab].pi_issue or ""]
     local label = workspace
-        and (vim.fs.basename(workspace.repo) .. "#" .. workspace.number .. " " .. core.status(workspace))
+        and (vim.fs.basename(workspace.repo) .. (workspace.source == "local" and "/task-" or "#")
+          .. workspace.number .. " " .. core.status(workspace))
       or ("Tab " .. i)
     parts[#parts + 1] = ("%s%%%dT %s %%T"):format(
       tab == vim.api.nvim_get_current_tabpage() and "%#TabLineSel#" or "%#TabLine#",
@@ -67,9 +84,8 @@ function M.statusline()
   local workspace = core.current()
   if not workspace then return "" end
   local job = core.jobs[workspace.id]
-  local model = job and job.model or "Luna"
-  if model == "github-copilot/gpt-5.6-luna" then model = "Luna" end
-  return safe(("Pi %d | %s | %s"):format(workspace.number, core.status(workspace), model))
+  local model = job and job.model or "pending"
+  return safe(("Pi %s | %s | %s"):format(tasks.label(workspace), core.status(workspace), model))
 end
 
 function M.layout()
@@ -135,7 +151,7 @@ function M.review(workspace, scope)
       return
     end
     Snacks.picker({
-      title = (workspace and (workspace.repo .. "#" .. workspace.number .. " - ") or "")
+      title = (workspace and (tasks.label(workspace) .. " - ") or "")
         .. selected_scope
         .. " changes",
       cwd = path,
@@ -156,7 +172,7 @@ function M.review(workspace, scope)
       actions = {
         issue_scope = function(picker)
           picker:close()
-          if not workspace then return vim.notify("Issue scope is available in an issue tab", vim.log.levels.WARN) end
+          if not workspace then return vim.notify("Base comparison requires a task workspace", vim.log.levels.WARN) end
           M.review(workspace, selected_scope == "working" and "issue" or "working")
         end,
         refresh_issue = function(picker)
@@ -167,7 +183,7 @@ function M.review(workspace, scope)
       win = {
         input = {
           keys = {
-            ["<C-g>"] = { "issue_scope", mode = { "i", "n" }, desc = "Working / Issue Changes" },
+            ["<C-g>"] = { "issue_scope", mode = { "i", "n" }, desc = "Working / Recorded Base Changes" },
             ["<C-r>"] = { "refresh_issue", mode = { "i", "n" }, desc = "Refresh Diff" },
           },
         },
@@ -196,7 +212,7 @@ local function draw()
   local title_width = math.max(8, width - repo_width - 26)
   local format = "  %-" .. repo_width .. "s  %-10s %5s  %s"
   local lines = {
-    "  Pi workspaces",
+    "  Task workspaces",
     ("  %d active / %d slots    %d waiting    %d workspaces"):format(
       active,
       core.settings().max_agents,
@@ -204,15 +220,15 @@ local function draw()
       #items
     ),
     "",
-    "  Worktrees and conversations are kept when agents stop.",
-    string.format(format, "ISSUE", "AGENT", "FILES", "TITLE"),
+    "  Pi status is not task completion. Stopping keeps your work.",
+    string.format(format, "TASK", "AGENT", "FILES", "TITLE"),
   }
   dashboard_rows = {}
   local selected = 6
   for _, workspace in ipairs(items) do
     lines[#lines + 1] = string.format(
       format,
-      clip(workspace.repo .. "#" .. workspace.number, repo_width),
+      clip(tasks.label(workspace), repo_width),
       core.status(workspace),
       workspace.refreshing and "..." or (workspace.files and tostring(workspace.files) or "?"),
       clip(workspace.title, title_width)
@@ -220,7 +236,7 @@ local function draw()
     dashboard_rows[#lines] = workspace
     if workspace.id == current_id then selected = #lines end
   end
-  if #items == 0 then lines[#lines + 1] = "  No workspaces yet. Press i to choose issues." end
+  if #items == 0 then lines[#lines + 1] = "  No workspaces. Press n to write a task, or i to choose one." end
   vim.bo[dashboard].modifiable = true
   vim.api.nvim_buf_set_lines(dashboard, 0, -1, false, lines)
   vim.bo[dashboard].modifiable = false
@@ -265,10 +281,10 @@ function M.dashboard()
       relative = "editor",
       style = "minimal",
       border = "rounded",
-      title = " Pi Workspaces ",
+      title = " Task Workspaces ",
       title_pos = "center",
-      footer = size.width >= 64 and " Enter open  p pi  d diff  i issues  ? help  q close "
-        or " Enter open  p pi  d diff  ? help ",
+      footer = size.width >= 64 and " Enter code  p pi  v task  n new  ? help  q close "
+        or " n new  Enter code  p pi  ? help ",
       footer_pos = "center",
     })
   )
@@ -303,10 +319,14 @@ function M.dashboard()
     end),
     d = action(function(w) M.review(w) end),
     D = action(function(w) M.review(w, "issue") end),
+    v = action(function(w)
+      core.open(w)
+      require("util.pi_issue_edit").open(w)
+    end),
     x = action(function(w)
       core.task(function()
         if
-          core.choose({ "Cancel", "Stop pi; keep worktree and session" }, "Stop " .. w.repo .. "#" .. w.number .. "?")
+          core.choose({ "Cancel", "Stop pi; keep worktree and session" }, "Stop " .. tasks.label(w) .. "?")
           == "Stop pi; keep worktree and session"
         then
           core.stop(w)
@@ -315,28 +335,44 @@ function M.dashboard()
     end),
     r = refresh,
     ["?"] = function()
-      vim.lsp.util.open_floating_preview({
-        "# Pi workspaces",
+      local lines = {
+        "# Task workspaces",
         "",
         "Enter: open code tab    p: start / focus pi",
-        "d: working diff        D: issue diff (recorded base)",
+        "d: working diff        D: changes since the recorded base",
+        "v: view / edit the task (GitHub uses a local draft)",
         "x: stop with confirmation; never delete work",
-        "r: refresh file counts i: choose more issues",
+        "r: refresh file counts i: choose tasks  n: new local task",
         "",
-        "Space a p: hide / show pi without stopping it",
+        "F6: hide / show pi, including from terminal input",
         "Space a s: paste context; Enter in pi submits it",
         "Space a r: paste a foreground reviewer request",
+        "Local tasks: :write saves.",
         "",
-        "Agent state does not verify tests or mark an issue complete.",
-      }, "markdown", { border = "rounded", max_width = 64 })
+        "Agent state does not verify tests or mark a task complete.",
+      }
+      if core.settings().github_enabled then
+        lines[#lines + 1] = "g: GitHub issues. Drafts: Space a P confirms publishing."
+      end
+      show_help(lines)
     end,
     i = function()
       vim.api.nvim_win_close(win, false)
-      M.issues()
+      M.tasks()
+    end,
+    n = function()
+      vim.api.nvim_win_close(win, false)
+      M.new_task()
     end,
     q = function() vim.cmd.close() end,
     ["<Esc>"] = function() vim.cmd.close() end,
   }
+  if core.settings().github_enabled then
+    maps.g = function()
+      vim.api.nvim_win_close(win, false)
+      M.issues()
+    end
+  end
   for key, fn in pairs(maps) do
     vim.keymap.set("n", key, fn, { buffer = dashboard, nowait = true })
   end
@@ -356,7 +392,7 @@ function M.confirm_launch(lines)
       relative = "editor",
       style = "minimal",
       border = "rounded",
-      title = " Review Issue Launch ",
+      title = " Review Task Launch ",
       title_pos = "center",
       footer = " s start / Enter prepare only / q cancel ",
       footer_pos = "center",
@@ -372,7 +408,7 @@ function M.confirm_launch(lines)
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
     vim.schedule(function()
       local ok, err = coroutine.resume(thread, choice)
-      if not ok then vim.notify(tostring(err), vim.log.levels.ERROR, { title = "Pi Issues" }) end
+      if not ok then vim.notify(tostring(err), vim.log.levels.ERROR, { title = "Pi Tasks" }) end
     end)
   end
   for key, choice in pairs({ s = "Prepare and start", ["<CR>"] = "Prepare only", q = "Cancel", ["<Esc>"] = "Cancel" }) do
@@ -388,26 +424,34 @@ end
 
 function M.launch(repo, issues)
   core.task(function()
-    local default = repo.default_branch and ("origin/" .. repo.default_branch) or ""
+    local default = repo.source == "local" and "HEAD"
+      or (repo.default_branch and ("origin/" .. repo.default_branch) or "")
     local ref = core.input("Base ref (locally cached; no automatic fetch): ", default)
     if not ref then return end
     local sha = core.base(repo, ref)
     assert(sha, "Base ref is unavailable: " .. ref .. ". Fetch explicitly or choose an existing ref.")
-    local summary = { repo.host .. "/" .. repo.repo, "", "Base: " .. ref .. " (" .. sha:sub(1, 12) .. ")", "" }
+    local summary = { repo.source == "local" and (repo.root .. " / local tasks") or (repo.host .. "/" .. repo.repo),
+      "", "Base: " .. ref .. " (" .. sha:sub(1, 12) .. ")", "" }
     local trees = core.worktrees(repo.root)
     for _, issue in ipairs(issues) do
-      summary[#summary + 1] = ("%d %s -> issue/%d"):format(issue.number, core.clean(issue.title), issue.number)
-      local path = vim.fs.dirname(repo.root) .. "/" .. vim.fs.basename(repo.root) .. "-worktrees/" .. issue.number
-      for _, tree in ipairs(trees) do
-        if tree.branch == "issue/" .. issue.number then path = tree.path end
+      local target = { source = repo.source, repo = repo.repo, number = issue.number }
+      local ok, label = pcall(tasks.label, target)
+      if not ok then
+        summary[#summary + 1] = "Invalid selection: " .. core.clean(label)
+      else
+        summary[#summary + 1] = label .. " " .. core.clean(issue.title) .. " -> " .. tasks.branch(target)
+        local path = tasks.worktree(repo, issue.number)
+        for _, tree in ipairs(trees) do
+          if tree.branch == tasks.branch(target) then path = tree.path end
+        end
+        summary[#summary + 1] = "   " .. path
       end
-      summary[#summary + 1] = "   " .. path
       summary[#summary + 1] = ""
     end
     summary[#summary + 1] = "Existing matching branches/worktrees will be reused; your main checkout is not changed."
-    summary[#summary + 1] = "Start sends issue context to GitHub Copilot Luna. Limit: "
+    summary[#summary + 1] = "Start sends task context using pi-agent's configured default model. Limit: "
       .. core.settings().max_agents
-      .. " live issue agents."
+      .. " live agents."
     local choice = M.confirm_launch(summary)
     if not choice or choice == "Cancel" then return end
     local failures, prepared, started = {}, 0, 0
@@ -426,7 +470,7 @@ function M.launch(repo, issues)
             started = started + 1
           else
             vim.notify(
-              "Prepared " .. workspace.repo .. "#" .. workspace.number .. "; start from Space a w when a slot is free",
+              "Prepared " .. tasks.label(workspace) .. "; start from Space a w when a slot is free",
               vim.log.levels.INFO
             )
           end
@@ -443,60 +487,86 @@ function M.launch(repo, issues)
         #failures > 0 and ("\n" .. table.concat(failures, "\n")) or ""
       ),
       #failures > 0 and vim.log.levels.ERROR or vim.log.levels.INFO,
-      { title = "Pi issue launch" }
+      { title = "Pi task launch" }
     )
   end)
 end
 
-function M.issues(query, limit, repository)
+function M.tasks(source, query, limit, repository)
+  source = source or "local"
   local root = repository and repository.root or core.root()
   limit = limit or 50
   core.task(function()
-    local repo = repository or core.repository(root)
-    local argv = {
-      "gh",
-      "issue",
-      "list",
-      "--repo",
-      repo.host .. "/" .. repo.repo,
-      "--limit",
-      tostring(limit),
-      "--json",
-      "number,title,url,labels,updatedAt",
-    }
-    if query and query ~= "" then vim.list_extend(argv, { "--search", query }) end
-    local result = core.run(argv, root)
-    local items = vim.json.decode(result.stdout)
+    local repo = repository or core.repository(root, source)
+    local items = tasks.list(repo, query, limit)
     for _, issue in ipairs(items) do
       issue.text = ("%d %s"):format(issue.number, core.clean(issue.title))
     end
-    local title = repo.repo .. " / Issues"
+    local title = repo.repo .. (source == "local" and " / Local Tasks" or " / GitHub Issues")
     if #items == 0 then
-      title = (query and query ~= "" and "No matching open issues / " or "No open issues / ") .. repo.repo
+      title = (source == "local" and "No local tasks / "
+        or (query and query ~= "" and "No matching open issues / " or "No open issues / ")) .. repo.repo
     end
     Snacks.picker({
       title = title,
       items = items,
       show_empty = true,
       format = "text",
-      layout = { preset = "select" },
-      footer = "Tab select / Enter continue / C-s search GitHub / C-l load 50 more",
+      layout = {
+        preset = "select",
+        layout = {
+          footer = "Ctrl-n new / Ctrl-o edit / Enter work / Tab select / ? help",
+          footer_pos = "center",
+        },
+      },
       confirm = function(picker)
         local selected = picker:selected({ fallback = true })
         picker:close()
         if #selected > 0 then M.launch(repo, selected) end
       end,
       actions = {
+        task_help = function()
+          local lines = {
+            source == "local" and "# Local tasks" or "# GitHub issues",
+            "",
+            "Enter: review worktree and pi launch options",
+            "Ctrl-o: edit the task; GitHub uses a local draft",
+            "Ctrl-n: create a local task",
+            "Tab: select several tasks",
+            "Ctrl-s: search    Ctrl-l: load 50 more",
+            "",
+            source == "local" and "Local tasks: :write saves. No publication step."
+              or "GitHub drafts: :write saves locally; Space a P confirms publishing.",
+          }
+          if core.settings().github_enabled then
+            lines[#lines + 1] = ":PiTasks github opens GitHub issues."
+            lines[#lines + 1] = ":PiTaskImport / :PiTaskExport copy between sources."
+          end
+          show_help(lines)
+        end,
+        view_issue = function(picker)
+          local issue = picker:current()
+          if not issue then return end
+          picker:close()
+          require("util.pi_issue_edit").open({
+            host = repo.host, repo = repo.repo, number = issue.number, path = repo.root,
+            source = repo.source, task_root = repo.task_root, task_file = issue.task_file,
+          })
+        end,
         server_search = function(picker)
           picker:close()
           core.task(function()
-            local search = core.input("GitHub issue search: ", query or "")
-            if search then M.issues(search, limit, repo) end
+            local search = core.input(source == "local" and "Local task search: " or "GitHub issue search: ", query or "")
+            if search then M.tasks(source, search, limit, repo) end
           end)
         end,
         more_issues = function(picker)
           picker:close()
-          M.issues(query, limit + 50, repo)
+          M.tasks(source, query, limit + 50, repo)
+        end,
+        new_task = function(picker)
+          picker:close()
+          M.new_task(nil, repo.root)
         end,
       },
       win = {
@@ -504,10 +574,89 @@ function M.issues(query, limit, repository)
           keys = {
             ["<C-s>"] = { "server_search", mode = { "n", "i" } },
             ["<C-l>"] = { "more_issues", mode = { "n", "i" } },
+            ["<C-o>"] = { "view_issue", mode = { "n", "i" } },
+            ["<C-n>"] = { "new_task", mode = { "n", "i" } },
+            ["?"] = { "task_help", mode = "n" },
           },
         },
       },
     })
+  end)
+end
+
+function M.issues(query, limit, repository) return M.tasks("github", query, limit, repository) end
+
+function M.new_task(title, root)
+  core.task(function()
+    local repo = core.repository(root or core.root(), "local")
+    if not title then return require("util.pi_issue_edit").compose(repo) end
+    local target = tasks.create(repo, title)
+    require("util.pi_issue_edit").open(target)
+  end)
+end
+
+local copying = false
+local function copy_task(fn)
+  return core.task(function()
+    assert(not copying, "A task copy is already in progress")
+    copying = true
+    local ok, err = pcall(fn)
+    copying = false
+    if not ok then error(err, 0) end
+  end)
+end
+
+function M.import_task(number)
+  local current = core.current()
+  local root = core.root()
+  return copy_task(function()
+    local local_repo = core.repository(root, "local")
+    local target
+    if not number and current and current.source ~= "local" then
+      target = current
+    else
+      local repo = core.repository(root, "github")
+      number = number or core.input("GitHub issue number to import: ", "")
+      if not number then return end
+      assert(tostring(number):match("^%d+$") and tonumber(number) > 0, "Enter a positive GitHub issue number")
+      target = { source = "github", repo = repo.repo, host = repo.host, number = tonumber(number), path = repo.root }
+    end
+    local issue = tasks.get(target)
+    if core.choose({ "Cancel", "Import as local task" },
+      "Copy " .. tasks.label(target) .. " into " .. local_repo.root .. "/.tasks/?") ~= "Import as local task" then return end
+    local imported = tasks.create(local_repo, issue.title, issue.body or "")
+    require("util.pi_issue_edit").open(imported)
+    vim.notify("Imported " .. tasks.label(target) .. " as " .. tasks.label(imported)
+      .. "; the GitHub issue is unchanged", vim.log.levels.INFO)
+  end)
+end
+
+function M.export_task()
+  local info = vim.b.pi_issue_draft
+  local target = info and info.target or core.current()
+  return copy_task(function()
+    assert(target and target.source == "local", "Open a local task or activate its workspace before exporting")
+    local repo = core.repository(target.task_root, "github")
+    local path = tasks.file(target)
+    local buf = vim.fn.bufnr(path)
+    if buf >= 0 and vim.api.nvim_buf_is_loaded(buf) then
+      vim.api.nvim_buf_call(buf, function()
+        vim.cmd("checktime")
+        vim.cmd("silent update")
+      end)
+    end
+    local task = tasks.get(target)
+    if core.choose({ "Cancel", "Create GitHub issue" },
+      "Publish " .. tasks.label(target) .. " as a NEW issue in " .. repo.host .. "/" .. repo.repo .. "?")
+      ~= "Create GitHub issue" then return end
+    local current_task = tasks.get(target)
+    assert(current_task.title == task.title and current_task.body == task.body
+      and (buf < 0 or not vim.api.nvim_buf_is_valid(buf) or not vim.bo[buf].modified),
+      "Local task changed during confirmation; review it and export again")
+    local created = tasks.create(repo, task.title, task.body)
+    vim.notify("Created " .. tasks.label(created) .. ": " .. created.url
+      .. "\nLocal task, worktree and session are unchanged. Repeating export creates another issue.",
+      vim.log.levels.INFO)
   end)
 end
 
@@ -518,7 +667,7 @@ function M.install()
   core.task(function()
     local result = core.run({ "npm", "ci", "--ignore-scripts", "--omit=dev" }, core.path())
     vim.notify(
-      "Pinned pi-subagents installed. Use Space a i to choose issues.\n" .. vim.trim(result.stdout),
+      "Pinned pi-subagents installed. Use Space a i to choose local tasks.\n" .. vim.trim(result.stdout),
       vim.log.levels.INFO
     )
   end)
@@ -527,14 +676,39 @@ end
 function M.setup()
   core.setup()
   core.load()
+  vim.api.nvim_create_user_command("PiTasks", function(opts)
+    M.tasks(opts.args ~= "" and opts.args or "local")
+  end, { nargs = "?", complete = function() return { "local", "github" } end, desc = "Choose local or GitHub tasks" })
+  vim.api.nvim_create_user_command("PiTaskNew", function(opts)
+    M.new_task(opts.args ~= "" and opts.args or nil)
+  end, { nargs = "*", desc = "Create a local Markdown task" })
+  vim.api.nvim_create_user_command("PiTaskView", function() require("util.pi_issue_edit").open() end,
+    { desc = "View / edit the active task" })
+  vim.api.nvim_create_user_command("PiTaskEdit", function() require("util.pi_issue_edit").edit() end,
+    { desc = "Ask the active pi-agent to revise the task" })
+  vim.api.nvim_create_user_command("PiTaskImport", function(opts)
+    M.import_task(opts.args ~= "" and opts.args or nil)
+  end, { nargs = "?", desc = "Copy a GitHub issue into a local task after confirmation" })
+  vim.api.nvim_create_user_command("PiTaskExport", M.export_task,
+    { desc = "Copy a local task to a new GitHub issue after confirmation" })
   vim.api.nvim_create_user_command(
     "PiIssues",
     function(opts) M.issues(opts.args) end,
     { nargs = "?", desc = "Choose GitHub issues" }
   )
-  vim.api.nvim_create_user_command("PiWorkspaces", M.dashboard, { desc = "Pi issue workspace dashboard" })
+  vim.api.nvim_create_user_command("PiWorkspaces", M.dashboard, { desc = "Pi task workspace dashboard" })
   vim.api.nvim_create_user_command("PiIssuesSetup", M.install, { desc = "Install pinned pi extension dependencies" })
   vim.api.nvim_create_user_command("PiQuit", core.quit, { desc = "Confirm stopping managed agents and quit safely" })
+  vim.api.nvim_create_user_command("PiIssueView", function() require("util.pi_issue_edit").open() end,
+    { desc = "View / edit the active GitHub issue draft" })
+  vim.api.nvim_create_user_command("PiIssuePublish", function() require("util.pi_issue_edit").publish() end,
+    { desc = "Publish the issue draft after confirmation" })
+  vim.api.nvim_create_user_command("PiIssueEdit", function() require("util.pi_issue_edit").edit() end,
+    { desc = "Ask the active pi-agent to revise the issue draft" })
+  vim.api.nvim_create_user_command("PiIssueReload", function()
+    local info = vim.b.pi_issue_draft
+    require("util.pi_issue_edit").open(info and info.target or nil, true)
+  end, { desc = "Reload the GitHub issue after confirming draft replacement" })
   vim.api.nvim_create_user_command(
     "PiIssueDiff",
     function(opts) M.review(core.current(), opts.args == "issue" and "issue" or "working") end,

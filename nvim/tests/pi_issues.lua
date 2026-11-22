@@ -5,7 +5,9 @@ local ui = require("util.pi_issues_ui")
 local uv = vim.uv
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp .. "/repo", "p")
-vim.g.pi_issues = { state_dir = temp .. "/state", pi = vim.fn.getcwd() .. "/nvim/tests/fixtures/pi_stub.py" }
+vim.g.pi_issues = {
+  state_dir = temp .. "/state", pi = vim.fn.getcwd() .. "/nvim/tests/fixtures/pi_stub.py", github_enabled = true,
+}
 local messages = {}
 vim.notify = function(message) messages[#messages + 1] = tostring(message) end
 _G.LazyVim = { root = setmetatable({ detectors = {}, cache = {} }, { __call = function() return temp .. "/repo" end }) }
@@ -143,9 +145,12 @@ local ok, failure = pcall(function()
   await(function() core.start(a, { body = "Test issue. Do not call a model." }) end)
   vim.env.NVIM_PI_TEST_CHILD = nil
   local job = core.jobs[a.id]
+  assert(not vim.tbl_contains(job.argv, "--provider") and not vim.tbl_contains(job.argv, "--model"),
+    "New issue sessions must inherit pi-agent's configured default")
   assert(job.channel > 0 and not job.exited)
   assert(vim.wait(5000, function() return job.sequence ~= nil end, 10), table.concat(messages, "\n"))
   assert(job.activity == "idle" and a.session_file, "Consume real filesystem lifecycle notifications")
+  assert(job.model == "ollama/mellum", "Display the model reported by pi-agent")
   local first_job = job.channel
   await(function() core.start(a) end)
   assert(core.jobs[a.id].channel == first_job, "Never start a second writer")
@@ -158,7 +163,7 @@ local ok, failure = pcall(function()
     session = a.session,
     session_file = a.session_file,
     activity = "working",
-    model = "github-copilot/gpt-5.6-luna",
+    model = "github-copilot/gpt-6.1-sol",
   }
   assert(core.accept_status(a, job, snapshot))
   assert(not core.accept_status(a, job, snapshot), "Reject out-of-order events")
@@ -191,6 +196,21 @@ local ok, failure = pcall(function()
   local pasted = table.concat(vim.fn.readfile(core.directory(a) .. "/paste.txt"), "\n")
   assert(pasted:find("unsaved buffer snapshot", 1, true))
   assert(not pasted:find("second issue", 1, true))
+  local model = job.model
+  job.model = nil
+  require("util.agents").review()
+  assert(messages[#messages]:find("active model", 1, true), "Do not guess a reviewer model before status arrives")
+  job.model = model
+  local send = vim.api.nvim_chan_send
+  local review
+  vim.api.nvim_chan_send = function(channel, text)
+    assert(channel == job.channel, "Send the reviewer request to the current issue")
+    review = text
+  end
+  require("util.agents").review()
+  vim.api.nvim_chan_send = send
+  assert(review and review:find("model: github-copilot/gpt-6.1-sol", 1, true),
+    "Reviewers must follow the active session model")
   require("util.agents").toggle()
   assert(not job.exited and vim.fn.jobwait({ job.channel }, 0)[1] == -1, "Hiding terminal must not stop pi")
   core.show(a)
@@ -217,7 +237,7 @@ local ok, failure = pcall(function()
   await(function() core.start(a) end)
   local resumed = core.jobs[a.id]
   assert(
-    vim.tbl_contains(resumed.argv, "--session") and not vim.tbl_contains(resumed.argv, "Implement the attached issue."),
+    vim.tbl_contains(resumed.argv, "--session") and not vim.tbl_contains(resumed.argv, "Implement the attached task."),
     "Resume the exact session without replaying the initial task"
   )
   core.stop(a)

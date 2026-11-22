@@ -1,16 +1,16 @@
 local M = { workspaces = {}, jobs = {} }
+local tasks = require("util.pi_tasks")
 local uv = vim.uv
 local token = vim.fn.sha256(tostring(uv.hrtime()) .. ":" .. vim.fn.getpid()):sub(1, 24)
 local initialized = false
 local loaded = false
 
-local function notify(message, level) vim.notify(message, level or vim.log.levels.ERROR, { title = "Pi Issues" }) end
+local function notify(message, level) vim.notify(message, level or vim.log.levels.ERROR, { title = "Pi Tasks" }) end
 
 function M.settings()
   local settings = vim.tbl_extend("force", {
     max_agents = 3,
-    provider = "github-copilot",
-    model = "gpt-5.6-luna",
+    github_enabled = false,
     state_dir = vim.fn.stdpath("state") .. "/pi-issues",
     pi = "pi",
   }, vim.g.pi_issues or {})
@@ -18,6 +18,7 @@ function M.settings()
     type(settings.max_agents) == "number" and settings.max_agents >= 1 and settings.max_agents % 1 == 0,
     "pi_issues.max_agents must be a positive integer"
   )
+  assert(type(settings.github_enabled) == "boolean", "pi_issues.github_enabled must be a boolean")
   return settings
 end
 
@@ -35,10 +36,10 @@ function M.task(fn)
   return thread
 end
 
-function M.run(argv, cwd, optional)
+function M.run(argv, cwd, optional, stdin)
   local thread = coroutine.running()
   assert(thread, "Pi commands must run inside task()")
-  local process = vim.system(argv, { cwd = cwd, timeout = 30000 }, function(result)
+  local process = vim.system(argv, { cwd = cwd, timeout = 30000, stdin = stdin }, function(result)
     vim.schedule(function()
       local ok, err = coroutine.resume(thread, result)
       if not ok then notify(tostring(err)) end
@@ -130,6 +131,9 @@ local fields = {
   "session",
   "session_file",
   "started",
+  "source",
+  "task_root",
+  "task_file",
 }
 function M.save(workspace)
   local data = { version = 1 }
@@ -165,7 +169,10 @@ function M.load()
           and type(data.session) == "string"
           and type(data.number) == "number"
           and data.number > 0
+          and data.number <= 9007199254740991
           and data.number % 1 == 0
+          and (data.source == nil or data.source == "github"
+            or (data.source == "local" and type(data.task_root) == "string" and type(data.task_file) == "string"))
         then
           M.workspaces[name] = data
         else
@@ -191,21 +198,8 @@ function M.worktrees(root)
   return entries
 end
 
-function M.repository(root)
-  root = M.real(vim.trim(git(root, "rev-parse", "--show-toplevel")))
-  local common = M.real(vim.trim(git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")))
-  local result = M.run({ "gh", "repo", "view", "--json", "nameWithOwner,url,defaultBranchRef" }, root)
-  local info = vim.json.decode(result.stdout)
-  local primary = M.worktrees(root)[1]
-  assert(primary and primary.path, "No primary Git worktree")
-  return {
-    root = primary.path,
-    common = common,
-    repo = info.nameWithOwner,
-    host = info.url:match("^https?://([^/]+)"),
-    url = info.url,
-    default_branch = info.defaultBranchRef and info.defaultBranchRef.name,
-  }
+function M.repository(root, source)
+  return tasks.repository(root, source or "local")
 end
 
 function M.base(repo, ref)
@@ -216,15 +210,30 @@ end
 
 function M.prepare(repo, issue, ref, reuse, base_sha)
   M.load()
-  assert(type(issue.number) == "number" and issue.number > 0 and issue.number % 1 == 0, "Invalid issue number")
-  local id = vim.fn.sha256(repo.common .. "\0" .. repo.host .. "/" .. repo.repo .. "\0" .. issue.number):sub(1, 24)
+  assert(repo.source == "local" or M.settings().github_enabled,
+    "GitHub integration is disabled; set vim.g.pi_issues.github_enabled = true to enable it")
+  assert(type(issue.number) == "number" and issue.number > 0 and issue.number <= 9007199254740991
+    and issue.number % 1 == 0, "Invalid issue number")
+  local target = {
+    source = repo.source, host = repo.host, repo = repo.repo, number = issue.number,
+    task_root = repo.task_root or (repo.source == "local" and repo.root or nil),
+    task_file = issue.task_file,
+  }
+  if repo.source == "local" then
+    local current = tasks.get(target)
+    target.task_file = current.task_file
+    issue = vim.tbl_extend("force", issue, current)
+  end
+  local key = repo.source == "local" and tasks.identity(target)
+    or (repo.host .. "/" .. repo.repo .. "\0" .. issue.number)
+  local id = vim.fn.sha256(repo.common .. "\0" .. key):sub(1, 24)
   if M.workspaces[id] then
     M.validate(M.workspaces[id])
     return M.workspaces[id]
   end
   local sha = base_sha or assert(M.base(repo, ref), "Base ref does not resolve to a commit: " .. ref)
-  local branch = "issue/" .. issue.number
-  local path = vim.fs.dirname(repo.root) .. "/" .. vim.fs.basename(repo.root) .. "-worktrees/" .. issue.number
+  local branch = tasks.branch(target)
+  local path = tasks.worktree(repo, issue.number)
   for _, existing in pairs(M.workspaces) do
     assert(
       existing.common ~= repo.common or (existing.branch ~= branch and existing.path ~= path),
@@ -257,11 +266,14 @@ function M.prepare(repo, issue, ref, reuse, base_sha)
     number = issue.number,
     title = M.clean(issue.title),
     url = issue.url,
+    source = repo.source,
+    task_root = target.task_root,
+    task_file = target.task_file,
     path = M.real(path),
     branch = branch,
     base_ref = ref,
     base_sha = sha,
-    session = "issue-" .. id,
+    session = (repo.source == "local" and "task-" or "issue-") .. id,
   }
   M.save(workspace)
   M.workspaces[id] = workspace
@@ -311,16 +323,19 @@ function M.open(workspace)
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = "markdown"
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-    "# " .. workspace.repo .. "#" .. workspace.number .. ": " .. workspace.title,
+    "# " .. tasks.label(workspace) .. ": " .. workspace.title,
     "",
     workspace.url or "",
     "",
-    "Space a p   Pi agent (Luna)",
+    "Space a p   Pi agent (configured default model)",
+    "F6          Hide / show Pi, also from terminal input",
     "Space a s   Send file / selection",
     "Space a r   Reviewer subagent",
     "Space g D   Review changes",
     "Space f f   Find files in this worktree",
-    "Space a w   All issue workspaces",
+    "Space a v   View / edit task",
+    "Space a e   Ask pi to revise task",
+    "Space a w   All task workspaces",
     "",
     "Worktree: " .. workspace.path,
     "Branch: " .. workspace.branch,
@@ -353,7 +368,7 @@ function M.lock(workspace, run)
       assert(
         M.choose(
           { "Cancel", "Recover abandoned lock" },
-          "Both the recorded editor and agent have exited. Recover " .. workspace.repo .. "#" .. workspace.number .. "?"
+          "Both the recorded editor and agent have exited. Recover " .. tasks.label(workspace) .. "?"
         ) == "Recover abandoned lock",
         "Ownership recovery cancelled"
       )
@@ -472,26 +487,12 @@ function M.start(workspace, issue)
       0
     )
   end
-  if not workspace.started and not issue then
-    local result = M.run({
-      "gh",
-      "issue",
-      "view",
-      tostring(workspace.number),
-      "--repo",
-      workspace.host .. "/" .. workspace.repo,
-      "--json",
-      "body,title,url,number",
-    }, workspace.path)
-    issue = vim.json.decode(result.stdout)
+  if not workspace.started and (not issue or issue.body == nil) then
+    issue = tasks.get(workspace)
   end
   local run = vim.fn.sha256(token .. tostring(uv.hrtime())):sub(1, 24)
   local argv = {
     M.settings().pi,
-    "--provider",
-    M.settings().provider,
-    "--model",
-    M.settings().model,
     "--theme",
     vim.fs.dirname(M.path()) .. "/themes/pi-retrobox.json",
     "--use-theme",
@@ -499,18 +500,18 @@ function M.start(workspace, issue)
     "--extension",
     M.path() .. "/extension.ts",
   }
+  if M.settings().provider then vim.list_extend(argv, { "--provider", M.settings().provider }) end
+  if M.settings().model then vim.list_extend(argv, { "--model", M.settings().model }) end
   if workspace.session_file then
     vim.list_extend(argv, { "--session", workspace.session_file })
   else
-    vim.list_extend(argv, { "--session-id", workspace.session, "--name", workspace.repo .. "#" .. workspace.number })
+    vim.list_extend(argv, { "--session-id", workspace.session, "--name", tasks.label(workspace) })
   end
   if not workspace.started then
     local body = issue and issue.body or ""
-    assert(#body <= 100000, "Issue body is too large; provide bounded issue context manually")
+    assert(#body <= 100000, "Task body is too large; provide bounded task context manually")
     local prompt = "# "
-      .. workspace.repo
-      .. "#"
-      .. workspace.number
+      .. tasks.label(workspace)
       .. ": "
       .. workspace.title
       .. "\n\n"
@@ -518,18 +519,16 @@ function M.start(workspace, issue)
       .. "\n\n"
       .. body
       .. "\n\n"
-      .. "Implement only this issue in the current worktree. Follow repository instructions. "
+      .. (workspace.source == "local" and ("Local task file: " .. tasks.file(workspace) .. "\n\n") or "")
+      .. "Implement only this task in the current worktree. Follow repository instructions. "
       .. "Run relevant tests with a timeout and report actual results. Leave changes for human review; "
       .. "do not commit, merge, push, close issues, install dependencies, or remove worktrees without asking. "
       .. "If explicitly asked to delegate, use pi-subagents in the foreground with async: false, "
-      .. "the current cwd, explicit model "
-      .. M.settings().provider
-      .. "/"
-      .. M.settings().model
-      .. ", and no managed worktree. Do not start background or external agents.\n"
+      .. "the current cwd, an explicit provider/model ID matching your active session model, "
+      .. "and no managed worktree. Do not start background or external agents.\n"
     local task_file = directory(workspace) .. "/" .. run .. "-task.md"
     M.write(task_file, prompt)
-    vim.list_extend(argv, { "--", "@" .. task_file, "Implement the attached issue." })
+    vim.list_extend(argv, { "--", "@" .. task_file, "Implement the attached task." })
   end
   previous = M.jobs[workspace.id]
   if previous and not previous.exited then return M.show(workspace) end
@@ -584,7 +583,6 @@ function M.start(workspace, issue)
       env = {
         NVIM_PI_STATUS = status_file,
         NVIM_PI_RUN = run,
-        NVIM_PI_MODEL = M.settings().provider .. "/" .. M.settings().model,
       },
       on_exit = function(_, code)
         vim.schedule(function()
@@ -621,9 +619,7 @@ function M.start(workspace, issue)
       job.activity = "unknown"
       notify(
         "Pi lifecycle reporting is unavailable for "
-          .. workspace.repo
-          .. "#"
-          .. workspace.number
+          .. tasks.label(workspace)
           .. "; inspect its terminal"
       )
       M.changed()
@@ -647,7 +643,7 @@ function M.quit()
     local function check_buffers()
       for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         assert(
-          not (vim.bo[buf].modified and vim.bo[buf].buftype == ""),
+          not (vim.bo[buf].modified and (vim.bo[buf].buftype == "" or vim.bo[buf].buftype == "acwrite")),
           "Save or discard modified files before :PiQuit. Agents are still running."
         )
       end
@@ -737,14 +733,23 @@ function M.files(workspace, scope)
 end
 
 function M.refresh(workspace)
-  if workspace.refreshing or not uv.fs_stat(workspace.path) then return end
+  if not uv.fs_stat(workspace.path) then return end
+  if workspace.source == "local" then
+    local current = tasks.get(workspace)
+    if workspace.title ~= M.clean(current.title) then
+      workspace.title = M.clean(current.title)
+      M.save(workspace)
+      M.changed()
+    end
+  end
+  if workspace.refreshing then return end
   workspace.refreshing = true
   local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
   workspace.refreshing = false
   if result.code ~= 0 then
     local message = M.clean(result.stderr)
     if workspace.git_error ~= message then
-      notify("Cannot refresh " .. workspace.repo .. "#" .. workspace.number .. ": " .. message)
+      notify("Cannot refresh " .. tasks.label(workspace) .. ": " .. message)
     end
     workspace.files = nil
     workspace.git_error = message

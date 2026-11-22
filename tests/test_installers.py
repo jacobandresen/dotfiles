@@ -75,20 +75,21 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(json.loads(settings.read_text())["memoryMiB"], 8192)
         self.assertEqual(json.loads((settings.parent / "settings-store.json.bak").read_text())["memoryMiB"], 4096)
 
-    def test_use_model_refreshes_existing_variant_and_configures_pi(self):
+    def test_use_model_preloads_without_generation_and_configures_pi(self):
         args = dotfiles.argparse.Namespace(dry_run=False)
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
              patch.object(dotfiles, "has_model", return_value=True), \
-             patch.object(dotfiles, "api_json", return_value={}), \
+             patch.object(dotfiles, "api_json", return_value={"done": True, "done_reason": "load"}) as api, \
              patch.object(dotfiles, "run") as command, \
              patch.object(dotfiles.pi_config, "main") as install, contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
-        command.assert_called_once_with("ollama", "create", "qwen3.5-coding:4b", "-f",
-                                        str(REPO / "ollama/Coding.Modelfile"))
+        command.assert_not_called()
+        self.assertEqual(api.call_args.args[1]["messages"], [],
+                         "Warmup must load the model without consuming an inference slot")
         install.assert_called_once_with([])
 
-    def test_use_model_pulls_missing_base_before_creating_variant(self):
+    def test_use_model_pulls_missing_base_before_copying_alias(self):
         args = dotfiles.argparse.Namespace(dry_run=False)
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
@@ -98,9 +99,26 @@ class InstallerTests(unittest.TestCase):
              patch.object(dotfiles.pi_config, "main"), contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
         self.assertEqual([call.args for call in command.call_args_list], [
-            ("ollama", "pull", "qwen3.5:4b-q4_K_M"),
-            ("ollama", "create", "qwen3.5-coding:4b", "-f", str(REPO / "ollama/Coding.Modelfile")),
+            ("ollama", "pull", dotfiles.coding_base_model()),
+            ("ollama", "cp", dotfiles.coding_base_model(), "mellum"),
         ])
+
+    def test_dependency_updater_completes_after_writing_pins(self):
+        script = self.root / "dotfiles.py"
+        script.write_text((REPO / "scripts/dotfiles.py").read_text())
+        hashes = self.root / "hashes.json"
+        hashes.write_text((REPO / "scripts/hashes.json").read_text())
+        output = io.StringIO()
+        with patch.object(dotfiles.hashes, "HASHES_FILE", hashes), \
+             patch.object(dotfiles.hashes.platform, "system", return_value="Linux"), \
+             patch.object(dotfiles.hashes, "latest", side_effect=["v1.6.0", "v0.40.17", "v5.6.0"]), \
+             patch.object(dotfiles.hashes, "hash_asset", return_value="a" * 64), \
+             patch.object(sys, "argv", ["hashes.py", str(script)]), \
+             contextlib.redirect_stdout(output):
+            dotfiles.hashes.main()
+        self.assertIn("PI_VERSION = '1.6.0'", script.read_text())
+        self.assertEqual(json.loads(hashes.read_text())["pi"]["Linux"]["x86_64"], "a" * 64)
+        self.assertIn("dependency update complete", output.getvalue())
 
     def test_matching_ollama_profile_keeps_app_running(self):
         home = self.root / "home"

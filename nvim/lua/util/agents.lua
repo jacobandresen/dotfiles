@@ -2,10 +2,6 @@ local M = {}
 
 local command = {
   "pi",
-  "--provider",
-  "github-copilot",
-  "--model",
-  "gpt-5.6-luna",
   "--theme",
   vim.fn.stdpath("config") .. "/themes/pi-retrobox.json",
   "--use-theme",
@@ -111,12 +107,13 @@ function M.review()
   local core = require("util.pi_issues")
   local workspace = core.current()
   local job = workspace and core.jobs[workspace.id]
-  if not job or job.exited then return vim.notify("Start the issue's pi with Space a p first", vim.log.levels.WARN) end
+  if not job or job.exited then return vim.notify("Start the task's pi with Space a p first", vim.log.levels.WARN) end
+  if not job.model or job.model == "" or job.model == "unavailable" then
+    return vim.notify("Pi has not reported its active model yet; inspect its terminal", vim.log.levels.WARN)
+  end
   local text = "Use the existing subagent tool with agent: reviewer, async: false, model: "
-    .. core.settings().provider
-    .. "/"
-    .. core.settings().model
-    .. " and the current cwd. Review this issue's changes against its task and repository instructions. "
+    .. job.model
+    .. " and the current cwd. Review this task's changes against its description and repository instructions. "
     .. "Do not edit files, use workflow scripts, or start background agents."
   vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
   core.show(workspace)

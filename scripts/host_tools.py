@@ -27,11 +27,11 @@ def ram_profile():
 
 
 def coding_model():
-    return "qwen3.5-coding:4b"
+    return "mellum"
 
 
 def coding_base_model():
-    return "qwen3.5:4b-q4_K_M"
+    return "hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf"
 
 
 def ollama_api():

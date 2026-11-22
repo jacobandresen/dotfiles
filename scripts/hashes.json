@@ -14,8 +14,8 @@
     }
   },
   "ollama": {
-    "x86_64": "c94aa4156b3d13e64ebc2efe5ea53f015384c882be776e6695cfb37fb180d5ad",
-    "arm64": "4d27cb1d8f46176a3c0ce10aea2a16e4ad73dfe1599f2ed13468f29e5b8aba0d"
+    "x86_64": "1df9d6228bac5a22e420b242708c0d10e5b886db97bab99d446a41760f4e79af",
+    "arm64": "0ec632480057cef6300459d1fa7dbbb3fc188b9a7d56cd0b0a72d05927d90ecc"
   },
   "lazydocker": {
     "x86_64": "c47e6f4b61debde5422183c7eb446a704a92c58b4c35bbd128c722d8bf269a86",

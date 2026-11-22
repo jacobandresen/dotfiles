@@ -1,4 +1,4 @@
-.PHONY: install deps doctor ram-profile use-model verify-model
+.PHONY: install deps doctor ram-profile use-model install-mellum verify-model
 .PHONY: install-nvim install-zsh install-mc install-kitty install-pi install-workflow update-pi install-ollama install-docker install-fonts
 .PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
 
@@ -11,7 +11,7 @@ install: deps
 	@$(MAKE) install-nvim install-zsh install-mc install-kitty install-workflow
 	@$(MAKE) install-ollama
 	@$(MAKE) install-docker
-	@$(MAKE) use-model
+	@$(MAKE) install-mellum
 
 deps:
 ifeq ($(OS),Darwin)
@@ -95,6 +95,9 @@ install-ollama:
 
 use-model:
 	@$(CLI) use-model
+
+install-mellum:
+	@$(MAKE) use-model
 
 install-docker:
 	@$(CLI) install-docker

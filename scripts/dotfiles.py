@@ -29,7 +29,7 @@ NEOVIM_VERSION = "v0.12.1"
 NEOVIM_SHA256 = hashes.DEPENDENCY_HASHES["neovim"]
 PI_VERSION = "1.0.4"
 PI_SHA256 = hashes.DEPENDENCY_HASHES["pi"]
-OLLAMA_VERSION = "v0.40.0"
+OLLAMA_VERSION = "v0.40.17"
 OLLAMA_SHA256 = hashes.DEPENDENCY_HASHES["ollama"]
 LAZYDOCKER_VERSION = "0.24.4"
 LAZYDOCKER_SHA256 = hashes.DEPENDENCY_HASHES["lazydocker"]
@@ -453,7 +453,6 @@ def start_ollama():
 
 def use_model(args):
     model = coding_model()
-    base_model = coding_base_model()
     keepalive = -1
     print(f"Setting up Ollama and pi-agent: {model}")
     if not shutil.which("ollama"):
@@ -463,7 +462,8 @@ def use_model(args):
             print(f"  [DRY-RUN] Would start Ollama at {ollama_api()}")
             print(f"  [DRY-RUN] Would ensure {model} is pulled and loaded (keep-alive {keepalive})")
         else:
-            print(f"  {model} is present" if has_model(model) else f"  [DRY-RUN] Would pull {base_model} and create {model}")
+            print(f"  {model} is present" if has_model(model)
+                  else f"  [DRY-RUN] Would ensure {coding_base_model()} is pulled and copy it to {model}")
             print(f"  [DRY-RUN] Would load {model} (keep-alive {keepalive})")
         print(f"  [DRY-RUN] Would configure pi-agent for {model}")
         return
@@ -477,15 +477,17 @@ def use_model(args):
     if not api_ready():
         fail(f"Ollama unreachable at {ollama_api()}")
     print(f"  Ollama responding at {ollama_api()}")
-    if not has_model(base_model):
-        print(f"  pulling {base_model}...")
-        run("ollama", "pull", base_model)
-    print(f"  updating {model} from the Modelfile...")
-    run("ollama", "create", model, "-f", str(ROOT / "ollama/Coding.Modelfile"))
+    if not has_model(model):
+        base_model = coding_base_model()
+        if not has_model(base_model):
+            print(f"  pulling {base_model}...")
+            run("ollama", "pull", base_model)
+        print(f"  creating local alias {model}...")
+        run("ollama", "cp", base_model, model)
     print(f"  loading {model} (keep-alive {keepalive})...")
     response = api_json("/api/chat", {
         "model": model,
-        "messages": [{"role": "user", "content": "hi"}],
+        "messages": [],
         "stream": False,
         "think": False,
         "keep_alive": keepalive,
@@ -510,9 +512,9 @@ def verify_model(args):
                 print(f"{model:22} {'-':8} {'-':10} {'-':9} PULL FAILED")
                 failed = True
                 continue
-            if run("ollama", "create", model, "-f", str(ROOT / "ollama/Coding.Modelfile"), check=False,
+            if run("ollama", "cp", coding_base_model(), model, check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-                print(f"{model:22} {'-':8} {'-':10} {'-':9} CREATE FAILED")
+                print(f"{model:22} {'-':8} {'-':10} {'-':9} COPY FAILED")
                 failed = True
                 continue
         work = Path(tempfile.mkdtemp())

@@ -53,7 +53,7 @@ local ok, failure = pcall(function()
     _G.Snacks = require("snacks")
     Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
     local core = require("util.pi_issues")
-    vim.g.pi_issues = { state_dir = temp .. "/state" }
+    vim.g.pi_issues = { state_dir = temp .. "/state", github_enabled = true }
     _G.LazyVim = { root = setmetatable({ detectors = {}, cache = {} }, { __call = function() return temp end }) }
     _G.workspace = {
       id = "test", path = temp, common = temp .. "/.git", branch = "main",
@@ -65,6 +65,65 @@ local ok, failure = pcall(function()
   ]],
     { vim.fn.getcwd(), vim.fn.stdpath("data") .. "/lazy/snacks.nvim", temp }
   )
+  lua([[
+    for _, key in ipairs(require("plugins.ai")[1].keys) do
+      if key[1] == "<F6>" then vim.keymap.set(key.mode, key[1], key[2]) end
+    end
+    local core = require("util.pi_issues")
+    _G.pi_terminal_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[pi_terminal_buf].bufhidden = "hide"
+    vim.api.nvim_buf_call(pi_terminal_buf, function()
+      _G.pi_terminal_job = vim.fn.jobstart({ "sleep", "30" }, { term = true })
+    end)
+    core.jobs.test = { buf = pi_terminal_buf, channel = pi_terminal_job, activity = "idle" }
+    core.show(workspace)
+  ]])
+  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "t" end, 10))
+  rpc("nvim_input", "<F6>")
+  assert(vim.wait(3000, function() return lua("return #vim.fn.win_findbuf(pi_terminal_buf) == 0") end, 10),
+    "F6 must hide Pi directly from terminal input")
+  lua("assert(vim.fn.jobwait({pi_terminal_job}, 0)[1] == -1, 'Hiding must leave Pi running')")
+  rpc("nvim_input", "<F6>")
+  assert(vim.wait(3000, function() return lua("return vim.api.nvim_get_current_buf() == pi_terminal_buf") end, 10),
+    "F6 must restore the same Pi terminal")
+  lua([[
+    assert(vim.bo[pi_terminal_buf].channel == pi_terminal_job)
+    vim.cmd.stopinsert()
+    require("util.agents").toggle()
+    vim.fn.jobstop(pi_terminal_job)
+    vim.fn.jobwait({ pi_terminal_job }, 3000)
+    require("util.pi_issues").jobs.test = nil
+  ]])
+  lua([[
+    local core = require("util.pi_issues")
+    local executable = workspace.path .. "/.git/pi-test-bin/pi"
+    core.write(executable, "#!/bin/sh\ntrap 'exit 0' TERM HUP\nwhile :; do sleep 1; done\n")
+    assert(vim.uv.fs_chmod(executable, 493))
+    _G.original_path = vim.env.PATH
+    vim.env.PATH = vim.fs.dirname(executable) .. ":" .. original_path
+    vim.t.pi_issue = nil
+    require("util.agents").toggle()
+    _G.standalone_pi_buf = vim.api.nvim_get_current_buf()
+    _G.standalone_pi_job = vim.bo.channel
+    assert(vim.bo.buftype == "terminal" and standalone_pi_job > 0)
+  ]])
+  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "t" end, 10))
+  rpc("nvim_input", "<F6>")
+  assert(vim.wait(3000, function() return lua("return #vim.fn.win_findbuf(standalone_pi_buf) == 0") end, 10),
+    "F6 must also hide a standalone Pi session")
+  lua("assert(vim.fn.jobwait({standalone_pi_job}, 0)[1] == -1, 'Standalone Pi must keep running')")
+  rpc("nvim_input", "<F6>")
+  assert(vim.wait(3000, function() return lua("return vim.api.nvim_get_current_buf() == standalone_pi_buf") end, 10),
+    "F6 must restore the same standalone conversation")
+  lua([[
+    assert(vim.bo.channel == standalone_pi_job)
+    vim.cmd.stopinsert()
+    require("util.agents").toggle()
+    vim.fn.jobstop(standalone_pi_job)
+    assert(vim.fn.jobwait({ standalone_pi_job }, 3000)[1] ~= -1)
+    vim.env.PATH = original_path
+    vim.t.pi_issue = "test"
+  ]])
   for _, width in ipairs({ 140, 80 }) do
     rpc("nvim_ui_try_resize", width, 40)
     lua("require('util.pi_issues_ui').review(workspace)")
@@ -126,10 +185,24 @@ local ok, failure = pcall(function()
     ui.dashboard()
     _G.issue_dashboard_win = vim.api.nvim_get_current_win()
   ]])
-  rpc("nvim_input", "i")
+  lua("vim.cmd.close(); require('util.pi_issues_ui').issues()")
+  assert(vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10))
+  lua([[
+    local editor = require("util.pi_issue_edit")
+    local open = editor.open
+    local viewed
+    editor.open = function(target) viewed = target end
+    local picker = Snacks.picker.get()[1]
+    local issue = picker:current()
+    picker.opts.actions.view_issue(picker)
+    assert(viewed and viewed.number == issue.number and viewed.repo == "test/repo")
+    assert(viewed.path == workspace.path and viewed.host == "github.com")
+    editor.open = open
+    require("util.pi_issues_ui").issues()
+  ]])
   assert(vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10))
   lua(
-    "assert(not vim.api.nvim_win_is_valid(issue_dashboard_win), 'i must replace the workspace panel with the issue picker')"
+    "assert(not vim.api.nvim_win_is_valid(issue_dashboard_win), 'GitHub picker replaces the workspace panel')"
   )
   rpc("nvim_input", "<Tab><Tab>")
   assert(
@@ -177,7 +250,7 @@ local ok, failure = pcall(function()
   lua([[
     local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
     core.repository = function()
-      return { root = workspace.path, host = "github.com", repo = "test/empty", default_branch = "main" }
+      return { root = workspace.path, task_root = workspace.path, source = "local", host = "local", repo = "test/empty" }
     end
     core.run = function(argv, ...)
       if argv[1] == "gh" then return { code = 0, stdout = "[]" } end
@@ -193,9 +266,41 @@ local ok, failure = pcall(function()
   )
   lua([[
     local picker = Snacks.picker.get()[1]
-    assert(picker:count() == 0 and picker.opts.title == "No open issues / test/empty")
+    assert(picker:count() == 0 and picker.opts.title == "No local tasks / test/empty")
     assert(not vim.api.nvim_win_is_valid(empty_dashboard_win))
-    picker:close()
+    local footers = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      footers[#footers + 1] = vim.inspect(vim.api.nvim_win_get_config(win).footer)
+    end
+    assert(table.concat(footers):find("Ctrl-n", 1, true), "New-task controls must actually be visible")
+  ]])
+  rpc("nvim_input", "<C-\\><C-n>?")
+  assert(vim.wait(3000, function()
+    return lua([[
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
+        if table.concat(lines, "\n"):find("Ctrl-n: create a local task", 1, true) then return true end
+      end
+      return false
+    ]])
+  end, 10), "The visible help shortcut must open actionable task help")
+  rpc("nvim_input", "q<C-n>")
+  assert(vim.wait(3000, function() return lua("return vim.bo.buftype == 'acwrite'") end, 10),
+    "Ctrl-n must open an editable blank task from an empty picker")
+  lua([[
+    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "# ")
+  ]])
+  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "i" end, 10),
+    "A blank task must be ready for typing its title")
+  rpc("nvim_input", "My self-written task<CR><CR>My own instructions.<Esc>:write<CR>")
+  assert(vim.wait(3000, function()
+    return lua("return vim.b.pi_issue_draft ~= nil and vim.b.pi_issue_draft.target.source == 'local'")
+  end, 10), "A user must be able to type and save a new task using normal editor keys")
+  lua([[
+    local task = require("util.pi_tasks").get(vim.b.pi_issue_draft.target)
+    assert(task.title == "My self-written task" and task.body:find("My own instructions.", 1, true))
+    assert(not task.body:find("Acceptance criteria", 1, true), "Do not insert a predefined task")
+    assert(not vim.bo.modified and vim.bo.buftype == "")
     local core = require("util.pi_issues")
     core.repository, core.run = original_repository, original_run
   ]])

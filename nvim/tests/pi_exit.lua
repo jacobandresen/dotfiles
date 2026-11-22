@@ -13,8 +13,9 @@ core.jobs[workspace.id] = { channel = job, activity = "working" }
 core.choose = function() return vim.env.PI_EXIT_CHOICE == "1" and "Cancel" or "Stop agents and quit" end
 local buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_set_current_buf(buf)
-if vim.env.PI_EXIT_DIRTY == "yes" then vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "unsaved" }) end
-if vim.env.PI_EXIT_DIRTY == "yes" then
+if vim.env.PI_EXIT_DIRTY ~= "no" then vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "unsaved" }) end
+if vim.env.PI_EXIT_DIRTY == "task" then vim.bo[buf].buftype = "acwrite" end
+if vim.env.PI_EXIT_DIRTY ~= "no" then
   local ok = pcall(vim.cmd, "qall")
   assert(not ok, "Modified buffers must cancel the quit")
   assert(vim.fn.jobwait({ job }, 0)[1] == -1, "Cancelled exit must preserve the agent")

@@ -27,7 +27,8 @@ export default async function (pi: ExtensionAPI) {
     const snapshot = () => JSON.parse(readFileSync(process.env.NVIM_PI_STATUS!, "utf8"));
     await invoke("session_start", event);
     assert(commands.has("subagents-guide") && !commands.has("run"));
-    const valid = { agent: "reviewer", async: false, model: process.env.NVIM_PI_MODEL, cwd: ctx.cwd };
+    assert(ctx.model, "The configured default model must be available");
+    const valid = { agent: "reviewer", async: false, model: `${ctx.model.provider}/${ctx.model.id}`, cwd: ctx.cwd };
     const guard = (input: object, toolName = "subagent") => invoke("tool_call", { toolName, input });
     assert.equal(await guard(valid), undefined);
     for (const input of [
@@ -49,6 +50,8 @@ export default async function (pi: ExtensionAPI) {
     assert.equal(snapshot().outcome, "error");
     await invoke("model_select", { model: { provider: "changed", id: "actual-model" } });
     assert.equal(snapshot().model, "changed/actual-model");
+    assert.equal((await guard(valid))?.block, true, "Do not retain the previous session model");
+    assert.equal(await guard({ ...valid, model: "changed/actual-model" }), undefined);
     await invoke("session_shutdown", { reason: "reload" });
     assert.notEqual(snapshot().activity, "exited");
     await invoke("session_start", event);

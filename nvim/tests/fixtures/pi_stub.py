@@ -20,7 +20,7 @@ temporary = status.with_suffix(".tmp")
 temporary.write_text(json.dumps({
     "version": 1, "run": os.environ["NVIM_PI_RUN"], "sequence": 1,
     "cwd": os.getcwd(), "session": session, "session_file": str(session_file),
-    "activity": "idle", "model": os.environ["NVIM_PI_MODEL"],
+    "activity": "idle", "model": "ollama/mellum",
 }))
 temporary.replace(status)
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
