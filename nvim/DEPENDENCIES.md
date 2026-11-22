@@ -66,6 +66,7 @@ agent limits, diff review and task editing reuse the same workflow.
 | `Space a n` | Write a new local task; `:write` creates its file |
 | `Space a i` | Pick local tasks; Tab selects several, Enter starts them now (base `HEAD`), `Ctrl-b` reviews / picks a base first |
 | `Space a g` | Start (or focus) the task in the current task buffer or tab |
+| `Space a R` / `:PiTaskRestart` | Restart the task with its current description in a new conversation; the worktree is kept (dashboard: `R`). Resuming with `p` after an edit sends the updated task into the existing conversation instead |
 | `Space a a` | Switch task: running ones first; Enter jumps to its pi, `Ctrl-o` to its code tab |
 | `Space a w` | Compact workspace panel, including written tasks not started yet (`new`); `1`-`9` jump to a task's pi (or start a `new` one), Enter opens code, `p` starts/focuses pi, `c` asks an idle pi to continue |
 | `F6` / `Space a p` | Hide/show Pi without stopping it; F6 also works in terminal mode |

@@ -25,6 +25,11 @@ return {
         desc = "Start / Focus This Task's Pi",
       },
       {
+        "<leader>aR",
+        function() require("util.pi_issues_ui").restart_current() end,
+        desc = "Restart Task with Its Current Description",
+      },
+      {
         "<leader>aw",
         function() require("util.pi_issues_ui").dashboard() end,
         desc = "Pi Task Workspaces",

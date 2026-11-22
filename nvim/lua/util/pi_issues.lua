@@ -134,6 +134,8 @@ local fields = {
   "source",
   "task_root",
   "task_file",
+  "task_sha",
+  "restarts",
 }
 function M.save(workspace)
   local data = { version = 1 }
@@ -463,6 +465,27 @@ function M.show(workspace)
   if not job.exited then vim.cmd.startinsert() end
 end
 
+-- Identifies the task text an agent was given, to notice later edits.
+function M.task_hash(task) return vim.fn.sha256((task.title or "") .. "\0" .. (task.body or "")) end
+
+function M.sleep(ms)
+  local thread = coroutine.running()
+  vim.defer_fn(function() coroutine.resume(thread) end, ms)
+  coroutine.yield()
+end
+
+local function send_update(workspace, job, task)
+  local text = "The task description was updated. Updated task:\n\n# " .. task.title .. "\n\n" .. task.body
+    .. "\n\nContinue with the updated task in this worktree; keep work that still applies."
+  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
+  vim.defer_fn(function()
+    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
+  end, 150)
+  workspace.task_sha = M.task_hash(task)
+  M.save(workspace)
+  notify("Sent the updated task to " .. tasks.label(workspace), vim.log.levels.INFO)
+end
+
 function M.start(workspace, issue)
   M.validate(workspace)
   local previous = M.jobs[workspace.id]
@@ -498,6 +521,15 @@ function M.start(workspace, issue)
   end
   if not workspace.started and (not issue or issue.body == nil) then
     issue = tasks.get(workspace)
+  end
+  local update
+  if workspace.started and workspace.source == "local" then
+    local current = tasks.get(workspace)
+    if workspace.task_sha and M.task_hash(current) ~= workspace.task_sha then update = current end
+  end
+  if not workspace.started and workspace.source == "local" then
+    workspace.title = M.clean(issue.title)
+    workspace.task_sha = M.task_hash(issue)
   end
   local run = vim.fn.sha256(token .. tostring(uv.hrtime())):sub(1, 24)
   local argv = {
@@ -639,6 +671,38 @@ function M.start(workspace, issue)
   end, 5000)
   M.show(workspace)
   M.changed()
+  if update then
+    -- Resumed after the task file changed: tell the conversation once pi reports it is ready.
+    local deadline = uv.now() + 30000
+    local function ready()
+      if M.jobs[workspace.id] ~= job or job.exited then return end
+      if job.sequence then return send_update(workspace, job, update) end
+      if uv.now() < deadline then vim.defer_fn(ready, 100) end
+    end
+    ready()
+  end
+end
+
+-- Start the task again from its current description in a new conversation; the worktree is kept.
+function M.restart(workspace)
+  local job = M.jobs[workspace.id]
+  if job and not job.exited then
+    if M.choose({ "Cancel", "Restart with the current task" }, "Restart " .. tasks.label(workspace)
+      .. "? Its conversation stops; worktree changes are kept.") ~= "Restart with the current task" then
+      return
+    end
+    M.stop(workspace)
+    for _ = 1, 100 do
+      if job.exited then break end
+      M.sleep(50)
+    end
+    assert(job.exited, "pi did not stop; inspect its terminal before restarting")
+  end
+  workspace.restarts = (workspace.restarts or 0) + 1
+  workspace.session = (workspace.source == "local" and "task-" or "issue-") .. workspace.id .. "-r" .. workspace.restarts
+  workspace.session_file, workspace.started = nil, nil
+  M.save(workspace)
+  M.start(workspace)
 end
 
 function M.stop(workspace)

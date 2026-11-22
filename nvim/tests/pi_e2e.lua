@@ -266,6 +266,36 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   ]])
   keys("<C-\\><C-n>")
 
+  step("edit task 1's description and restart it with Space a R")
+  lua("require('util.pi_issues').open(e2e.by_number(1))")
+  keys("<Esc><Space>av")
+  wait_for("Space a v opens task 1's file in its tab", [[
+    local info = vim.b.pi_issue_draft
+    return info ~= nil and info.target.number == 1 and vim.t.pi_issue == e2e.by_number(1).id
+  ]])
+  keys("Go<CR>Also add a goodbye() alias.<Esc>:write<CR>")
+  wait_for("Saving a started task points to restart", [[
+    return _G.e2e_messages[#_G.e2e_messages]:find("Space a R restarts project/task-1", 1, true) ~= nil
+  ]])
+  vim.fn.writefile({ "work from the first conversation" }, repo .. "-worktrees/task-1/kept-work.txt")
+  local old_job = lua("return e2e.job(1).channel")
+  keys("<Space>aR")
+  wait_for("Restart asks before stopping a running agent", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 2")
+  pick("Restart", "Restart with the current task")
+  wait_for("Task 1 restarts in a new conversation", [[
+    local job = e2e.job(1)
+    return job ~= nil and job.channel ~= ... and not job.exited and job.sequence ~= nil and e2e.live() == 3
+  ]], 10000, old_job)
+  local restarted
+  for _, event in ipairs(agents()) do
+    if event.event == "started" then restarted = event end
+  end
+  assert(restarted.event == "started" and restarted.cwd:match("task%-1$") and not restarted.resumed, vim.inspect(restarted))
+  assert(restarted.prompt:find("Also add a goodbye() alias.", 1, true), "The restart sends the edited description")
+  assert(restarted.args[vim.fn.index(restarted.args, "--session-id") + 2]:match("%-r1$"), "A fresh session id")
+  assert(uv.fs_stat(repo .. "-worktrees/task-1/kept-work.txt"), "Restarting keeps the worktree's changes")
+  keys("<C-\\><C-n>")
+
   step("stop task 2 from the dashboard, then start the queued task 4")
   keys("<Esc><Space>aw")
   wait_for("Dashboard", "return e2e.dashboard_row(2) ~= nil")
@@ -322,8 +352,19 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   step("resume task 2 after another agent stops")
   lua("require('util.pi_issues').stop(e2e.by_number(1))")
   wait_for("Task 1 stops", "return e2e.job(1).exited and e2e.live() == 2")
-  lua("require('util.pi_issues').open(e2e.by_number(2))")
+  lua([[
+    local tasks = require("util.pi_tasks")
+    local task = tasks.get(e2e.by_number(2))
+    tasks.update(e2e.by_number(2), task.title, task.body .. "\n\nAlso document farewell().")
+    require("util.pi_issues").open(e2e.by_number(2))
+  ]])
   keys("<Esc><Space>ap")
+  wait_for("Resuming after an edit sends the updated task into the conversation", [[
+    local path = require("util.pi_issues").directory(e2e.by_number(2)) .. "/paste.txt"
+    local text = vim.uv.fs_stat(path) and table.concat(vim.fn.readfile(path, "b"), "\n") or ""
+    return text:find("The task description was updated", 1, true) ~= nil
+      and text:find("Also document farewell().", 1, true) ~= nil and text:find("\27[201~\r", 1, true) ~= nil
+  ]])
   wait_for("Space a p resumes task 2", [[
     local job = e2e.job(2)
     return job ~= nil and not job.exited and job.sequence ~= nil and e2e.live() == 3

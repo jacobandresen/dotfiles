@@ -243,6 +243,25 @@ function M.switch()
   })
 end
 
+local function workspace_for(target)
+  for _, workspace in pairs(core.workspaces) do
+    if tasks.identity(workspace) == tasks.identity(target) then return workspace end
+  end
+end
+
+-- Restart the task of the current task buffer or tab with its current description.
+function M.restart_current()
+  local info = vim.b.pi_issue_draft
+  local target = info and info.target or core.current()
+  if not target then return vim.notify("Open a task (Space a i, Space a n) first", vim.log.levels.WARN) end
+  local workspace = workspace_for(target)
+  if not workspace then return M.start_current() end
+  core.task(function()
+    if info and vim.bo.modified then vim.cmd("silent write") end
+    core.restart(workspace)
+  end)
+end
+
 -- Start (or focus) the task of the current task buffer or task tab.
 function M.start_current()
   local info = vim.b.pi_issue_draft
@@ -438,6 +457,9 @@ function M.dashboard()
     p = action(function(w)
       core.task(function() core.start(w) end)
     end, start_pending),
+    R = action(function(w)
+      core.task(function() core.restart(w) end)
+    end, start_pending),
     c = function()
       local entry = selected()
       if entry and entry.pending then return not_started() end
@@ -468,6 +490,7 @@ function M.dashboard()
         "new rows: written tasks without a workspace; p / Enter / 1-9 start them",
         "1-9: jump to that task's pi (or code tab when stopped)",
         "c: ask an idle pi to continue (e.g. after \"no changes\")",
+        "R: restart with the current task text (new conversation, worktree kept)",
         "Space a a: switch task from anywhere    Space a g: start this task",
         "d: working diff        D: changes since the recorded base",
         "v: view / edit the task (GitHub uses a local draft)",
@@ -838,6 +861,8 @@ function M.setup()
   vim.api.nvim_create_user_command("PiTaskNew", function(opts)
     M.new_task(opts.args ~= "" and opts.args or nil)
   end, { nargs = "*", desc = "Create a local Markdown task" })
+  vim.api.nvim_create_user_command("PiTaskRestart", M.restart_current,
+    { desc = "Restart the task with its current description in a new conversation" })
   vim.api.nvim_create_user_command("PiTaskView", function() require("util.pi_issue_edit").open() end,
     { desc = "View / edit the active task" })
   vim.api.nvim_create_user_command("PiTaskEdit", function() require("util.pi_issue_edit").edit() end,

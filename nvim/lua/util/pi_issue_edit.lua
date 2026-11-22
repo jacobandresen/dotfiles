@@ -89,14 +89,22 @@ function M.open(target, reload, edit_with_pi)
       vim.cmd("botright vsplit")
       vim.api.nvim_win_set_buf(0, buf)
     end
-    vim.wo.winbar = local_task and " Local task | :write save | Space ag start | Space ae ask Pi "
+    vim.wo.winbar = local_task and " Local task | :write save | Space ag start | Space aR restart | Space ae ask Pi "
       or " GitHub draft | :write local save | Space aP publish | Space ae Pi "
     if local_task then
       vim.api.nvim_create_autocmd("BufWritePost", {
         group = vim.api.nvim_create_augroup("pi_local_task_" .. buf, { clear = true }),
         buffer = buf,
         callback = function()
-          core.task(function() refresh(target, fetch(target).title) end)
+          core.task(function()
+            refresh(target, fetch(target).title)
+            for _, workspace in pairs(core.workspaces) do
+              if workspace.started and identity(workspace) == identity(target) then
+                vim.notify("Task updated. Space a R restarts " .. tasks.label(workspace)
+                  .. " with it; resuming with p sends it to the current conversation.", vim.log.levels.INFO)
+              end
+            end
+          end)
         end,
       })
     else
