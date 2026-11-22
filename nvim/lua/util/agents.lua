@@ -20,7 +20,8 @@ local function opts()
   }
 end
 
-function M.toggle()
+-- resume: a stopped task's leftover terminal starts (resumes) pi instead of hiding.
+function M.toggle(resume)
   local core = require("util.pi_issues")
   local workspace = core.current()
   if workspace then
@@ -28,6 +29,14 @@ function M.toggle()
     if job then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if vim.api.nvim_win_get_buf(win) == job.buf then
+          if resume and job.exited then
+            return core.task(function()
+              core.start(workspace)
+              if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == job.buf then
+                vim.api.nvim_win_close(win, false)
+              end
+            end)
+          end
           if #vim.api.nvim_tabpage_list_wins(0) == 1 then
             vim.api.nvim_win_set_buf(win, vim.api.nvim_create_buf(true, false))
           else

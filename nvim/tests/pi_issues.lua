@@ -101,6 +101,24 @@ local ok, failure = pcall(function()
   assert(staged and unstaged and untracked and renamed, "Diff scopes must preserve stages, renames and unusual paths")
   await(function() core.refresh(a) end)
   assert(a.files == 3, "Count a renamed file once")
+  local done_refreshing, real_run = false, core.run
+  core.run = function(argv, cwd, ...)
+    if argv[2] ~= "status" then return real_run(argv, cwd, ...) end
+    core.run = real_run
+    -- Snapshot the worktree now, but answer later: the agent's write lands in between.
+    local stale = vim.system(argv, { cwd = cwd }):wait()
+    local thread = coroutine.running()
+    vim.defer_fn(function() coroutine.resume(thread, stale) end, 200)
+    return coroutine.yield()
+  end
+  core.task(function() core.refresh(a) done_refreshing = true end)
+  write(a.path .. "/late-agent-write.txt", { "written after the first git status started" })
+  await(function() core.refresh(a) end)
+  assert(vim.wait(5000, function() return done_refreshing and not a.refreshing end, 10))
+  assert(a.files == 4, "A refresh requested during another must still count later writes: " .. tostring(a.files))
+  assert(uv.fs_unlink(a.path .. "/late-agent-write.txt"))
+  await(function() core.refresh(a) end)
+  assert(a.files == 3)
   cmd({ "git", "commit", "-m", "Issue change" }, a.path)
   local issue_rows = await(function() return core.files(a, "issue") end)
   assert(#issue_rows == 3, "Issue scope includes committed changes")
@@ -321,7 +339,8 @@ local ok, failure = pcall(function()
   end
   ui.launch(
     repo,
-    { { number = 11, title = "Existing" }, { number = -1, title = "Invalid" }, { number = 13, title = "Third" } }
+    { { number = 11, title = "Existing" }, { number = -1, title = "Invalid" }, { number = 13, title = "Third" } },
+    { review = true }
   )
   assert(
     vim.wait(

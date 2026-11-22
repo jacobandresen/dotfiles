@@ -36,7 +36,7 @@ local function git(...)
   return vim.trim(await(function() return core.git(temp .. "/repo", unpack(args)) end))
 end
 
-local ok, failure = pcall(function()
+local ok, failure = xpcall(function()
   git("init", "-b", "main")
   git("config", "user.name", "Test")
   git("config", "user.email", "test@example.invalid")
@@ -218,7 +218,7 @@ local ok, failure = pcall(function()
     return selected and selected:count() == 1
   end, 10), table.concat(messages, "\n"))
   picker = Snacks.picker.get()[1]
-  picker.opts.confirm(picker)
+  picker.opts.actions.review_launch(picker)
   assert(vim.wait(5000, function()
     return vim.inspect(vim.api.nvim_win_get_config(0).title):find("Review Task Launch", 1, true)
   end, 10), table.concat(messages, "\n"))
@@ -243,14 +243,27 @@ local ok, failure = pcall(function()
   end
   assert(context and context:find("My own task", 1, true) and context:find("A second edit.", 1, true)
     and context:find(tasks.file(own), 1, true), "A newly written task must reach its running pi agent")
+  assert(context:find("Your worktree is " .. active.path .. " (branch task/4)", 1, true)
+    and context:find("create and change files only inside it", 1, true),
+    "The prompt must name the worktree as the task's repository root, not the main checkout")
   assert(vim.tbl_contains(running.argv, "Implement the attached task."))
   core.stop(active)
   assert(vim.wait(4000, function() return running.exited end, 10))
   core.input = input
+  local fresh = temp .. "/fresh"
+  vim.fn.mkdir(fresh, "p")
+  await(function() core.git(fresh, "init", "-b", "main") end)
+  local fresh_repo = await(function() return core.repository(fresh) end)
+  local fresh_task = tasks.create(fresh_repo, "Plan the demo")
+  ui.launch(fresh_repo, { fresh_task })
+  assert(vim.wait(5000, function()
+    return messages[#messages]:find("no commits yet", 1, true) ~= nil
+  end, 10), "A repository without commits must explain how to start: " .. messages[#messages])
+  assert(not vim.uv.fs_stat(temp .. "/fresh-worktrees"), "No worktree is created without a base commit")
   local count = #messages
   vim.cmd("PiTasks github")
   assert(#messages > count and messages[#messages]:find("GitHub integration is disabled", 1, true))
-end)
+end, debug.traceback)
 
 for id, job in pairs(core.jobs) do
   if not job.exited then core.stop(core.workspaces[id]) end

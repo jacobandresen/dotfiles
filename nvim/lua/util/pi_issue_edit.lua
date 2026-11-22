@@ -79,21 +79,34 @@ function M.open(target, reload, edit_with_pi)
     vim.b[buf].pi_issue_draft = info
     vim.bo[buf].buflisted, vim.bo[buf].filetype, vim.bo[buf].autoread = true, "markdown", true
     vim.api.nvim_buf_call(buf, function() vim.cmd("checktime") end)
-    local windows = vim.fn.win_findbuf(buf)
+    -- Stay in the task's own tab even when the file is still shown where it was written.
+    local tab = vim.api.nvim_get_current_tabpage()
+    local windows = vim.tbl_filter(function(win) return vim.api.nvim_win_get_tabpage(win) == tab end,
+      vim.fn.win_findbuf(buf))
     if #windows > 0 then
       vim.api.nvim_set_current_win(windows[1])
     else
       vim.cmd("botright vsplit")
       vim.api.nvim_win_set_buf(0, buf)
     end
-    vim.wo.winbar = local_task and " Local task | :write save | Space ai work | Space ae Pi "
+    vim.wo.winbar = local_task and " Local task | :write save | Space ag start | Space aR restart | Space ae ask Pi "
       or " GitHub draft | :write local save | Space aP publish | Space ae Pi "
     if local_task then
       vim.api.nvim_create_autocmd("BufWritePost", {
         group = vim.api.nvim_create_augroup("pi_local_task_" .. buf, { clear = true }),
         buffer = buf,
         callback = function()
-          core.task(function() refresh(target, fetch(target).title) end)
+          if vim.b[buf].pi_task_renaming then return end
+          core.task(function()
+            M.follow_rename(buf, target)
+            refresh(target, fetch(target).title)
+            for _, workspace in pairs(core.workspaces) do
+              if workspace.started and identity(workspace) == identity(target) then
+                vim.notify("Task updated. Space a R restarts " .. tasks.label(workspace)
+                  .. " with it; resuming with p sends it to the current conversation.", vim.log.levels.INFO)
+              end
+            end
+          end)
         end,
       })
     else
@@ -104,6 +117,36 @@ function M.open(target, reload, edit_with_pi)
       { buffer = buf, desc = "Ask Pi to Edit Task" })
     if edit_with_pi then M.agent(buf) end
   end)
+end
+
+-- After a save that changed the title: rename the file, then point the buffer, its draft info
+-- and any workspace at the new name. The buffer keeps its undo history.
+function M.follow_rename(buf, target)
+  local name, old = tasks.rename(target)
+  if not old then return end
+  target.task_file = name
+  local info = vim.b[buf].pi_issue_draft
+  if info then
+    info.target.task_file = name
+    vim.b[buf].pi_issue_draft = info
+  end
+  for _, workspace in pairs(core.workspaces) do
+    if identity(workspace) == identity(target) then
+      workspace.task_file = name
+      core.save(workspace)
+    end
+  end
+  local path = tasks.file(target)
+  vim.schedule(function()
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    vim.b[buf].pi_task_renaming = true
+    vim.api.nvim_buf_call(buf, function()
+      vim.cmd("silent keepalt file " .. vim.fn.fnameescape(path))
+      vim.cmd("silent write!") -- same content; clears the "not edited" state so plain :w keeps working
+    end)
+    vim.b[buf].pi_task_renaming = false
+  end)
+  vim.notify("Renamed task file to " .. name, vim.log.levels.INFO)
 end
 
 function M.publish(buf)
@@ -183,7 +226,7 @@ function M.compose(repo)
   vim.api.nvim_buf_set_name(buf, name)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# ", "", "" })
   vim.api.nvim_win_set_buf(0, buf)
-  vim.wo.winbar = " New local task | Write a title and body | :write creates the task "
+  vim.wo.winbar = " New local task | Write a title and body | :write creates it | then Space ag starts it "
   local write
   write = vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = buf,

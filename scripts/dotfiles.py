@@ -451,6 +451,22 @@ def start_ollama():
     subprocess.Popen([shutil.which("ollama") or "ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+MODELFILE = ROOT / "ollama/Mellum.Modelfile"
+# Present only in the template from MODELFILE, which honours think: false.
+THINK_OFF_MARKER = "(not $.Think)"
+
+
+def model_current(model):
+    try:
+        return THINK_OFF_MARKER in api_json("/api/show", {"model": model}).get("template", "")
+    except OSError:
+        return False
+
+
+def create_model(model, **kwargs):
+    return run("ollama", "create", model, "-f", str(MODELFILE), **kwargs)
+
+
 def use_model(args):
     model = coding_model()
     keepalive = -1
@@ -463,7 +479,7 @@ def use_model(args):
             print(f"  [DRY-RUN] Would ensure {model} is pulled and loaded (keep-alive {keepalive})")
         else:
             print(f"  {model} is present" if has_model(model)
-                  else f"  [DRY-RUN] Would ensure {coding_base_model()} is pulled and copy it to {model}")
+                  else f"  [DRY-RUN] Would ensure {coding_base_model()} is pulled and build {model} from {MODELFILE.name}")
             print(f"  [DRY-RUN] Would load {model} (keep-alive {keepalive})")
         print(f"  [DRY-RUN] Would configure pi-agent for {model}")
         return
@@ -477,13 +493,13 @@ def use_model(args):
     if not api_ready():
         fail(f"Ollama unreachable at {ollama_api()}")
     print(f"  Ollama responding at {ollama_api()}")
-    if not has_model(model):
+    if not has_model(model) or not model_current(model):
         base_model = coding_base_model()
         if not has_model(base_model):
             print(f"  pulling {base_model}...")
             run("ollama", "pull", base_model)
-        print(f"  creating local alias {model}...")
-        run("ollama", "cp", base_model, model)
+        print(f"  building {model} from {MODELFILE.name} (thinking off unless requested)...")
+        create_model(model)
     print(f"  loading {model} (keep-alive {keepalive})...")
     response = api_json("/api/chat", {
         "model": model,
@@ -512,9 +528,8 @@ def verify_model(args):
                 print(f"{model:22} {'-':8} {'-':10} {'-':9} PULL FAILED")
                 failed = True
                 continue
-            if run("ollama", "cp", coding_base_model(), model, check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-                print(f"{model:22} {'-':8} {'-':10} {'-':9} COPY FAILED")
+            if create_model(model, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                print(f"{model:22} {'-':8} {'-':10} {'-':9} CREATE FAILED")
                 failed = True
                 continue
         work = Path(tempfile.mkdtemp())

@@ -37,12 +37,22 @@ end)
 local function rpc(method, ...)
   sequence = sequence + 1
   input:write(vim.mpack.encode({ 0, sequence, method, { ... } }))
-  assert(vim.wait(5000, function() return replies[sequence] ~= nil end, 10), method .. ": " .. table.concat(stderr))
+  assert(vim.wait(5000, function() return replies[sequence] ~= nil end, 10), method .. ": " .. table.concat(stderr) .. "\n" .. vim.inspect({ ... }):sub(1, 300))
   local reply = replies[sequence]
   if reply[3] ~= vim.NIL then error(vim.inspect(reply[3])) end
   return reply[4]
 end
 local function lua(code, args) return rpc("nvim_exec_lua", code, args or {}) end
+-- Poll the child without nesting vim.wait, so a stuck rpc() fails instead of hanging.
+local function poll(timeout, condition)
+  local deadline = uv.now() + timeout
+  while not condition() do
+    if uv.now() >= deadline then return false end
+    vim.wait(10)
+    uv.update_time()
+  end
+  return true
+end
 local ok, failure = pcall(function()
   rpc("nvim_ui_attach", 140, 40, { rgb = true, ext_linegrid = true })
   lua(
@@ -78,13 +88,13 @@ local ok, failure = pcall(function()
     core.jobs.test = { buf = pi_terminal_buf, channel = pi_terminal_job, activity = "idle" }
     core.show(workspace)
   ]])
-  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "t" end, 10))
+  assert(poll(3000, function() return rpc("nvim_get_mode").mode == "t" end))
   rpc("nvim_input", "<F6>")
-  assert(vim.wait(3000, function() return lua("return #vim.fn.win_findbuf(pi_terminal_buf) == 0") end, 10),
+  assert(poll(3000, function() return lua("return #vim.fn.win_findbuf(pi_terminal_buf) == 0") end),
     "F6 must hide Pi directly from terminal input")
   lua("assert(vim.fn.jobwait({pi_terminal_job}, 0)[1] == -1, 'Hiding must leave Pi running')")
   rpc("nvim_input", "<F6>")
-  assert(vim.wait(3000, function() return lua("return vim.api.nvim_get_current_buf() == pi_terminal_buf") end, 10),
+  assert(poll(3000, function() return lua("return vim.api.nvim_get_current_buf() == pi_terminal_buf") end),
     "F6 must restore the same Pi terminal")
   lua([[
     assert(vim.bo[pi_terminal_buf].channel == pi_terminal_job)
@@ -94,6 +104,8 @@ local ok, failure = pcall(function()
     vim.fn.jobwait({ pi_terminal_job }, 3000)
     require("util.pi_issues").jobs.test = nil
   ]])
+  -- Let the pending stopinsert land before the standalone terminal requests insert mode.
+  assert(poll(3000, function() return rpc("nvim_get_mode").mode == "n" end), "Leaving the issue terminal")
   lua([[
     local core = require("util.pi_issues")
     local executable = workspace.path .. "/.git/pi-test-bin/pi"
@@ -107,13 +119,16 @@ local ok, failure = pcall(function()
     _G.standalone_pi_job = vim.bo.channel
     assert(vim.bo.buftype == "terminal" and standalone_pi_job > 0)
   ]])
-  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "t" end, 10))
+  assert(poll(3000, function() return rpc("nvim_get_mode").mode == "t" end),
+    "Standalone pi must open in terminal input: " .. vim.inspect(lua([[return { mode = vim.fn.mode(),
+      buf = vim.api.nvim_get_current_buf(), pi = standalone_pi_buf, buftype = vim.bo.buftype,
+      running = vim.fn.jobwait({ standalone_pi_job }, 0)[1] }]])))
   rpc("nvim_input", "<F6>")
-  assert(vim.wait(3000, function() return lua("return #vim.fn.win_findbuf(standalone_pi_buf) == 0") end, 10),
+  assert(poll(3000, function() return lua("return #vim.fn.win_findbuf(standalone_pi_buf) == 0") end),
     "F6 must also hide a standalone Pi session")
   lua("assert(vim.fn.jobwait({standalone_pi_job}, 0)[1] == -1, 'Standalone Pi must keep running')")
   rpc("nvim_input", "<F6>")
-  assert(vim.wait(3000, function() return lua("return vim.api.nvim_get_current_buf() == standalone_pi_buf") end, 10),
+  assert(poll(3000, function() return lua("return vim.api.nvim_get_current_buf() == standalone_pi_buf") end),
     "F6 must restore the same standalone conversation")
   lua([[
     assert(vim.bo.channel == standalone_pi_job)
@@ -128,7 +143,7 @@ local ok, failure = pcall(function()
     rpc("nvim_ui_try_resize", width, 40)
     lua("require('util.pi_issues_ui').review(workspace)")
     assert(
-      vim.wait(
+      poll(
         5000,
         function()
           return lua([[
@@ -136,8 +151,7 @@ local ok, failure = pcall(function()
         if not picker or not picker.preview.win:valid() then return false end
         return table.concat(vim.api.nvim_buf_get_lines(picker.preview.win.buf, 0, -1, false), "\n"):find("+after", 1, true) ~= nil
       ]])
-        end,
-        20
+        end
       ),
       "Preview did not render at " .. width .. " columns"
     )
@@ -186,7 +200,7 @@ local ok, failure = pcall(function()
     _G.issue_dashboard_win = vim.api.nvim_get_current_win()
   ]])
   lua("vim.cmd.close(); require('util.pi_issues_ui').issues()")
-  assert(vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10))
+  assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
   lua([[
     local editor = require("util.pi_issue_edit")
     local open = editor.open
@@ -200,24 +214,24 @@ local ok, failure = pcall(function()
     editor.open = open
     require("util.pi_issues_ui").issues()
   ]])
-  assert(vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10))
+  assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
   lua(
     "assert(not vim.api.nvim_win_is_valid(issue_dashboard_win), 'GitHub picker replaces the workspace panel')"
   )
   rpc("nvim_input", "<Tab><Tab>")
   assert(
-    vim.wait(3000, function() return lua("return #Snacks.picker.get()[1]:selected() == 2") end, 10),
+    poll(3000, function() return lua("return #Snacks.picker.get()[1]:selected() == 2") end),
     "Tab must select multiple GitHub issues"
   )
   rpc("nvim_input", "<CR>")
-  assert(vim.wait(3000, function() return lua("return _G.selected_issues ~= nil") end, 10))
+  assert(poll(3000, function() return lua("return _G.selected_issues ~= nil") end))
   lua([[
     assert(selected_issues.repo == "test/repo" and #selected_issues.issues == 2)
     assert(selected_issues.issues[1].number ~= selected_issues.issues[2].number)
     local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
     ui.issues()
   ]])
-  assert(vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10))
+  assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
   lua([[
     local core = require("util.pi_issues")
     core.repository = function() error("Server search must retain the selected repository") end
@@ -230,7 +244,7 @@ local ok, failure = pcall(function()
     assert(coroutine.resume(search_thread, "needle"))
   ]])
   assert(
-    vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10),
+    poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end),
     "Server search must keep its original repository across asynchronous input"
   )
   lua([[
@@ -261,7 +275,7 @@ local ok, failure = pcall(function()
   ]])
   rpc("nvim_input", "i")
   assert(
-    vim.wait(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end, 10),
+    poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end),
     "An empty repository must leave a visible issue picker instead of silently closing"
   )
   lua([[
@@ -275,7 +289,7 @@ local ok, failure = pcall(function()
     assert(table.concat(footers):find("Ctrl-n", 1, true), "New-task controls must actually be visible")
   ]])
   rpc("nvim_input", "<C-\\><C-n>?")
-  assert(vim.wait(3000, function()
+  assert(poll(3000, function()
     return lua([[
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
@@ -283,19 +297,19 @@ local ok, failure = pcall(function()
       end
       return false
     ]])
-  end, 10), "The visible help shortcut must open actionable task help")
+  end), "The visible help shortcut must open actionable task help")
   rpc("nvim_input", "q<C-n>")
-  assert(vim.wait(3000, function() return lua("return vim.bo.buftype == 'acwrite'") end, 10),
+  assert(poll(3000, function() return lua("return vim.bo.buftype == 'acwrite'") end),
     "Ctrl-n must open an editable blank task from an empty picker")
   lua([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "# ")
   ]])
-  assert(vim.wait(3000, function() return rpc("nvim_get_mode").mode == "i" end, 10),
+  assert(poll(3000, function() return rpc("nvim_get_mode").mode == "i" end),
     "A blank task must be ready for typing its title")
   rpc("nvim_input", "My self-written task<CR><CR>My own instructions.<Esc>:write<CR>")
-  assert(vim.wait(3000, function()
+  assert(poll(3000, function()
     return lua("return vim.b.pi_issue_draft ~= nil and vim.b.pi_issue_draft.target.source == 'local'")
-  end, 10), "A user must be able to type and save a new task using normal editor keys")
+  end), "A user must be able to type and save a new task using normal editor keys")
   lua([[
     local task = require("util.pi_tasks").get(vim.b.pi_issue_draft.target)
     assert(task.title == "My self-written task" and task.body:find("My own instructions.", 1, true))

@@ -134,6 +134,8 @@ local fields = {
   "source",
   "task_root",
   "task_file",
+  "task_sha",
+  "restarts",
 }
 function M.save(workspace)
   local data = { version = 1 }
@@ -206,6 +208,12 @@ function M.base(repo, ref)
   local result = M.run({ "git", "rev-parse", "--verify", "--end-of-options", ref .. "^{commit}" }, repo.root, true)
   if result.code ~= 0 then return nil end
   return vim.trim(result.stdout)
+end
+
+-- True when the current branch has no commits yet (a fresh git init).
+function M.unborn(repo)
+  return M.run({ "git", "rev-parse", "--verify", "--quiet", "HEAD" }, repo.root, true).code ~= 0
+    and M.run({ "git", "symbolic-ref", "--quiet", "HEAD" }, repo.root, true).code == 0
 end
 
 function M.prepare(repo, issue, ref, reuse, base_sha)
@@ -426,6 +434,9 @@ function M.accept_status(workspace, job, data)
   if data.cwd ~= workspace.path or type(data.session) ~= "string" then return false end
   local settled = job.activity ~= "idle" and data.activity == "idle"
   job.sequence, job.activity, job.outcome = data.sequence, data.activity, data.outcome
+  -- Snapshots can coalesce; a settle outcome also proves a turn ran.
+  if data.activity == "working" or (data.outcome and data.outcome ~= "unknown") then job.worked = true end
+  if settled then job.settled_at = uv.hrtime() end
   job.model = M.clean(data.model)
   workspace.session = data.session
   workspace.session_file = type(data.session_file) == "string" and data.session_file or nil
@@ -452,6 +463,27 @@ function M.show(workspace)
   vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn = false, false, "no"
   vim.wo.winbar = " Pi " .. workspace.number .. " "
   if not job.exited then vim.cmd.startinsert() end
+end
+
+-- Identifies the task text an agent was given, to notice later edits.
+function M.task_hash(task) return vim.fn.sha256((task.title or "") .. "\0" .. (task.body or "")) end
+
+function M.sleep(ms)
+  local thread = coroutine.running()
+  vim.defer_fn(function() coroutine.resume(thread) end, ms)
+  coroutine.yield()
+end
+
+local function send_update(workspace, job, task)
+  local text = "The task description was updated. Updated task:\n\n# " .. task.title .. "\n\n" .. task.body
+    .. "\n\nContinue with the updated task in this worktree; keep work that still applies."
+  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
+  vim.defer_fn(function()
+    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
+  end, 150)
+  workspace.task_sha = M.task_hash(task)
+  M.save(workspace)
+  notify("Sent the updated task to " .. tasks.label(workspace), vim.log.levels.INFO)
 end
 
 function M.start(workspace, issue)
@@ -490,6 +522,15 @@ function M.start(workspace, issue)
   if not workspace.started and (not issue or issue.body == nil) then
     issue = tasks.get(workspace)
   end
+  local update
+  if workspace.started and workspace.source == "local" then
+    local current = tasks.get(workspace)
+    if workspace.task_sha and M.task_hash(current) ~= workspace.task_sha then update = current end
+  end
+  if not workspace.started and workspace.source == "local" then
+    workspace.title = M.clean(issue.title)
+    workspace.task_sha = M.task_hash(issue)
+  end
   local run = vim.fn.sha256(token .. tostring(uv.hrtime())):sub(1, 24)
   local argv = {
     M.settings().pi,
@@ -519,8 +560,11 @@ function M.start(workspace, issue)
       .. "\n\n"
       .. body
       .. "\n\n"
-      .. (workspace.source == "local" and ("Local task file: " .. tasks.file(workspace) .. "\n\n") or "")
-      .. "Implement only this task in the current worktree. Follow repository instructions. "
+      .. (workspace.source == "local" and ("Task description file (lives in the main checkout; do not edit it or "
+        .. "anything else there): " .. tasks.file(workspace) .. "\n\n") or "")
+      .. "Your worktree is " .. workspace.path .. " (branch " .. workspace.branch .. "). It is the repository "
+      .. "root for this task: create and change files only inside it, and resolve relative paths from it. "
+      .. "Implement only this task in this worktree. Follow repository instructions. "
       .. "Run relevant tests with a timeout and report actual results. Leave changes for human review; "
       .. "do not commit, merge, push, close issues, install dependencies, or remove worktrees without asking. "
       .. "If explicitly asked to delegate, use pi-subagents in the foreground with async: false, "
@@ -627,6 +671,38 @@ function M.start(workspace, issue)
   end, 5000)
   M.show(workspace)
   M.changed()
+  if update then
+    -- Resumed after the task file changed: tell the conversation once pi reports it is ready.
+    local deadline = uv.now() + 30000
+    local function ready()
+      if M.jobs[workspace.id] ~= job or job.exited then return end
+      if job.sequence then return send_update(workspace, job, update) end
+      if uv.now() < deadline then vim.defer_fn(ready, 100) end
+    end
+    ready()
+  end
+end
+
+-- Start the task again from its current description in a new conversation; the worktree is kept.
+function M.restart(workspace)
+  local job = M.jobs[workspace.id]
+  if job and not job.exited then
+    if M.choose({ "Cancel", "Restart with the current task" }, "Restart " .. tasks.label(workspace)
+      .. "? Its conversation stops; worktree changes are kept.") ~= "Restart with the current task" then
+      return
+    end
+    M.stop(workspace)
+    for _ = 1, 100 do
+      if job.exited then break end
+      M.sleep(50)
+    end
+    assert(job.exited, "pi did not stop; inspect its terminal before restarting")
+  end
+  workspace.restarts = (workspace.restarts or 0) + 1
+  workspace.session = (workspace.source == "local" and "task-" or "issue-") .. workspace.id .. "-r" .. workspace.restarts
+  workspace.session_file, workspace.started = nil, nil
+  M.save(workspace)
+  M.start(workspace)
 end
 
 function M.stop(workspace)
@@ -636,6 +712,22 @@ function M.stop(workspace)
   job.stop_requested = true
   vim.fn.jobstop(job.channel)
   M.changed()
+end
+
+-- Ask a live, settled agent to keep going; Enter is sent after the paste so pi submits it.
+function M.continue(workspace)
+  local job = M.jobs[workspace.id]
+  assert(job and not job.exited, "Start " .. tasks.label(workspace) .. "'s pi with p before continuing it")
+  assert(job.activity == "idle", "Pi is " .. tostring(job.activity) .. "; continue once it is idle")
+  local text = M.status(workspace) == "no changes"
+      and "Your last turn left the worktree unchanged, so the task is not done. Implement it now in this "
+        .. "worktree with your tools, then report what changed."
+    or "Continue this task where you left off in this worktree, then report what changed."
+  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
+  vim.defer_fn(function()
+    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
+  end, 150)
+  vim.notify("Asked " .. tasks.label(workspace) .. " to continue", vim.log.levels.INFO, { title = "Pi Tasks" })
 end
 
 function M.quit()
@@ -684,6 +776,11 @@ function M.status(workspace)
     return uv.fs_stat(workspace.path) and (workspace.started and "stopped" or "prepared") or "missing"
   end
   if job.activity == "idle" and job.outcome == "error" then return "error" end
+  -- A finished turn that left the worktree clean (counted after it settled) did not do the task.
+  if job.activity == "idle" and job.worked and workspace.files == 0
+    and (workspace.refreshed_at or 0) > (job.settled_at or 0) then
+    return "no changes"
+  end
   return job.activity
 end
 
@@ -742,10 +839,19 @@ function M.refresh(workspace)
       M.changed()
     end
   end
-  if workspace.refreshing then return end
+  -- A refresh requested while one runs (e.g. an agent settling) must not be dropped:
+  -- the running one may have read the worktree before the agent's last write.
+  if workspace.refreshing then
+    workspace.refresh_again = true
+    return
+  end
   workspace.refreshing = true
   local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
   workspace.refreshing = false
+  if workspace.refresh_again then
+    workspace.refresh_again = false
+    return M.refresh(workspace)
+  end
   if result.code ~= 0 then
     local message = M.clean(result.stderr)
     if workspace.git_error ~= message then
@@ -762,7 +868,7 @@ function M.refresh(workspace)
     count = count + 1
     i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
   end
-  workspace.files, workspace.git_error = count, nil
+  workspace.files, workspace.git_error, workspace.refreshed_at = count, nil, uv.hrtime()
   M.changed()
 end
 
