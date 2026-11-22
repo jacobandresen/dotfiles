@@ -37,7 +37,7 @@ end)
 local function rpc(method, ...)
   sequence = sequence + 1
   input:write(vim.mpack.encode({ 0, sequence, method, { ... } }))
-  assert(vim.wait(5000, function() return replies[sequence] ~= nil end, 10), method .. ": " .. table.concat(stderr))
+  assert(vim.wait(5000, function() return replies[sequence] ~= nil end, 10), method .. ": " .. table.concat(stderr) .. "\n" .. vim.inspect({ ... }):sub(1, 300))
   local reply = replies[sequence]
   if reply[3] ~= vim.NIL then error(vim.inspect(reply[3])) end
   return reply[4]

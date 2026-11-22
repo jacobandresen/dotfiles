@@ -208,6 +208,12 @@ function M.base(repo, ref)
   return vim.trim(result.stdout)
 end
 
+-- True when the current branch has no commits yet (a fresh git init).
+function M.unborn(repo)
+  return M.run({ "git", "rev-parse", "--verify", "--quiet", "HEAD" }, repo.root, true).code ~= 0
+    and M.run({ "git", "symbolic-ref", "--quiet", "HEAD" }, repo.root, true).code == 0
+end
+
 function M.prepare(repo, issue, ref, reuse, base_sha)
   M.load()
   assert(repo.source == "local" or M.settings().github_enabled,

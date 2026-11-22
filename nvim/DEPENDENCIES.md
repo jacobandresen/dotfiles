@@ -44,6 +44,9 @@ task or agent is required. An empty title is rejected without losing the draft.
 `:PiTaskNew Improve search` creates a titled file directly, with no boilerplate.
 Task completion is never inferred from agent state.
 
+Tasks run in Git worktrees branched from a commit, so a freshly initialised
+repository needs a first commit before a task can start.
+
 `Space a i` / `:PiTasks` lists local tasks. `Ctrl-n` in the picker or `n` in the
 workspace panel opens a blank task. `Ctrl-o` edits; `?` shows actions in normal
 mode. `Ctrl-s` searches titles and bodies locally.
@@ -64,7 +67,7 @@ agent limits, diff review and task editing reuse the same workflow.
 | `Space a i` | Pick local tasks; Tab selects several, Enter starts them now (base `HEAD`), `Ctrl-b` reviews / picks a base first |
 | `Space a g` | Start (or focus) the task in the current task buffer or tab |
 | `Space a a` | Switch task: running ones first; Enter jumps to its pi, `Ctrl-o` to its code tab |
-| `Space a w` | Compact workspace panel; `1`-`9` jump to a task's pi, Enter opens code, `p` starts/focuses pi, `c` asks an idle pi to continue |
+| `Space a w` | Compact workspace panel, including written tasks not started yet (`new`); `1`-`9` jump to a task's pi (or start a `new` one), Enter opens code, `p` starts/focuses pi, `c` asks an idle pi to continue |
 | `F6` / `Space a p` | Hide/show Pi without stopping it; F6 also works in terminal mode |
 | `Space a s` | Paste file/selection context into that task's pi; Enter submits |
 | `Space a r` | Paste a foreground reviewer request using the existing extension |

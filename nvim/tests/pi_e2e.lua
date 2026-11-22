@@ -46,6 +46,21 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     assert(content:find(task.body, 1, true), "Typed body must be saved: " .. content)
   end
   assert(#agents() == 0, "Writing tasks must not start pi")
+  keys("<Esc><Space>aw")
+  wait_for("Written tasks appear in Space a w before they start", [[
+    local lines = e2e.float_lines("Task Workspaces") or {}
+    local text = table.concat(lines, "\n")
+    if not text:find("0 workspaces    4 new", 1, true) then return false end
+    for number = 1, 4 do
+      local row = e2e.dashboard_row(number)
+      if not row or not lines[row]:find(" new ", 1, true) then return false end
+    end
+    return true
+  ]])
+  keys("x")
+  wait_for("Actions that need a running agent explain instead",
+    "return _G.e2e_messages[#_G.e2e_messages]:find('Not started yet', 1, true) ~= nil")
+  keys("q")
 
   step("pick three tasks with Space a i and Tab, then start them")
   keys("<Esc><Space>ai")

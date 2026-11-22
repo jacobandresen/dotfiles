@@ -250,6 +250,16 @@ local ok, failure = pcall(function()
   core.stop(active)
   assert(vim.wait(4000, function() return running.exited end, 10))
   core.input = input
+  local fresh = temp .. "/fresh"
+  vim.fn.mkdir(fresh, "p")
+  await(function() core.git(fresh, "init", "-b", "main") end)
+  local fresh_repo = await(function() return core.repository(fresh) end)
+  local fresh_task = tasks.create(fresh_repo, "Plan the demo")
+  ui.launch(fresh_repo, { fresh_task })
+  assert(vim.wait(5000, function()
+    return messages[#messages]:find("no commits yet", 1, true) ~= nil
+  end, 10), "A repository without commits must explain how to start: " .. messages[#messages])
+  assert(not vim.uv.fs_stat(temp .. "/fresh-worktrees"), "No worktree is created without a base commit")
   local count = #messages
   vim.cmd("PiTasks github")
   assert(#messages > count and messages[#messages]:find("GitHub integration is disabled", 1, true))
