@@ -61,8 +61,10 @@ agent limits, diff review and task editing reuse the same workflow.
 | Key | Action |
 | --- | --- |
 | `Space a n` | Write a new local task; `:write` creates its file |
-| `Space a i` | Pick local tasks; Tab selects several, Enter reviews the launch |
-| `Space a w` | Compact workspace panel; Enter opens code, `p` starts/focuses pi |
+| `Space a i` | Pick local tasks; Tab selects several, Enter starts them now (base `HEAD`), `Ctrl-b` reviews / picks a base first |
+| `Space a g` | Start (or focus) the task in the current task buffer or tab |
+| `Space a a` | Switch task: running ones first; Enter jumps to its pi, `Ctrl-o` to its code tab |
+| `Space a w` | Compact workspace panel; `1`-`9` jump to a task's pi, Enter opens code, `p` starts/focuses pi, `c` asks an idle pi to continue |
 | `F6` / `Space a p` | Hide/show Pi without stopping it; F6 also works in terminal mode |
 | `Space a s` | Paste file/selection context into that task's pi; Enter submits |
 | `Space a r` | Paste a foreground reviewer request using the existing extension |
@@ -159,9 +161,17 @@ worktree and conversation remain in place. Repeating export creates another
 issue; this is an explicit copy, not automatic two-way synchronization.
 Comments, labels, assignees and GitHub issue state are not copied.
 
-Focused checks, from the repository root (no hosted model requests):
+Focused checks, from the repository root (no hosted model requests). `make test-pi`
+runs all of them; `pi_e2e.lua` boots the real config and uses keystrokes to write tasks,
+start three agents at once, queue a fourth, stop/resume, quit and restore, with a
+scripted offline pi (`PI_E2E_VERBOSE=1` prints steps, `PI_E2E_KEEP=1` keeps its files).
+`make test-pi-real` runs the same flow with the real pi against a local model only
+(`PI_REAL_MODEL=ollama/<id>`; hosted or unpulled models are refused):
 
 ```sh
+make test-pi
+make test-pi-real   # opt-in: real pi + extension + your local default model (slow on CPU)
+timeout 180 nvim --headless -u NONE -i NONE -l nvim/tests/pi_e2e.lua
 timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issues.lua
 timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_layout.lua
 python3 nvim/tests/pi_extension.py

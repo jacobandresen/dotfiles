@@ -15,6 +15,16 @@ return {
         desc = "Write a New Local Task",
       },
       {
+        "<leader>aa",
+        function() require("util.pi_issues_ui").switch() end,
+        desc = "Switch Task (running first)",
+      },
+      {
+        "<leader>ag",
+        function() require("util.pi_issues_ui").start_current() end,
+        desc = "Start / Focus This Task's Pi",
+      },
+      {
         "<leader>aw",
         function() require("util.pi_issues_ui").dashboard() end,
         desc = "Pi Task Workspaces",
@@ -31,7 +41,7 @@ return {
       },
       {
         "<leader>ap",
-        function() require("util.agents").toggle() end,
+        function() require("util.agents").toggle(true) end,
         desc = "Pi Agent",
       },
       {

@@ -218,7 +218,7 @@ local ok, failure = pcall(function()
     return selected and selected:count() == 1
   end, 10), table.concat(messages, "\n"))
   picker = Snacks.picker.get()[1]
-  picker.opts.confirm(picker)
+  picker.opts.actions.review_launch(picker)
   assert(vim.wait(5000, function()
     return vim.inspect(vim.api.nvim_win_get_config(0).title):find("Review Task Launch", 1, true)
   end, 10), table.concat(messages, "\n"))
@@ -243,6 +243,9 @@ local ok, failure = pcall(function()
   end
   assert(context and context:find("My own task", 1, true) and context:find("A second edit.", 1, true)
     and context:find(tasks.file(own), 1, true), "A newly written task must reach its running pi agent")
+  assert(context:find("Your worktree is " .. active.path .. " (branch task/4)", 1, true)
+    and context:find("create and change files only inside it", 1, true),
+    "The prompt must name the worktree as the task's repository root, not the main checkout")
   assert(vim.tbl_contains(running.argv, "Implement the attached task."))
   core.stop(active)
   assert(vim.wait(4000, function() return running.exited end, 10))

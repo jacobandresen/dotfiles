@@ -192,6 +192,75 @@ function M.review(workspace, scope)
   end)
 end
 
+-- Jump to a task: its pi terminal when pi is running, otherwise its code tab.
+function M.focus(workspace)
+  core.task(function()
+    core.validate(workspace)
+    local job = core.jobs[workspace.id]
+    if job and not job.exited then core.show(workspace) else core.open(workspace) end
+  end)
+end
+
+local function ordered()
+  local items = vim.tbl_values(core.workspaces)
+  table.sort(items, function(a, b) return a.repo == b.repo and a.number < b.number or a.repo < b.repo end)
+  return items
+end
+
+local rank = { waiting = 1, working = 2, ["no changes"] = 3, idle = 3, starting = 3, unknown = 3, stopping = 4 }
+function M.switch()
+  core.load()
+  local items = {}
+  for _, workspace in ipairs(ordered()) do
+    local status = core.status(workspace)
+    items[#items + 1] = {
+      workspace = workspace, status = status, rank = rank[status] or 9,
+      text = ("%-22s %-11s %s"):format(tasks.label(workspace), status, core.clean(workspace.title)),
+    }
+  end
+  if #items == 0 then return vim.notify("No task workspaces yet; start one with Space a i", vim.log.levels.INFO) end
+  table.sort(items, function(a, b)
+    if a.rank ~= b.rank then return a.rank < b.rank end
+    return a.workspace.number < b.workspace.number
+  end)
+  Snacks.picker({
+    title = "Switch Task",
+    items = items,
+    format = "text",
+    layout = { preset = "select", layout = { footer = "Enter pi / Ctrl-o code tab", footer_pos = "center" } },
+    confirm = function(picker, item)
+      picker:close()
+      if item then M.focus(item.workspace) end
+    end,
+    actions = {
+      code_tab = function(picker)
+        local item = picker:current()
+        picker:close()
+        if item then core.task(function() core.validate(item.workspace) core.open(item.workspace) end) end
+      end,
+    },
+    win = { input = { keys = { ["<C-o>"] = { "code_tab", mode = { "n", "i" } } } } },
+  })
+end
+
+-- Start (or focus) the task of the current task buffer or task tab.
+function M.start_current()
+  local info = vim.b.pi_issue_draft
+  local target = info and info.target or core.current()
+  if not target then return vim.notify("Open a task (Space a i, Space a n) first", vim.log.levels.WARN) end
+  core.task(function()
+    if target.source ~= "local" then
+      local workspace = core.current()
+      assert(workspace, "Start GitHub issues from :PiIssues")
+      return M.focus(workspace)
+    end
+    if vim.bo.modified and info then vim.cmd("silent write") end
+    local repo = core.repository(target.task_root, "local")
+    local task = tasks.get(target)
+    M.launch(repo, { { number = target.number, title = task.title, task_file = task.task_file } })
+  end)
+end
+
 local function draw()
   if not dashboard or not vim.api.nvim_buf_is_valid(dashboard) then return end
   local current_id
@@ -199,8 +268,7 @@ local function draw()
     local row = vim.api.nvim_win_get_cursor(win)[1]
     current_id = dashboard_rows[row] and dashboard_rows[row].id
   end
-  local items = vim.tbl_values(core.workspaces)
-  table.sort(items, function(a, b) return a.repo == b.repo and a.number < b.number or a.repo < b.repo end)
+  local items = ordered()
   local active, waiting = 0, 0
   for _, job in pairs(core.jobs) do
     if not job.exited then active = active + 1 end
@@ -210,7 +278,7 @@ local function draw()
   local width = #wins > 0 and vim.api.nvim_win_get_width(wins[1]) or 100
   local repo_width = math.min(28, math.floor(width * 0.3))
   local title_width = math.max(8, width - repo_width - 26)
-  local format = "  %-" .. repo_width .. "s  %-10s %5s  %s"
+  local format = "%2s %-" .. repo_width .. "s  %-10s %5s  %s"
   local lines = {
     "  Task workspaces",
     ("  %d active / %d slots    %d waiting    %d workspaces"):format(
@@ -220,14 +288,15 @@ local function draw()
       #items
     ),
     "",
-    "  Pi status is not task completion. Stopping keeps your work.",
-    string.format(format, "TASK", "AGENT", "FILES", "TITLE"),
+    "  Pi status is not task completion; \"no changes\" means its turn left the worktree clean.",
+    string.format(format, "", "TASK", "AGENT", "FILES", "TITLE"),
   }
   dashboard_rows = {}
   local selected = 6
-  for _, workspace in ipairs(items) do
+  for index, workspace in ipairs(items) do
     lines[#lines + 1] = string.format(
       format,
+      index <= 9 and tostring(index) or "",
       clip(tasks.label(workspace), repo_width),
       core.status(workspace),
       workspace.refreshing and "..." or (workspace.files and tostring(workspace.files) or "?"),
@@ -251,10 +320,10 @@ local function draw()
   for row, workspace in pairs(dashboard_rows) do
     local status = core.status(workspace)
     local group = (status == "error" or status == "missing") and "DiagnosticError"
-      or status == "waiting" and "DiagnosticWarn"
+      or (status == "waiting" or status == "no changes") and "DiagnosticWarn"
       or status == "working" and "DiagnosticInfo"
       or "Comment"
-    highlight(row - 1, repo_width + 4, group, repo_width + 14)
+    highlight(row - 1, repo_width + 5, group, repo_width + 15)
   end
   for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
     vim.api.nvim_win_set_cursor(win, { math.min(selected, #lines), 0 })
@@ -283,7 +352,7 @@ function M.dashboard()
       border = "rounded",
       title = " Task Workspaces ",
       title_pos = "center",
-      footer = size.width >= 64 and " Enter code  p pi  v task  n new  ? help  q close "
+      footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  n new  ? help  q "
         or " n new  Enter code  p pi  ? help ",
       footer_pos = "center",
     })
@@ -317,6 +386,10 @@ function M.dashboard()
     p = action(function(w)
       core.task(function() core.start(w) end)
     end),
+    c = function()
+      local workspace = selected()
+      if workspace then core.task(function() core.continue(workspace) end) end
+    end,
     d = action(function(w) M.review(w) end),
     D = action(function(w) M.review(w, "issue") end),
     v = action(function(w)
@@ -339,6 +412,9 @@ function M.dashboard()
         "# Task workspaces",
         "",
         "Enter: open code tab    p: start / focus pi",
+        "1-9: jump to that task's pi (or code tab when stopped)",
+        "c: ask an idle pi to continue (e.g. after \"no changes\")",
+        "Space a a: switch task from anywhere    Space a g: start this task",
         "d: working diff        D: changes since the recorded base",
         "v: view / edit the task (GitHub uses a local draft)",
         "x: stop with confirmation; never delete work",
@@ -367,6 +443,14 @@ function M.dashboard()
     q = function() vim.cmd.close() end,
     ["<Esc>"] = function() vim.cmd.close() end,
   }
+  for index = 1, 9 do
+    maps[tostring(index)] = function()
+      local workspace = ordered()[index]
+      if not workspace then return end
+      vim.cmd.close()
+      M.focus(workspace)
+    end
+  end
   if core.settings().github_enabled then
     maps.g = function()
       vim.api.nvim_win_close(win, false)
@@ -399,6 +483,8 @@ function M.confirm_launch(lines)
     })
   )
   resize_with_editor(win, 100, #lines + 2)
+  -- The base-ref prompt leaves insert mode pending; s/Enter/q are normal-mode keys.
+  vim.cmd.stopinsert()
   vim.wo.wrap, vim.wo.linebreak, vim.wo.signcolumn = true, true, "no"
   vim.api.nvim_buf_set_extmark(buf, accents, 0, 0, { end_col = #lines[1], hl_group = "Title" })
   local finished = false
@@ -422,11 +508,15 @@ function M.confirm_launch(lines)
   return coroutine.yield()
 end
 
-function M.launch(repo, issues)
+-- opts.review: ask for the base ref and show the launch review first. Otherwise start at once
+-- from the default base (HEAD for local tasks); existing workspaces are reused and focused.
+function M.launch(repo, issues, opts)
+  opts = opts or {}
   core.task(function()
     local default = repo.source == "local" and "HEAD"
       or (repo.default_branch and ("origin/" .. repo.default_branch) or "")
-    local ref = core.input("Base ref (locally cached; no automatic fetch): ", default)
+    local ref = default
+    if opts.review then ref = core.input("Base ref (locally cached; no automatic fetch): ", default) end
     if not ref then return end
     local sha = core.base(repo, ref)
     assert(sha, "Base ref is unavailable: " .. ref .. ". Fetch explicitly or choose an existing ref.")
@@ -452,7 +542,7 @@ function M.launch(repo, issues)
     summary[#summary + 1] = "Start sends task context using pi-agent's configured default model. Limit: "
       .. core.settings().max_agents
       .. " live agents."
-    local choice = M.confirm_launch(summary)
+    local choice = opts.review and M.confirm_launch(summary) or "Prepare and start"
     if not choice or choice == "Cancel" then return end
     local failures, prepared, started = {}, 0, 0
     for _, issue in ipairs(issues) do
@@ -515,7 +605,7 @@ function M.tasks(source, query, limit, repository)
       layout = {
         preset = "select",
         layout = {
-          footer = "Ctrl-n new / Ctrl-o edit / Enter work / Tab select / ? help",
+          footer = "Enter start / Tab select / Ctrl-b review / Ctrl-n new / Ctrl-o edit / ? help",
           footer_pos = "center",
         },
       },
@@ -529,7 +619,8 @@ function M.tasks(source, query, limit, repository)
           local lines = {
             source == "local" and "# Local tasks" or "# GitHub issues",
             "",
-            "Enter: review worktree and pi launch options",
+            "Enter: start pi on the selected task(s) now (base: HEAD)",
+            "Ctrl-b: choose a base ref and review before starting / prepare only",
             "Ctrl-o: edit the task; GitHub uses a local draft",
             "Ctrl-n: create a local task",
             "Tab: select several tasks",
@@ -543,6 +634,11 @@ function M.tasks(source, query, limit, repository)
             lines[#lines + 1] = ":PiTaskImport / :PiTaskExport copy between sources."
           end
           show_help(lines)
+        end,
+        review_launch = function(picker)
+          local selected = picker:selected({ fallback = true })
+          picker:close()
+          if #selected > 0 then M.launch(repo, selected, { review = true }) end
         end,
         view_issue = function(picker)
           local issue = picker:current()
@@ -575,6 +671,7 @@ function M.tasks(source, query, limit, repository)
             ["<C-s>"] = { "server_search", mode = { "n", "i" } },
             ["<C-l>"] = { "more_issues", mode = { "n", "i" } },
             ["<C-o>"] = { "view_issue", mode = { "n", "i" } },
+            ["<C-b>"] = { "review_launch", mode = { "n", "i" } },
             ["<C-n>"] = { "new_task", mode = { "n", "i" } },
             ["?"] = { "task_help", mode = "n" },
           },

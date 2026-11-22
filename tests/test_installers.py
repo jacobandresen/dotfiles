@@ -80,7 +80,9 @@ class InstallerTests(unittest.TestCase):
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
              patch.object(dotfiles, "has_model", return_value=True), \
-             patch.object(dotfiles, "api_json", return_value={"done": True, "done_reason": "load"}) as api, \
+             patch.object(dotfiles, "api_json", side_effect=lambda path, *_args, **_kw:
+                          {"template": "... " + dotfiles.THINK_OFF_MARKER} if path == "/api/show"
+                          else {"done": True, "done_reason": "load"}) as api, \
              patch.object(dotfiles, "run") as command, \
              patch.object(dotfiles.pi_config, "main") as install, contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
@@ -89,7 +91,7 @@ class InstallerTests(unittest.TestCase):
                          "Warmup must load the model without consuming an inference slot")
         install.assert_called_once_with([])
 
-    def test_use_model_pulls_missing_base_before_copying_alias(self):
+    def test_use_model_pulls_missing_base_before_building_mellum(self):
         args = dotfiles.argparse.Namespace(dry_run=False)
         with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
              patch.object(dotfiles, "api_ready", return_value=True), \
@@ -100,8 +102,27 @@ class InstallerTests(unittest.TestCase):
             dotfiles.use_model(args)
         self.assertEqual([call.args for call in command.call_args_list], [
             ("ollama", "pull", dotfiles.coding_base_model()),
-            ("ollama", "cp", dotfiles.coding_base_model(), "mellum"),
+            ("ollama", "create", "mellum", "-f", str(dotfiles.MODELFILE)),
         ])
+
+    def test_use_model_rebuilds_mellum_with_an_outdated_template(self):
+        args = dotfiles.argparse.Namespace(dry_run=False)
+        with patch.object(dotfiles.shutil, "which", return_value="/usr/bin/ollama"), \
+             patch.object(dotfiles, "api_ready", return_value=True), \
+             patch.object(dotfiles, "has_model", return_value=True), \
+             patch.object(dotfiles, "api_json", side_effect=lambda path, *_args, **_kw:
+                          {"template": "<think>\n"} if path == "/api/show" else {"done": True}), \
+             patch.object(dotfiles, "run") as command, \
+             patch.object(dotfiles.pi_config, "main"), contextlib.redirect_stdout(io.StringIO()):
+            dotfiles.use_model(args)
+        self.assertEqual([call.args for call in command.call_args_list],
+                         [("ollama", "create", "mellum", "-f", str(dotfiles.MODELFILE))],
+                         "An old template that ignores think: false must be replaced")
+
+    def test_mellum_modelfile_disables_thinking_on_request(self):
+        text = dotfiles.MODELFILE.read_text()
+        self.assertIn("FROM " + dotfiles.coding_base_model(), text)
+        self.assertIn("{{ if and $.IsThinkSet " + dotfiles.THINK_OFF_MARKER + " }}<think>\n\n</think>", text)
 
     def test_dependency_updater_completes_after_writing_pins(self):
         script = self.root / "dotfiles.py"

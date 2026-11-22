@@ -3,7 +3,7 @@
   "defaultModel": "mellum",
   "defaultThinkingLevel": "low",
   "modelThinkingLevels": {
-    "ollama/mellum": "high"
+    "ollama/mellum": "off"
   },
   "enabledModels": [
     "ollama/mellum",

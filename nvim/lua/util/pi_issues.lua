@@ -426,6 +426,9 @@ function M.accept_status(workspace, job, data)
   if data.cwd ~= workspace.path or type(data.session) ~= "string" then return false end
   local settled = job.activity ~= "idle" and data.activity == "idle"
   job.sequence, job.activity, job.outcome = data.sequence, data.activity, data.outcome
+  -- Snapshots can coalesce; a settle outcome also proves a turn ran.
+  if data.activity == "working" or (data.outcome and data.outcome ~= "unknown") then job.worked = true end
+  if settled then job.settled_at = uv.hrtime() end
   job.model = M.clean(data.model)
   workspace.session = data.session
   workspace.session_file = type(data.session_file) == "string" and data.session_file or nil
@@ -519,8 +522,11 @@ function M.start(workspace, issue)
       .. "\n\n"
       .. body
       .. "\n\n"
-      .. (workspace.source == "local" and ("Local task file: " .. tasks.file(workspace) .. "\n\n") or "")
-      .. "Implement only this task in the current worktree. Follow repository instructions. "
+      .. (workspace.source == "local" and ("Task description file (lives in the main checkout; do not edit it or "
+        .. "anything else there): " .. tasks.file(workspace) .. "\n\n") or "")
+      .. "Your worktree is " .. workspace.path .. " (branch " .. workspace.branch .. "). It is the repository "
+      .. "root for this task: create and change files only inside it, and resolve relative paths from it. "
+      .. "Implement only this task in this worktree. Follow repository instructions. "
       .. "Run relevant tests with a timeout and report actual results. Leave changes for human review; "
       .. "do not commit, merge, push, close issues, install dependencies, or remove worktrees without asking. "
       .. "If explicitly asked to delegate, use pi-subagents in the foreground with async: false, "
@@ -638,6 +644,22 @@ function M.stop(workspace)
   M.changed()
 end
 
+-- Ask a live, settled agent to keep going; Enter is sent after the paste so pi submits it.
+function M.continue(workspace)
+  local job = M.jobs[workspace.id]
+  assert(job and not job.exited, "Start " .. tasks.label(workspace) .. "'s pi with p before continuing it")
+  assert(job.activity == "idle", "Pi is " .. tostring(job.activity) .. "; continue once it is idle")
+  local text = M.status(workspace) == "no changes"
+      and "Your last turn left the worktree unchanged, so the task is not done. Implement it now in this "
+        .. "worktree with your tools, then report what changed."
+    or "Continue this task where you left off in this worktree, then report what changed."
+  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
+  vim.defer_fn(function()
+    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
+  end, 150)
+  vim.notify("Asked " .. tasks.label(workspace) .. " to continue", vim.log.levels.INFO, { title = "Pi Tasks" })
+end
+
 function M.quit()
   M.task(function()
     local function check_buffers()
@@ -684,6 +706,11 @@ function M.status(workspace)
     return uv.fs_stat(workspace.path) and (workspace.started and "stopped" or "prepared") or "missing"
   end
   if job.activity == "idle" and job.outcome == "error" then return "error" end
+  -- A finished turn that left the worktree clean (counted after it settled) did not do the task.
+  if job.activity == "idle" and job.worked and workspace.files == 0
+    and (workspace.refreshed_at or 0) > (job.settled_at or 0) then
+    return "no changes"
+  end
   return job.activity
 end
 
@@ -742,10 +769,19 @@ function M.refresh(workspace)
       M.changed()
     end
   end
-  if workspace.refreshing then return end
+  -- A refresh requested while one runs (e.g. an agent settling) must not be dropped:
+  -- the running one may have read the worktree before the agent's last write.
+  if workspace.refreshing then
+    workspace.refresh_again = true
+    return
+  end
   workspace.refreshing = true
   local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
   workspace.refreshing = false
+  if workspace.refresh_again then
+    workspace.refresh_again = false
+    return M.refresh(workspace)
+  end
   if result.code ~= 0 then
     local message = M.clean(result.stderr)
     if workspace.git_error ~= message then
@@ -762,7 +798,7 @@ function M.refresh(workspace)
     count = count + 1
     i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
   end
-  workspace.files, workspace.git_error = count, nil
+  workspace.files, workspace.git_error, workspace.refreshed_at = count, nil, uv.hrtime()
   M.changed()
 end
 
