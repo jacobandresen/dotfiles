@@ -109,11 +109,19 @@ local function task_files(target)
   return files
 end
 
+local function slug(title)
+  local value = title:lower():gsub("[^a-z0-9]+", "-"):gsub("^%-+", ""):gsub("%-+$", ""):sub(1, 60)
+  return value == "" and "task" or value
+end
+
 function M.file(target)
   assert(source(target) == "local", "Only local tasks have a source file")
   id(target)
   local name = target.task_file
-  if not name then
+  -- A remembered filename goes stale when the title (and so the file) is renamed.
+  local stale = name and not name:find("/", 1, true) and number(name) == target.number
+    and not vim.uv.fs_lstat(task_directory(target) .. "/" .. name)
+  if not name or stale then
     for _, item in ipairs(task_files(target)) do
       if item.number == target.number then name = item.task_file end
     end
@@ -154,6 +162,7 @@ providers["local"] = {
   end,
   update = function(target, title, body)
     core().write(M.file(target), "# " .. title .. "\n\n" .. body .. "\n")
+    target.task_file = M.rename(target)
   end,
   create = function(repo, title, body)
     local directory = task_directory(repo)
@@ -164,10 +173,8 @@ providers["local"] = {
     local ok, item = pcall(function()
       local files = task_files(repo)
       local id = #files > 0 and files[#files].number + 1 or 1
-      local slug = title:lower():gsub("[^a-z0-9]+", "-"):gsub("^%-+", ""):gsub("%-+$", ""):sub(1, 60)
-      if slug == "" then slug = "task" end
       local task = { source = "local", number = id, task_root = repo.root,
-        task_file = ("%03d-%s.md"):format(id, slug), title = title, repo = repo.repo, host = "local", path = repo.root }
+        task_file = ("%03d-%s.md"):format(id, slug(title)), title = title, repo = repo.repo, host = "local", path = repo.root }
       local path = M.file(task)
       local fd, err = vim.uv.fs_open(path, "wx", 384)
       assert(fd, "Cannot create local task: " .. tostring(err))
@@ -183,6 +190,20 @@ providers["local"] = {
     return item
   end,
 }
+
+-- Keep the filename in step with the title: same number prefix, new slug.
+-- Returns the (possibly new) filename and the old one when it changed.
+function M.rename(target)
+  local path = M.file(target)
+  local old = vim.fs.basename(path)
+  local task = M.parse(vim.fn.readfile(path))
+  local name = old:match("^(%d+)") .. "-" .. slug(task.title) .. ".md"
+  if name == old then return old end
+  local destination = vim.fs.dirname(path) .. "/" .. name
+  assert(not vim.uv.fs_lstat(destination), "Cannot rename task: " .. destination .. " already exists")
+  assert(vim.uv.fs_rename(path, destination))
+  return name, old
+end
 
 function M.parse(lines)
   local title = lines[1] and lines[1]:match("^# (.+)$")

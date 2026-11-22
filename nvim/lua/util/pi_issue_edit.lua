@@ -96,7 +96,9 @@ function M.open(target, reload, edit_with_pi)
         group = vim.api.nvim_create_augroup("pi_local_task_" .. buf, { clear = true }),
         buffer = buf,
         callback = function()
+          if vim.b[buf].pi_task_renaming then return end
           core.task(function()
+            M.follow_rename(buf, target)
             refresh(target, fetch(target).title)
             for _, workspace in pairs(core.workspaces) do
               if workspace.started and identity(workspace) == identity(target) then
@@ -115,6 +117,36 @@ function M.open(target, reload, edit_with_pi)
       { buffer = buf, desc = "Ask Pi to Edit Task" })
     if edit_with_pi then M.agent(buf) end
   end)
+end
+
+-- After a save that changed the title: rename the file, then point the buffer, its draft info
+-- and any workspace at the new name. The buffer keeps its undo history.
+function M.follow_rename(buf, target)
+  local name, old = tasks.rename(target)
+  if not old then return end
+  target.task_file = name
+  local info = vim.b[buf].pi_issue_draft
+  if info then
+    info.target.task_file = name
+    vim.b[buf].pi_issue_draft = info
+  end
+  for _, workspace in pairs(core.workspaces) do
+    if identity(workspace) == identity(target) then
+      workspace.task_file = name
+      core.save(workspace)
+    end
+  end
+  local path = tasks.file(target)
+  vim.schedule(function()
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    vim.b[buf].pi_task_renaming = true
+    vim.api.nvim_buf_call(buf, function()
+      vim.cmd("silent keepalt file " .. vim.fn.fnameescape(path))
+      vim.cmd("silent write!") -- same content; clears the "not edited" state so plain :w keeps working
+    end)
+    vim.b[buf].pi_task_renaming = false
+  end)
+  vim.notify("Renamed task file to " .. name, vim.log.levels.INFO)
 end
 
 function M.publish(buf)

@@ -36,7 +36,7 @@ local function git(...)
   return vim.trim(await(function() return core.git(temp .. "/repo", unpack(args)) end))
 end
 
-local ok, failure = pcall(function()
+local ok, failure = xpcall(function()
   git("init", "-b", "main")
   git("config", "user.name", "Test")
   git("config", "user.email", "test@example.invalid")
@@ -263,7 +263,7 @@ local ok, failure = pcall(function()
   local count = #messages
   vim.cmd("PiTasks github")
   assert(#messages > count and messages[#messages]:find("GitHub integration is disabled", 1, true))
-end)
+end, debug.traceback)
 
 for id, job in pairs(core.jobs) do
   if not job.exited then core.stop(core.workspaces[id]) end
