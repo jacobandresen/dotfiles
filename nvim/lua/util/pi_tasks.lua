@@ -237,6 +237,11 @@ function M.update(target, title, body)
   assert(type(body) == "string", "Task body must be Markdown text")
   return provider(target).update(target, title, body)
 end
+function M.delete(target)
+  assert(source(target) == "local", "Only local tasks can be deleted")
+  local path = M.file(target)
+  assert(vim.uv.fs_unlink(path))
+end
 function M.create(repo, title, body)
   enabled(repo)
   assert(type(title) == "string" and vim.trim(title) ~= "" and not title:find("[\r\n]"),

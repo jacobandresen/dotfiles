@@ -410,8 +410,8 @@ function M.dashboard()
       border = "rounded",
       title = " Task Workspaces ",
       title_pos = "center",
-      footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  n new  ? help  q "
-        or " n new  Enter code  p pi  ? help ",
+      footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  X delete  n new  ? help  q "
+        or " X delete  n new  Enter code  p pi  ? help ",
       footer_pos = "center",
     })
   )
@@ -481,6 +481,29 @@ function M.dashboard()
         end
       end)
     end),
+    X = function()
+      local entry = selected()
+      if not entry then return end
+      vim.cmd.close()
+      core.task(function()
+        if entry.pending then
+          if core.choose({ "Cancel", "Delete local task file" },
+            "Delete " .. tasks.label({
+              source = "local", repo = entry.repo.repo, number = entry.pending.number,
+            }) .. "?") == "Delete local task file" then
+            tasks.delete(entry.pending)
+            vim.notify("Deleted " .. tasks.label({
+              source = "local", repo = entry.repo.repo, number = entry.pending.number,
+            }), vim.log.levels.INFO, { title = "Pi Tasks" })
+          end
+        elseif core.choose({ "Cancel", "Delete task, worktree and session" },
+          "Delete " .. tasks.label(entry) .. "? This removes its task file and all worktree changes.")
+          == "Delete task, worktree and session" then
+          core.delete(entry)
+          vim.notify("Deleted " .. tasks.label(entry), vim.log.levels.INFO, { title = "Pi Tasks" })
+        end
+      end)
+    end,
     r = refresh,
     ["?"] = function()
       local lines = {
@@ -495,6 +518,7 @@ function M.dashboard()
         "d: working diff        D: changes since the recorded base",
         "v: view / edit the task (GitHub uses a local draft)",
         "x: stop with confirmation; never delete work",
+        "X: delete a local task (and its worktree/session) with confirmation",
         "r: refresh file counts i: choose tasks  n: new local task",
         "",
         "F6: hide / show pi, including from terminal input",
@@ -687,7 +711,7 @@ function M.tasks(source, query, limit, repository)
       layout = {
         preset = "select",
         layout = {
-          footer = "Enter start / Tab select / Ctrl-b review / Ctrl-n new / Ctrl-o edit / ? help",
+          footer = "Enter start / Ctrl-d delete / Ctrl-b review / Ctrl-n new / Ctrl-o edit / ? help",
           footer_pos = "center",
         },
       },
@@ -704,6 +728,7 @@ function M.tasks(source, query, limit, repository)
             "Enter: start pi on the selected task(s) now (base: HEAD)",
             "Ctrl-b: choose a base ref and review before starting / prepare only",
             "Ctrl-o: edit the task; GitHub uses a local draft",
+            "Ctrl-d: delete selected local task(s), including worktrees and sessions",
             "Ctrl-n: create a local task",
             "Tab: select several tasks",
             "Ctrl-s: search    Ctrl-l: load 50 more",
@@ -721,6 +746,28 @@ function M.tasks(source, query, limit, repository)
           local selected = picker:selected({ fallback = true })
           picker:close()
           if #selected > 0 then M.launch(repo, selected, { review = true }) end
+        end,
+        delete_task = function(picker)
+          local selected = picker:selected({ fallback = true })
+          if source ~= "local" then
+            return vim.notify("Only local tasks can be deleted", vim.log.levels.INFO, { title = "Pi Tasks" })
+          end
+          if core.choose({ "Cancel", "Delete selected local task(s)" },
+            ("Delete %d task(s)? Their files, worktrees and sessions will be removed."):format(#selected))
+            ~= "Delete selected local task(s)" then return end
+          picker:close()
+          core.task(function()
+            for _, item in ipairs(selected) do
+              local workspace = core.workspaces[vim.fn.sha256(repo.common .. "\0"
+                .. tasks.identity(item)):sub(1, 24)]
+              if workspace then
+                core.delete(workspace)
+              else
+                tasks.delete(item)
+              end
+            end
+            vim.notify(("Deleted %d local task(s)"):format(#selected), vim.log.levels.INFO, { title = "Pi Tasks" })
+          end)
         end,
         view_issue = function(picker)
           local issue = picker:current()
@@ -754,6 +801,7 @@ function M.tasks(source, query, limit, repository)
             ["<C-l>"] = { "more_issues", mode = { "n", "i" } },
             ["<C-o>"] = { "view_issue", mode = { "n", "i" } },
             ["<C-b>"] = { "review_launch", mode = { "n", "i" } },
+            ["<C-d>"] = { "delete_task", mode = { "n", "i" } },
             ["<C-n>"] = { "new_task", mode = { "n", "i" } },
             ["?"] = { "task_help", mode = "n" },
           },
@@ -771,6 +819,22 @@ function M.new_task(title, root)
     if not title then return require("util.pi_issue_edit").compose(repo) end
     local target = tasks.create(repo, title)
     require("util.pi_issue_edit").open(target)
+  end)
+end
+
+function M.delete_current()
+  local info = vim.b.pi_issue_draft
+  local workspace = core.current()
+  local target = info and info.target or workspace
+  assert(target and target.source == "local", "Open or activate a local task before deleting it")
+  core.task(function()
+    if core.choose({ "Cancel", "Delete local task" },
+      "Delete " .. tasks.label(target) .. "? This cannot be undone.") ~= "Delete local task" then return end
+    local active = workspace and core.workspaces[vim.fn.sha256(
+      workspace.common .. "\0" .. tasks.identity(target)
+    ):sub(1, 24)]
+    if active then core.delete(active) else tasks.delete(target) end
+    vim.notify("Deleted " .. tasks.label(target), vim.log.levels.INFO, { title = "Pi Tasks" })
   end)
 end
 
@@ -867,6 +931,8 @@ function M.setup()
     { desc = "View / edit the active task" })
   vim.api.nvim_create_user_command("PiTaskEdit", function() require("util.pi_issue_edit").edit() end,
     { desc = "Ask the active pi-agent to revise the task" })
+  vim.api.nvim_create_user_command("PiTaskDelete", M.delete_current,
+    { desc = "Delete the current local task and its workspace" })
   vim.api.nvim_create_user_command("PiTaskImport", function(opts)
     M.import_task(opts.args ~= "" and opts.args or nil)
   end, { nargs = "?", desc = "Copy a GitHub issue into a local task after confirmation" })

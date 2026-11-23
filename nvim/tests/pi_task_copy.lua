@@ -99,7 +99,7 @@ local ok, failure = pcall(function()
   action(ui.export_task)
   assert(#creations == 1 and creations[1].title == "Local revision"
     and creations[1].body == "Changed while confirming", "Export must publish saved title/body via stdin")
-  assert(vim.uv.fs_stat(path) and tasks.get(imported).title == "Local revision")
+  assert(vim.uv.fs_stat(tasks.file(imported)) and tasks.get(imported).title == "Local revision")
   assert(vim.b.pi_issue_draft.target.source == "local" and next(core.jobs) == nil,
     "Export must not switch task identity or launch an agent")
   assert(remote.title == 'Remote "task"' and remote.body:find("Existing progress", 1, true),

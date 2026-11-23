@@ -133,6 +133,10 @@ local ok, failure = xpcall(function()
   assert(vim.api.nvim_buf_get_name(buf) == tasks.file(a), "Edit the canonical task, not a stale worktree copy")
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# Search checkpoint", "", "Status: active", "", "- [ ] Next step" })
   vim.cmd("silent write")
+  assert(vim.wait(3000, function()
+    return vim.api.nvim_buf_is_valid(buf)
+      and vim.api.nvim_buf_get_name(buf):find("001%-search%-checkpoint%.md$") ~= nil
+  end, 10), "Task title rename did not settle")
   assert(tasks.get(a).title == "Search checkpoint" and workspace.title == "Search checkpoint")
   local sent, send = nil, vim.api.nvim_chan_send
   vim.api.nvim_chan_send = function(channel, text)

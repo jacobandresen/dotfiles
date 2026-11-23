@@ -714,6 +714,36 @@ function M.stop(workspace)
   M.changed()
 end
 
+function M.delete(workspace)
+  assert(workspace.source == "local", "Only local tasks can be deleted")
+  local job = M.jobs[workspace.id]
+  assert(not job or job.exited, "Stop pi before deleting " .. tasks.label(workspace))
+  M.validate(workspace)
+  local task_path = tasks.file(workspace)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_get_name(buf) == task_path then
+      assert(not vim.bo[buf].modified, "Save or discard modified task buffers before deleting " .. tasks.label(workspace))
+    end
+  end
+  for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    if vim.t[tab].pi_issue == workspace.id then
+      for _, buf in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+        local buffer = vim.api.nvim_win_get_buf(buf)
+        assert(not vim.bo[buffer].modified, "Save or discard modified files before deleting " .. tasks.label(workspace))
+      end
+      vim.api.nvim_set_current_tabpage(tab)
+      vim.cmd("tabclose!")
+    end
+  end
+  local root = assert(workspace.task_root, "Local task repository is missing")
+  git(root, "worktree", "remove", "--force", workspace.path)
+  tasks.delete(workspace)
+  assert(vim.fn.delete(directory(workspace), "rf") == 0, "Cannot remove workspace state: " .. directory(workspace))
+  M.jobs[workspace.id] = nil
+  M.workspaces[workspace.id] = nil
+  M.changed()
+end
+
 -- Ask a live, settled agent to keep going; Enter is sent after the paste so pi submits it.
 function M.continue(workspace)
   local job = M.jobs[workspace.id]
@@ -833,8 +863,16 @@ function M.refresh(workspace)
   if not uv.fs_stat(workspace.path) then return end
   if workspace.source == "local" then
     local current = tasks.get(workspace)
+    local changed = false
     if workspace.title ~= M.clean(current.title) then
       workspace.title = M.clean(current.title)
+      changed = true
+    end
+    if workspace.task_file ~= current.task_file then
+      workspace.task_file = current.task_file
+      changed = true
+    end
+    if changed then
       M.save(workspace)
       M.changed()
     end
