@@ -116,10 +116,10 @@ doctor:
 	@$(CLI) doctor
 
 # Offline Neovim/pi task suite; pi_e2e drives the real config with keystrokes.
-PI_LUA_TESTS := pi_tasks pi_issues pi_issue_edit pi_task_copy pi_task_delete pi_layout pi_e2e
+PI_LUA_TESTS := pi_tasks pi_issues pi_issue_edit pi_issue_fields pi_task_copy pi_task_delete pi_layout pi_e2e
 test-pi:
 	@test -f nvim/pi/node_modules/pi-subagents/bundle/index.js || \
-		{ echo "Pinned pi extension missing: run :PiIssuesSetup (or cd nvim/pi && npm ci --ignore-scripts --omit=dev)"; exit 1; }
+		{ echo "Pinned pi extension missing: run :PiTaskSetup (or cd nvim/pi && npm ci --ignore-scripts --omit=dev)"; exit 1; }
 	@for test in $(PI_LUA_TESTS); do \
 		timeout 180 nvim --headless -u NONE -i NONE -l nvim/tests/$$test.lua || exit 1; echo; \
 	done

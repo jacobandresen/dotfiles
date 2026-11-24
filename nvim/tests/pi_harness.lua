@@ -210,7 +210,7 @@ local helpers = [[
   function e2e.dashboard_row(number)
     local lines = e2e.float_lines("Task Workspaces") or {}
     for row, line in ipairs(lines) do
-      if line:find("/task%-" .. number .. "%s") then return row end
+      if line:find("/" .. number .. "%-") then return row end
     end
   end
 ]]

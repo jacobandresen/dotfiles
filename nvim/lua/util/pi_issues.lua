@@ -22,6 +22,15 @@ function M.settings()
   return settings
 end
 
+-- GitHub-dependent commands stay available everywhere but explain themselves
+-- when the integration is off: one actionable hint instead of a deep assert.
+function M.require_github()
+  if M.settings().github_enabled then return true end
+  vim.notify("The GitHub integration is disabled; press Space a G to enable it (or :PiTaskGithub)",
+    vim.log.levels.WARN, { title = "Pi Tasks" })
+  return false
+end
+
 function M.path() return vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h") .. "/pi" end
 
 function M.clean(text) return (tostring(text or ""):gsub("[%z\1-\31\127]", " ")) end
@@ -129,6 +138,7 @@ local fields = {
   "task_file",
   "task_sha",
   "restarts",
+  "finished",
 }
 function M.save(workspace)
   local data = { version = 1 }
@@ -332,6 +342,7 @@ function M.open(workspace)
     "F6          Hide / show Pi, also from terminal input",
     "Space a s   Send file / selection",
     "Space a r   Reviewer subagent",
+    "Space a m   Finish: commit, merge, mark finished",
     "Space g D   Review changes",
     "Space f f   Find files in this worktree",
     "Space a v   View / edit task",
@@ -454,7 +465,7 @@ function M.show(workspace)
   vim.api.nvim_win_set_buf(0, job.buf)
   vim.api.nvim_win_set_width(0, math.max(30, math.floor(vim.o.columns * 0.4)))
   vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn = false, false, "no"
-  vim.wo.winbar = " Pi " .. workspace.number .. " "
+  vim.wo.winbar = " \u{f085} Pi " .. tasks.label(workspace) .. " "
   if not job.exited then vim.cmd.startinsert() end
 end
 
@@ -509,7 +520,7 @@ function M.start(workspace, issue)
   assert(vim.fn.executable(M.settings().pi) == 1, "pi is not installed")
   assert(
     uv.fs_stat(M.path() .. "/node_modules/pi-subagents/bundle/index.js"),
-    "Run :PiIssuesSetup to install the pinned pi extension"
+    "Run :PiTaskSetup to install the pinned pi extension"
   )
   if workspace.session_file then
     assert(
@@ -571,8 +582,18 @@ function M.start(workspace, issue)
       .. "\n\n"
       .. body
       .. "\n\n"
-      .. (workspace.source == "local" and ("Task description file (lives in the main checkout; do not edit it or "
-        .. "anything else there): " .. tasks.file(workspace) .. "\n\n") or "")
+      .. (workspace.source == "local" and ("Task description file (lives in the main checkout): "
+        .. tasks.file(workspace)
+        .. ". Its only editable part is the Actions checklist, the '- [ ]' lines: check items off as you "
+        .. "complete them and add new actions as you discover them. Change nothing else in the main "
+        .. "checkout.\n\n") or "")
+      .. ((workspace.restarts or 0) > 0 and ("A previous conversation already worked on this task in this "
+        .. "worktree, then stopped. Before writing anything, inspect the worktree (git status, "
+        .. "git log --oneline -8, git diff) and the files it created, keep completed work, and pick up "
+        .. "exactly where that conversation left off; do not redo finished steps. First state what was "
+        .. "already done and what remains, then continue the remaining actions.\n\n") or "")
+      .. "Treat the task as an action list: complete the description's '- [ ]' items one by one; if there "
+      .. "is no checklist yet, first break the work into concrete actions, then complete them.\n\n"
       .. "Your worktree is " .. workspace.path .. " (branch " .. workspace.branch .. "). It is the repository "
       .. "root for this task: create and change files only inside it, and resolve relative paths from it. "
       .. "Implement only this task in this worktree. Follow repository instructions. "
@@ -585,8 +606,6 @@ function M.start(workspace, issue)
     M.write(task_file, prompt)
     vim.list_extend(argv, { "--", "@" .. task_file, "Implement the attached task." })
   end
-  previous = M.jobs[workspace.id]
-  if previous and not previous.exited then return M.show(workspace) end
   assert(M.live() < M.settings().max_agents, "Agent limit reached while preparing; workspace kept for later")
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "hide"
@@ -686,6 +705,17 @@ function M.start(workspace, issue)
   end
 end
 
+-- Stop a running pi and yield until it has exited. Finishing, restarting and
+-- deleting all need the agent's terminal down first; worktree changes survive.
+function M.stop_wait(workspace, job)
+  M.stop(workspace)
+  for _ = 1, 100 do
+    if job.exited then break end
+    M.sleep(50)
+  end
+  return job.exited
+end
+
 -- Start the task again from its current description in a new conversation; the worktree is kept.
 function M.restart(workspace)
   local job = M.jobs[workspace.id]
@@ -694,18 +724,65 @@ function M.restart(workspace)
       .. "? Its conversation stops; worktree changes are kept.") ~= "Restart with the current task" then
       return
     end
-    M.stop(workspace)
-    for _ = 1, 100 do
-      if job.exited then break end
-      M.sleep(50)
-    end
-    assert(job.exited, "pi did not stop; inspect its terminal before restarting")
+    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal before restarting")
   end
   workspace.restarts = (workspace.restarts or 0) + 1
+  workspace.finished = nil -- a restart makes the task unfinished again
   workspace.session = (workspace.source == "local" and "task-" or "issue-") .. workspace.id .. "-r" .. workspace.restarts
   workspace.session_file, workspace.started = nil, nil
   M.save(workspace)
   M.start(workspace)
+end
+
+-- Finish a task: stop pi if it is still running, commit whatever the agent left
+-- in its worktree, merge the branch into the primary checkout's current branch,
+-- and mark it finished. A human decision from the dashboard (m) or Space a m;
+-- agents never merge.
+function M.finish(workspace)
+  M.validate(workspace)
+  assert(workspace.source == "local", "Only local tasks are finished this way")
+  local job = M.jobs[workspace.id]
+  local running = job and not job.exited
+  local primary
+  for _, entry in ipairs(M.worktrees(workspace.path)) do
+    if entry.path ~= workspace.path then primary = primary or entry end
+  end
+  assert(primary and primary.path and primary.branch,
+    "No checked-out branch in the primary worktree to merge into")
+  local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
+  assert(result.code == 0, "Cannot inspect worktree status: " .. M.clean(result.stderr))
+  local records = vim.split(result.stdout, "\0", { plain = true, trimempty = true })
+  local count, i = 0, 1
+  while i <= #records do
+    count = count + 1
+    i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
+  end
+  local message = tasks.label(workspace) .. "\n\n"
+    .. (running and "Pi is stopped first; worktree changes are kept.\n" or "")
+    .. "Worktree: " .. (count == 0 and "clean" or count .. " changed file(s) will be committed") .. "\n"
+    .. "Merges " .. workspace.branch .. " into " .. primary.branch .. " (at " .. primary.path .. ")\n"
+    .. (workspace.finished and "Already finished before; the merge is repeated." or "")
+  local action = running and "Stop pi, commit and merge" or "Commit and merge"
+  assert(M.choose({ "Cancel", action }, message) == action, "Finish cancelled")
+  if running then
+    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal before finishing")
+  end
+  if count > 0 then
+    git(workspace.path, "add", "-A")
+    git(workspace.path, "commit", "-m", tasks.label(workspace))
+  end
+  -- Git itself refuses a merge that would overwrite uncommitted changes in the primary checkout.
+  local ok, err = pcall(git, primary.path, "merge", "--no-edit", workspace.branch)
+  if not ok then
+    error("Merge failed: " .. tostring(err)
+      .. "\nResolve in " .. primary.path .. " or back out with: git merge --abort", 0)
+  end
+  local first = not workspace.finished
+  workspace.finished = os.time()
+  M.save(workspace)
+  M.changed()
+  notify(tasks.label(workspace) .. (first and " finished" or " merged again") .. ": " .. workspace.branch
+    .. " -> " .. primary.branch .. " in " .. primary.path, vim.log.levels.INFO)
 end
 
 function M.stop(workspace)
@@ -720,13 +797,17 @@ end
 function M.delete(workspace)
   assert(workspace.source == "local", "Only local tasks can be deleted")
   local job = M.jobs[workspace.id]
-  assert(not job or job.exited, "Stop pi before deleting " .. tasks.label(workspace))
+  -- The caller has already confirmed the deletion; a running pi is stopped first
+  -- (its worktree changes were kept only until this point anyway).
+  if job and not job.exited then
+    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal, then delete again")
+  end
   -- The worktree or task file may already be gone (removed externally, or a
   -- partially failed delete); tolerate that so a stale row can always be cleaned.
-  local task_path = tasks.file(workspace)
+  local ok_task, task_path = pcall(tasks.file, workspace)
   local missing_worktree = not uv.fs_stat(workspace.path)
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_get_name(buf) == task_path then
+    if ok_task and vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_get_name(buf) == task_path then
       assert(not vim.bo[buf].modified, "Save or discard modified task buffers before deleting " .. tasks.label(workspace))
     end
   end
@@ -809,9 +890,11 @@ end
 function M.status(workspace)
   local job = M.jobs[workspace.id]
   if not job then
+    if workspace.finished then return "finished" end
     if uv.fs_stat(directory(workspace) .. "/owner.json") then return "external" end
     return uv.fs_stat(workspace.path) and (workspace.started and "stopped" or "prepared") or "missing"
   end
+  if workspace.finished and job.exited then return "finished" end
   if job.activity == "idle" and job.outcome == "error" then return "error" end
   -- A finished turn that left the worktree clean (counted after it settled) did not do the task.
   if job.activity == "idle" and job.worked and workspace.files == 0
@@ -822,6 +905,7 @@ function M.status(workspace)
 end
 
 function M.files(workspace, scope)
+  assert(scope == nil or scope == "working" or scope == "issue", "Unknown diff scope: " .. tostring(scope))
   local rows = {}
   local function diff(staged)
     local argv = { "git", "--no-pager", "diff", "--no-ext-diff", "--no-textconv", "--name-status", "-z", "-M" }
@@ -877,6 +961,12 @@ function M.refresh(workspace)
     end
     if workspace.task_file ~= current.task_file then
       workspace.task_file = current.task_file
+      changed = true
+    end
+    -- Progress over the task's action list; the dashboard shows it next to the title.
+    local progress = tasks.actions(current)
+    if workspace.actions_done ~= progress.done or workspace.actions_total ~= progress.total then
+      workspace.actions_done, workspace.actions_total = progress.done, progress.total
       changed = true
     end
     if changed then

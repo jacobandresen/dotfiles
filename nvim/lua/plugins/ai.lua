@@ -30,6 +30,16 @@ return {
         desc = "Restart Task with Its Current Description",
       },
       {
+        "<leader>aG",
+        function() require("util.pi_issues_ui").toggle_github() end,
+        desc = "Toggle GitHub Issue Integration",
+      },
+      {
+        "<leader>am",
+        function() require("util.pi_issues_ui").finish_current() end,
+        desc = "Finish Task: Commit, Merge and Mark Finished",
+      },
+      {
         "<leader>aw",
         function() require("util.pi_issues_ui").dashboard() end,
         desc = "Pi Task Workspaces",
@@ -38,6 +48,11 @@ return {
         "<leader>av",
         function() require("util.pi_issue_edit").open() end,
         desc = "View / Edit Active Task",
+      },
+      {
+        "<leader>af",
+        function() require("util.pi_issue_fields").open() end,
+        desc = "Pi Task Fields (Labels, Assignees, Milestone)",
       },
       {
         "<leader>ae",

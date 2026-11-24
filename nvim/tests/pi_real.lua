@@ -12,7 +12,7 @@ local function fail(message)
 end
 if vim.fn.executable("pi") ~= 1 then fail("pi is not installed") end
 if not uv.fs_stat(root .. "/nvim/pi/node_modules/pi-subagents/bundle/index.js") then
-  fail("pinned pi extension missing: run :PiIssuesSetup")
+  fail("pinned pi extension missing: run :PiTaskSetup")
 end
 
 -- Resolve and verify the local model before anything starts.

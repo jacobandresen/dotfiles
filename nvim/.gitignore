@@ -12,5 +12,5 @@ lazy/
 # Claude Code session files
 .claude/
 
-# Pinned pi extensions are installed with :PiIssuesSetup.
+# Pinned pi extensions are installed with :PiTaskSetup.
 pi/node_modules/

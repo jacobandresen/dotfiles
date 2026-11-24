@@ -26,7 +26,7 @@ adapters, formatters).
 - **gh**, authenticated for the issue repository — optional, only for explicitly
   enabled GitHub integration. Local tasks need Git but no remote or GitHub account.
 - **Node.js/npm** — the pinned `pi-subagents@0.89.1` dependency. Run
-  `:PiIssuesSetup` once after installing this configuration. No package installation,
+  `:PiTaskSetup` once after installing this configuration. No package installation,
   issue requests, or model calls run on editor startup. Pi 1.5.2 is integration-tested.
 
 New terminals and task sessions inherit pi-agent's model and thinking settings,
@@ -126,7 +126,7 @@ GitHub integration is disabled by default. Enable it in `lua/config/options.lua`
 vim.g.pi_issues = { github_enabled = true }
 ```
 
-Then use `:PiTasks github` or `:PiIssues` to select GitHub issues. Local task
+Then use `:PiTasks github` to select GitHub issues. Local task
 selection remains the default even when GitHub is enabled. Existing GitHub
 workspace metadata is retained; fetching or publishing an issue requires the
 setting above. This controls task integration, not pi-agent's AI provider:
@@ -134,19 +134,19 @@ using a hosted model still requires that model's network/authentication.
 
 In the issue picker, `Ctrl-o` opens an issue without creating a worktree or
 starting an agent. In the workspace panel, `v` opens that workspace's issue.
-`Space a v` / `:PiIssueView` opens the active issue as an editable local draft.
+`Space a v` / `:PiTaskView` opens the active issue as an editable local draft.
 Keep `# Issue title` on the first line, a blank second line, then the Markdown
 body. `:write` saves locally, not to GitHub. Drafts persist under Neovim's
 pi-issues state directory, outside worktrees, and reopen without losing edits.
 
-`Space a e` / `:PiIssueEdit` asks for revision instructions and pastes a bounded
+`Space a e` / `:PiTaskEdit` asks for revision instructions and pastes a bounded
 draft-only request into the matching active pi-agent. Press Enter in pi to
 submit it, then return to the draft to review its edits. This does not start
 another agent or authorize publishing. Unsaved buffer edits are saved first.
 
-From the draft, `Space a P` / `:PiIssuePublish` confirms publishing its title and
+From the draft, `Space a P` / `:PiTaskPublish` confirms publishing its title and
 body using `gh issue edit`. Changes on GitHub since the draft was fetched block
-publishing; `:PiIssueReload` explicitly confirms discarding the local draft and
+publishing; `:PiTaskReload` explicitly confirms discarding the local draft and
 fetching the current issue. No comments, labels, assignees or issue state are
 changed. GitHub's CLI does not provide an atomic compare-and-update here, so
 avoid simultaneous edits while publishing.

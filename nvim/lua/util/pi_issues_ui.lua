@@ -64,13 +64,24 @@ end
 
 local function safe(text) return (core.clean(text):gsub("%%", "%%%%")) end
 
+-- Nerd Font glyphs for agent states; the plain text always follows.
+local glyph = {
+  starting = "\u{f110}", working = "\u{f110}", waiting = "\u{f252}", unknown = "\u{f059}",
+  idle = "\u{f017}", ["no changes"] = "\u{f056}", stopping = "\u{f011}", stopped = "\u{f011}",
+  finished = "\u{f00c}", error = "\u{f06a}", missing = "\u{f06a}", new = "\u{f067}",
+}
+-- Local tasks carry a file mark, GitHub issues the mark.
+local source_glyph = { ["local"] = "\u{f0f6} ", github = "\u{f09b} " }
+local function icon(status) return (glyph[status] or "\u{f059}") end
+
 function M.tabline()
   local parts = {}
   for i, tab in ipairs(vim.api.nvim_list_tabpages()) do
     local workspace = core.workspaces[vim.t[tab].pi_issue or ""]
     local label = workspace
-        and (vim.fs.basename(workspace.repo) .. (workspace.source == "local" and "/task-" or "#")
-          .. workspace.number .. " " .. core.status(workspace))
+        and (icon(core.status(workspace)) .. " "
+          .. vim.fs.basename(workspace.repo) .. (workspace.source == "local" and "/" or "#")
+          .. (tasks.name(workspace, 22) or ("task-" .. workspace.number)) .. " " .. core.status(workspace))
       or ("Tab " .. i)
     parts[#parts + 1] = ("%s%%%dT %s %%T"):format(
       tab == vim.api.nvim_get_current_tabpage() and "%#TabLineSel#" or "%#TabLine#",
@@ -91,7 +102,7 @@ function M.statusline()
   if not workspace then return "" end
   local job = core.jobs[workspace.id]
   local model = job and job.model or "pending"
-  return safe(("Pi %s | %s | %s"):format(tasks.label(workspace), core.status(workspace), model))
+  return safe(("\u{f085} Pi %s | %s | %s"):format(tasks.label(workspace), core.status(workspace), model))
 end
 
 function M.layout()
@@ -207,13 +218,32 @@ function M.focus(workspace)
   end)
 end
 
+-- Common Git dir of the repository the panel is opened from; workspaces of other
+-- repositories are scoped out of the task list. Nil outside any Git repository,
+-- in which case every workspace is still shown.
+local function current_common()
+  local local_root = core.root()
+  local git_path = vim.fs.find(".git", { upward = true, path = local_root, limit = 1 })[1]
+  if not git_path then return nil end
+  local stat = vim.uv.fs_stat(git_path)
+  if stat and stat.type == "file" then -- a linked worktree's .git points at the main checkout
+    local gitdir = (vim.fn.readfile(git_path, "", 1)[1] or ""):gsub("^gitdir:%s*", ""):gsub("%s+$", "")
+    return core.real(gitdir:match("^(.*)/worktrees/[^/]+") or gitdir)
+  end
+  return core.real(git_path)
+end
+
 local function ordered()
-  local items = vim.tbl_values(core.workspaces)
+  local common = current_common()
+  local items = {}
+  for _, workspace in pairs(core.workspaces) do
+    if not common or workspace.common == common then items[#items + 1] = workspace end
+  end
   table.sort(items, function(a, b) return a.repo == b.repo and a.number < b.number or a.repo < b.repo end)
   return items
 end
 
-local rank = { waiting = 1, working = 2, ["no changes"] = 3, idle = 3, starting = 3, unknown = 3, stopping = 4 }
+local rank = { waiting = 1, working = 2, ["no changes"] = 3, idle = 3, starting = 3, unknown = 3, stopping = 4, finished = 10 }
 -- Dashboard row color for each agent status; unknown statuses stay dim.
 local status_groups = {
   error = "DiagnosticError",
@@ -222,6 +252,7 @@ local status_groups = {
   ["no changes"] = "DiagnosticWarn",
   working = "DiagnosticInfo",
   new = "DiagnosticHint",
+  finished = "Comment",
 }
 
 function M.switch()
@@ -231,7 +262,9 @@ function M.switch()
     local status = core.status(workspace)
     items[#items + 1] = {
       workspace = workspace, status = status, rank = rank[status] or 9,
-      text = ("%-22s %-11s %s"):format(tasks.label(workspace), status, core.clean(workspace.title)),
+      text = ("%s %-20s %-11s %s"):format(
+        icon(status), tasks.label(workspace), status, core.clean(workspace.title)
+      ),
     }
   end
   if #items == 0 then return vim.notify("No task workspaces yet; start one with Space a i", vim.log.levels.INFO) end
@@ -266,8 +299,7 @@ local function workspace_for(target)
 end
 
 -- Restart the task of the current task buffer or tab with its current description.
-function M.restart_current()
-  local info = vim.b.pi_issue_draft
+function M.restart_current()  local info = vim.b.pi_issue_draft
   local target = info and info.target or core.current()
   if not target then return vim.notify("Open a task (Space a i, Space a n) first", vim.log.levels.WARN) end
   local workspace = workspace_for(target)
@@ -278,6 +310,17 @@ function M.restart_current()
   end)
 end
 
+-- Finish the task of the current tab: commit its worktree, merge, mark finished.
+function M.finish_current()
+  local workspace = core.current()
+  if not workspace then
+    local info = vim.b.pi_issue_draft
+    if info and info.target then workspace = workspace_for(info.target) end
+  end
+  if not workspace then return vim.notify("Open a task tab (Space a i) first", vim.log.levels.WARN) end
+  core.task(function() core.finish(workspace) end)
+end
+
 -- Start (or focus) the task of the current task buffer or task tab.
 function M.start_current()
   local info = vim.b.pi_issue_draft
@@ -286,7 +329,7 @@ function M.start_current()
   core.task(function()
     if target.source ~= "local" then
       local workspace = core.current()
-      assert(workspace, "Start GitHub issues from :PiIssues")
+      assert(workspace, "Start GitHub issues from :PiTasks github")
       return M.focus(workspace)
     end
     if vim.bo.modified and info then vim.cmd("silent write") end
@@ -328,6 +371,9 @@ local function start_pending(entry)
   M.launch(entry.repo, { { number = item.number, title = item.title, task_file = item.task_file } })
 end
 
+-- Dashboard paging: the panel shows one page of rows at a time.
+local page, page_count, visible_rows = 1, 1, {}
+
 local function draw()
   if not dashboard or not vim.api.nvim_buf_is_valid(dashboard) then return end
   local current_id
@@ -335,47 +381,71 @@ local function draw()
     local row = vim.api.nvim_win_get_cursor(win)[1]
     current_id = dashboard_rows[row] and entry_id(dashboard_rows[row])
   end
-  local items = entries()
+  local all = entries()
   local workspaces_count = #ordered()
   local waiting = 0
   for _, job in pairs(core.jobs) do
     if not job.exited and job.activity == "waiting" then waiting = waiting + 1 end
   end
   local active = core.live()
+  -- Unfinished tasks first; the index tiebreak keeps the order stable across redraws.
+  local sortable = {}
+  for index, entry in ipairs(all) do
+    sortable[index] = { entry = entry, index = index, finished = not entry.pending and core.status(entry) == "finished" }
+  end
+  table.sort(sortable, function(a, b)
+    if a.finished ~= b.finished then return b.finished end
+    return a.index < b.index
+  end)
+  local page_size = math.max(5, vim.o.lines - 16)
+  page_count = math.max(1, math.ceil(#sortable / page_size))
+  page = math.min(math.max(page, 1), page_count)
+  visible_rows = {}
+  for i = (page - 1) * page_size + 1, math.min(page * page_size, #sortable) do
+    visible_rows[#visible_rows + 1] = sortable[i].entry
+  end
   local wins = vim.fn.win_findbuf(dashboard)
   local width = #wins > 0 and vim.api.nvim_win_get_width(wins[1]) or 100
   local repo_width = math.min(28, math.floor(width * 0.3))
-  local title_width = math.max(8, width - repo_width - 26)
-  local format = "%2s %-" .. repo_width .. "s  %-10s %5s  %s"
+  local title_width = math.max(8, width - repo_width - 27)
+  local format = "%2s %-" .. repo_width .. "s  %-12s %5s  %s"
   local lines = {
-    "  Task workspaces",
+    "\u{f07b}  Task workspaces",
     ("  %d active / %d slots    %d waiting    %d workspaces    %d new"):format(
       active,
       core.settings().max_agents,
       waiting,
       workspaces_count,
-      #items - workspaces_count
-    ),
+      #all - workspaces_count
+    ) .. (page_count > 1 and ("    unfinished first    page %d/%d ( [ ] )"):format(page, page_count) or ""),
     "",
-    "  Pi status is not task completion; \"no changes\" means its turn left the worktree clean.",
+    "  Pi status is not task completion; \"finished\" means its branch merged into your main checkout.",
     string.format(format, "", "TASK", "AGENT", "FILES", "TITLE"),
   }
   dashboard_rows = {}
   local selected = 6
-  for index, entry in ipairs(items) do
+  for index, entry in ipairs(visible_rows) do
     local new = entry.pending
+    local status = new and "new" or core.status(entry)
     lines[#lines + 1] = string.format(
       format,
       index <= 9 and tostring(index) or "",
-      clip(tasks.label(new and { source = "local", repo = entry.repo.repo, number = new.number } or entry), repo_width),
-      new and "new" or core.status(entry),
+      clip(tasks.label(new and { source = "local", repo = entry.repo.repo, number = new.number, title = new.title }
+        or entry), repo_width),
+      icon(status) .. " " .. status,
       new and "-" or (entry.refreshing and "..." or (entry.files and tostring(entry.files) or "?")),
       clip(new and new.title or entry.title, title_width)
+        .. (not new and entry.actions_total and entry.actions_total > 0
+          and (" (%d/%d)"):format(entry.actions_done, entry.actions_total) or "")
     )
     dashboard_rows[#lines] = entry
     if entry_id(entry) == current_id then selected = #lines end
   end
-  if #items == 0 then lines[#lines + 1] = "  No tasks yet. Press n to write one." end
+  if #all == 0 then
+    lines[#lines + 1] = vim.tbl_count(core.workspaces) > 0
+        and "  No tasks in this repository; the existing task workspaces belong to other checkouts."
+      or "  No tasks yet. Press n to write one."
+  end
   vim.bo[dashboard].modifiable = true
   vim.api.nvim_buf_set_lines(dashboard, 0, -1, false, lines)
   vim.bo[dashboard].modifiable = false
@@ -389,7 +459,7 @@ local function draw()
   highlight(4, 0, "Comment")
   for row, entry in pairs(dashboard_rows) do
     local status = entry.pending and "new" or core.status(entry)
-    highlight(row - 1, repo_width + 5, status_groups[status] or "Comment", repo_width + 15)
+    highlight(row - 1, repo_width + 5, status_groups[status] or "Comment", repo_width + 17)
   end
   for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
     if vim.api.nvim_win_get_height(win) < #lines and vim.api.nvim_win_get_config(win).relative ~= "" then
@@ -415,10 +485,14 @@ function M.dashboard()
   local win = float(dashboard, 112, height, {
     style = "minimal",
     border = "rounded",
-    title = " Task Workspaces ",
+    title = " \u{f07b} Task Workspaces ",
     title_pos = "center",
-    footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  X delete  n new  ? help  q "
-      or " X delete  n new  Enter code  p pi  ? help ",
+    -- GitHub keys appear in the footer only when the integration is on.
+    footer = size.width >= 64
+      and (" 1-9 jump  Enter code  p pi  c continue  m merge  v task  f fields  E revise  "
+        .. (core.settings().github_enabled and "e export  I import  " or "")
+        .. "X delete  n new  ? help  q ")
+      or " m merge  f fields  v task  X delete  n new  ? help ",
     footer_pos = "center",
   }, draw)
   vim.wo.number, vim.wo.relativenumber, vim.wo.wrap, vim.wo.cursorline = false, false, false, true
@@ -445,12 +519,21 @@ function M.dashboard()
     end)
     draw()
   end
+  -- The editor/fields target for a "new" row: a written local task with no workspace yet.
+  local function draft_target(entry)
+    return {
+      source = "local", task_root = entry.repo.root, number = entry.pending.number,
+      task_file = entry.pending.task_file, repo = entry.repo.repo, host = "local", path = entry.repo.root,
+    }
+  end
   local function view_pending(entry)
-    local item = entry.pending
-    require("util.pi_issue_edit").open({
-      source = "local", task_root = entry.repo.root, number = item.number, task_file = item.task_file,
-      repo = entry.repo.repo, host = "local", path = entry.repo.root,
-    })
+    require("util.pi_issue_edit").open(draft_target(entry))
+  end
+  local function popup(fn)
+    return function()
+      vim.api.nvim_win_close(win, false)
+      fn()
+    end
   end
   local maps = {
     ["<CR>"] = action(function(w)
@@ -465,6 +548,9 @@ function M.dashboard()
     R = action(function(w)
       core.task(function() core.restart(w) end)
     end, start_pending),
+    m = action(function(w)
+      core.task(function() core.finish(w) end)
+    end),
     c = function()
       local entry = selected()
       if entry and entry.pending then return not_started() end
@@ -476,15 +562,31 @@ function M.dashboard()
       core.open(w)
       require("util.pi_issue_edit").open(w)
     end, view_pending),
+    f = action(function(w)
+      core.task(function() require("util.pi_issue_fields").open(w) end)
+    end, function(entry)
+      require("util.pi_issue_fields").open(draft_target(entry))
+    end),
+    E = action(function(w)
+      core.open(w)
+      require("util.pi_issue_edit").open(w)
+      require("util.pi_issue_edit").edit()
+    end, function(entry)
+      require("util.pi_issue_edit").open(draft_target(entry))
+      require("util.pi_issue_edit").edit()
+    end),
+    e = action(function(w)
+      core.task(function() M.export_task(w) end)
+    end, function(entry)
+      core.task(function() M.export_task(draft_target(entry)) end)
+    end),
+    -- popup: close the dashboard, then open the next surface.
+    I = popup(M.import_task),
+    a = popup(M.switch),
+    Q = popup(core.quit),
     x = action(function(w)
-      core.task(function()
-        if
-          core.choose({ "Cancel", "Stop pi; keep worktree and session" }, "Stop " .. tasks.label(w) .. "?")
-          == "Stop pi; keep worktree and session"
-        then
-          core.stop(w)
-        end
-      end)
+      -- Stopping never deletes work; no confirmation needed.
+      core.task(function() core.stop(w) end)
     end),
     X = function()
       local entry = selected()
@@ -492,7 +594,9 @@ function M.dashboard()
       vim.cmd.close()
       core.task(function()
         if entry.pending then
-          local label = tasks.label({ source = "local", repo = entry.repo.repo, number = entry.pending.number })
+          local label = tasks.label({
+            source = "local", repo = entry.repo.repo, number = entry.pending.number, title = entry.pending.title,
+          })
           if core.choose({ "Cancel", "Delete local task file" }, "Delete " .. label .. "?")
             == "Delete local task file" then
             tasks.delete(entry.pending)
@@ -514,12 +618,21 @@ function M.dashboard()
         "Enter: open code tab    p: start / focus pi",
         "new rows: written tasks without a workspace; p / Enter / 1-9 start them",
         "1-9: jump to that task's pi (or code tab when stopped)",
+        "Unfinished tasks come first; finished ones are dimmed below.",
+        "[ / ]: previous / next page (shown when list overflows)",
         "c: ask an idle pi to continue (e.g. after \"no changes\")",
         "R: restart with the current task text (new conversation, worktree kept)",
+        "Restarted and resumed tasks are told to pick up where the previous conversation left off.",
+        "Tasks carry an ## Actions checklist; pi completes the items and the row shows progress (2/5).",
+        "m: finish: stop pi if running, commit, merge into your main checkout, mark finished",
         "Space a a: switch task from anywhere    Space a g: start this task",
         "d: working diff        D: changes since the recorded base",
         "v: view / edit the task (GitHub uses a local draft)",
-        "x: stop with confirmation; never delete work",
+        "f: fields (labels, assignees, milestone, state, relations)",
+        "E: ask pi to revise the task text    a: switch task    Q: stop pi agents and quit",
+        "Issue metadata (labels, assignees, milestone, comments) lives in the",
+        "task's .tasks/NNN.json sidecar; imported issue data is never dropped.",
+        "x: stop pi (worktree and session are kept)",
         "X: delete a local task (and its worktree/session) with confirmation",
         "r: refresh counts    i: choose tasks    n: new local task",
         "",
@@ -531,34 +644,31 @@ function M.dashboard()
         "Agent state does not verify tests or mark a task complete.",
       }
       if core.settings().github_enabled then
-        lines[#lines + 1] = "g: GitHub issues. Drafts: Space a P confirms publishing."
+        lines[#lines + 1] = "g: GitHub issues    e: export to a new issue    I: import open issues"
+        lines[#lines + 1] = "Drafts: Space a P confirms publishing."
+      else
+        lines[#lines + 1] = "The GitHub integration is off; Space a G enables g / e / I in this panel."
       end
       show_help(lines)
     end,
-    i = function()
-      vim.api.nvim_win_close(win, false)
-      M.tasks()
-    end,
-    n = function()
-      vim.api.nvim_win_close(win, false)
-      M.new_task()
-    end,
+    i = popup(function() M.tasks() end),
+    n = popup(M.new_task),
     q = function() vim.cmd.close() end,
     ["<Esc>"] = function() vim.cmd.close() end,
   }
   for index = 1, 9 do
     maps[tostring(index)] = function()
-      local entry = entries()[index]
+      local entry = visible_rows[index]
       if not entry then return end
       vim.cmd.close()
       if entry.pending then start_pending(entry) else M.focus(entry) end
     end
   end
-  if core.settings().github_enabled then
-    maps.g = function()
-      vim.api.nvim_win_close(win, false)
-      M.issues()
-    end
+  maps["["] = function() page = page > 1 and page - 1 or page_count; draw() end
+  maps["]"] = function() page = page < page_count and page + 1 or 1; draw() end
+  maps.g = function()
+    if not core.require_github() then return end
+    popup(function() M.tasks("github") end)()
   end
   for key, fn in pairs(maps) do
     vim.keymap.set("n", key, fn, { buffer = dashboard, nowait = true })
@@ -622,7 +732,7 @@ function M.launch(repo, issues, opts)
       "", "Base: " .. ref .. " (" .. sha:sub(1, 12) .. ")", "" }
     local trees = core.worktrees(repo.root)
     for _, issue in ipairs(issues) do
-      local target = { source = repo.source, repo = repo.repo, number = issue.number }
+      local target = { source = repo.source, repo = repo.repo, number = issue.number, title = issue.title }
       local ok, label = pcall(tasks.label, target)
       if not ok then
         summary[#summary + 1] = "Invalid selection: " .. core.clean(label)
@@ -676,17 +786,31 @@ function M.launch(repo, issues, opts)
   end)
 end
 
-function M.tasks(source, query, limit, repository)
+-- opts.import: Enter imports the selected issues as local tasks instead of
+-- starting pi on them.
+function M.tasks(source, query, limit, repository, opts)
   source = source or "local"
+  if source == "github" and not core.require_github() then return end
+  opts = opts or {}
   local root = repository and repository.root or core.root()
   limit = limit or 50
   core.task(function()
     local repo = repository or core.repository(root, source)
     local items = tasks.list(repo, query, limit)
     for _, issue in ipairs(items) do
-      issue.text = ("%d %s"):format(issue.number, core.clean(issue.title))
+      local data = issue.meta or issue
+      local labels = {}
+      for _, label in ipairs(data.labels or {}) do
+        labels[#labels + 1] = type(label) == "table" and (label.name or "") or label
+      end
+      local progress = source == "local" and tasks.actions(issue) or { total = 0 }
+      issue.text = (source_glyph[source] or "") .. ("%d %s"):format(issue.number, core.clean(issue.title))
+        .. (progress.total > 0 and ("  (" .. progress.done .. "/" .. progress.total .. ")") or "")
+        .. (#labels > 0 and ("  [" .. table.concat(labels, ", ") .. "]") or "")
+        .. (data.state == "closed" and "  (closed)" or "")
     end
     local title = repo.repo .. (source == "local" and " / Local Tasks" or " / GitHub Issues")
+    if opts.import then title = repo.repo .. " / Import GitHub Issues" end
     if #items == 0 then
       title = (source == "local" and "No local tasks / "
         or (query and query ~= "" and "No matching open issues / " or "No open issues / ")) .. repo.repo
@@ -699,27 +823,38 @@ function M.tasks(source, query, limit, repository)
       layout = {
         preset = "select",
         layout = {
-          footer = "Enter start / Ctrl-d delete / Ctrl-b review / Ctrl-n new / Ctrl-o edit / ? help",
+          footer = opts.import
+            and "Enter import as local task / Tab select several / Ctrl-n new / ? help"
+            or ("Enter start / Ctrl-d delete / Ctrl-b review / Ctrl-n new / Ctrl-o edit / Ctrl-f fields / ? help"),
           footer_pos = "center",
         },
       },
       confirm = function(picker)
         local selected = picker:selected({ fallback = true })
         picker:close()
-        if #selected > 0 then M.launch(repo, selected) end
+        if #selected == 0 then return end
+        if opts.import then M.import_issues(repo, selected) else M.launch(repo, selected) end
       end,
       actions = {
         task_help = function()
           local lines = {
-            source == "local" and "# Local tasks" or "# GitHub issues",
+            opts.import and "# Import GitHub issues"
+              or (source == "local" and "# Local tasks" or "# GitHub issues"),
             "",
-            "Enter: start pi on the selected task(s) now (base: HEAD)",
+            opts.import
+              and "Enter: copy the selected issue(s) into local .tasks (full snapshot kept)"
+              or "Enter: start pi on the selected task(s) now (base: HEAD)",
             "Ctrl-b: choose a base ref and review before starting / prepare only",
             "Ctrl-o: edit the task; GitHub uses a local draft",
             "Ctrl-d: delete selected local task(s), including worktrees and sessions",
             "Ctrl-n: create a local task",
             "Tab: select several tasks",
             "Ctrl-s: search    Ctrl-l: load 50 more",
+            "Rows show labels and a closed state when the task carries them.",
+            "Local rows show action-list progress (done/total) when the task has a checklist.",
+            "Ctrl-f: open the Fields tab (labels, assignees, milestone, relations).",
+            "Metadata lives in the .tasks/NNN.json sidecar; imported issue",
+            "data is never dropped; Tab switches Task / Fields.",
             "",
             source == "local" and "Local tasks: :write saves. No publication step."
               or "GitHub drafts: :write saves locally; Space a P confirms publishing.",
@@ -766,6 +901,15 @@ function M.tasks(source, query, limit, repository)
             source = repo.source, task_root = repo.task_root, task_file = issue.task_file,
           })
         end,
+        view_fields = function(picker)
+          local issue = picker:current()
+          if not issue then return end
+          picker:close()
+          require("util.pi_issue_fields").open({
+            host = repo.host, repo = repo.repo, number = issue.number, path = repo.root,
+            source = repo.source, task_root = repo.task_root, task_file = issue.task_file,
+          })
+        end,
         server_search = function(picker)
           picker:close()
           core.task(function()
@@ -788,6 +932,7 @@ function M.tasks(source, query, limit, repository)
             ["<C-s>"] = { "server_search", mode = { "n", "i" } },
             ["<C-l>"] = { "more_issues", mode = { "n", "i" } },
             ["<C-o>"] = { "view_issue", mode = { "n", "i" } },
+            ["<C-f>"] = { "view_fields", mode = { "n", "i" } },
             ["<C-b>"] = { "review_launch", mode = { "n", "i" } },
             ["<C-d>"] = { "delete_task", mode = { "n", "i" } },
             ["<C-n>"] = { "new_task", mode = { "n", "i" } },
@@ -799,7 +944,6 @@ function M.tasks(source, query, limit, repository)
   end)
 end
 
-function M.issues(query, limit, repository) return M.tasks("github", query, limit, repository) end
 
 function M.new_task(title, root)
   core.task(function()
@@ -837,34 +981,69 @@ local function copy_task(fn)
   end)
 end
 
+-- Copy GitHub issues into the local .tasks store after confirmation. The full
+-- issue snapshot goes into the sidecar, so nothing from GitHub is dropped.
+local function import_now(repo, items)
+  local root = repo.root or (items[1] and items[1].path) or core.root()
+  local local_repo = core.repository(root, "local")
+  local fetched = {}
+  for _, item in ipairs(items) do
+    fetched[#fetched + 1] = { number = item.number, issue = tasks.get({
+      source = "github", repo = repo.repo, host = repo.host, number = item.number, path = root,
+    }) }
+  end
+  local what = #fetched == 1
+      and ("GitHub issue #%d in %s?"):format(fetched[1].number, repo.repo)
+    or (#fetched .. " issues in " .. repo.repo .. "?")
+  if core.choose({ "Cancel", "Import as local task" },
+    "Copy " .. what .. " into " .. local_repo.root .. "/.tasks/?") ~= "Import as local task" then return end
+  local last
+  for _, entry in ipairs(fetched) do
+    local issue = entry.issue
+    local imported = tasks.create(local_repo, issue.title, issue.body or "")
+    local labels = vim.tbl_map(function(label) return label.name or label end, issue.labels or {})
+    local assignees = vim.tbl_map(function(assignee) return assignee.login or assignee end, issue.assignees or {})
+    local milestone = issue.milestone and (issue.milestone.title or issue.milestone) or nil
+    tasks.set_meta(imported, {
+      origin = tasks.identity({ source = "github", repo = repo.repo,
+        host = repo.host, number = entry.number }),
+      labels = labels, assignees = assignees, milestone = milestone,
+      state = issue.state, relations = {},
+      issue = issue, -- verbatim gh snapshot; the editable fields above are views
+    })
+    last = imported
+  end
+  if last then require("util.pi_issue_edit").open(last) end
+  vim.notify(("Imported %d issue(s) as local task(s); the original issue data (labels, comments, ...) "
+    .. "is kept in each task's metadata"):format(#fetched), vim.log.levels.INFO, { title = "Pi Tasks" })
+end
+
+function M.import_issues(repo, items)
+  return copy_task(function() import_now(repo, items) end)
+end
+
+-- Import by number (:PiTaskImport 42, or from an open GitHub draft); without
+-- one, pick from the repository's open issues instead.
 function M.import_task(number)
   local current = core.current()
   local root = core.root()
-  return copy_task(function()
-    local local_repo = core.repository(root, "local")
-    local target
-    if not number and current and current.source ~= "local" then
-      target = current
-    else
-      local repo = core.repository(root, "github")
-      number = number or core.input("GitHub issue number to import: ", "")
-      if not number then return end
-      assert(tostring(number):match("^%d+$") and tonumber(number) > 0, "Enter a positive GitHub issue number")
-      target = { source = "github", repo = repo.repo, host = repo.host, number = tonumber(number), path = repo.root }
-    end
-    local issue = tasks.get(target)
-    if core.choose({ "Cancel", "Import as local task" },
-      "Copy " .. tasks.label(target) .. " into " .. local_repo.root .. "/.tasks/?") ~= "Import as local task" then return end
-    local imported = tasks.create(local_repo, issue.title, issue.body or "")
-    require("util.pi_issue_edit").open(imported)
-    vim.notify("Imported " .. tasks.label(target) .. " as " .. tasks.label(imported)
-      .. "; the GitHub issue is unchanged", vim.log.levels.INFO)
-  end)
+  if not core.require_github() then return end
+  if not number and current and current.source ~= "local" then
+    return copy_task(function() import_now({ repo = current.repo, host = current.host }, { current }) end)
+  end
+  if number then
+    assert(tostring(number):match("^%d+$") and tonumber(number) > 0, "Enter a positive GitHub issue number")
+    return copy_task(function()
+      import_now(core.repository(root, "github"), { { number = tonumber(number) } })
+    end)
+  end
+  return M.tasks("github", nil, 50, nil, { import = true })
 end
 
-function M.export_task()
+function M.export_task(target)
+  if not core.require_github() then return end
   local info = vim.b.pi_issue_draft
-  local target = info and info.target or core.current()
+  target = target or (info and info.target) or core.current()
   return copy_task(function()
     assert(target and target.source == "local", "Open a local task or activate its workspace before exporting")
     local repo = core.repository(target.task_root, "github")
@@ -904,6 +1083,17 @@ function M.install()
   end)
 end
 
+-- Runtime switch for the GitHub integration (Space a G / :PiTaskGithub); the
+-- dashboard and task pickers pick it up the next time they open.
+function M.toggle_github()
+  vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues or {}, { github_enabled = not core.settings().github_enabled })
+  vim.notify(
+    "Pi GitHub integration " .. (core.settings().github_enabled and "enabled" or "disabled"),
+    vim.log.levels.INFO,
+    { title = "Pi Tasks" }
+  )
+end
+
 function M.setup()
   core.setup()
   core.load()
@@ -915,10 +1105,16 @@ function M.setup()
   end, { nargs = "*", desc = "Create a local Markdown task" })
   vim.api.nvim_create_user_command("PiTaskRestart", M.restart_current,
     { desc = "Restart the task with its current description in a new conversation" })
+  vim.api.nvim_create_user_command("PiTaskFinish", M.finish_current,
+    { desc = "Commit the task's worktree changes, merge and mark it finished" })
   vim.api.nvim_create_user_command("PiTaskView", function() require("util.pi_issue_edit").open() end,
     { desc = "View / edit the active task" })
+  vim.api.nvim_create_user_command("PiTaskFields", function() require("util.pi_issue_fields").open() end,
+    { desc = "Fields tab: labels, assignees, milestone, state and relations" })
   vim.api.nvim_create_user_command("PiTaskEdit", function() require("util.pi_issue_edit").edit() end,
     { desc = "Ask the active pi-agent to revise the task" })
+  vim.api.nvim_create_user_command("PiTaskGithub", M.toggle_github,
+    { desc = "Enable / disable the GitHub issue integration for this session" })
   vim.api.nvim_create_user_command("PiTaskDelete", M.delete_current,
     { desc = "Delete the current local task and its workspace" })
   vim.api.nvim_create_user_command("PiTaskImport", function(opts)
@@ -926,26 +1122,19 @@ function M.setup()
   end, { nargs = "?", desc = "Copy a GitHub issue into a local task after confirmation" })
   vim.api.nvim_create_user_command("PiTaskExport", M.export_task,
     { desc = "Copy a local task to a new GitHub issue after confirmation" })
-  vim.api.nvim_create_user_command(
-    "PiIssues",
-    function(opts) M.issues(opts.args) end,
-    { nargs = "?", desc = "Choose GitHub issues" }
-  )
+  -- One command per action; every task command is named PiTask*.
   vim.api.nvim_create_user_command("PiWorkspaces", M.dashboard, { desc = "Pi task workspace dashboard" })
-  vim.api.nvim_create_user_command("PiIssuesSetup", M.install, { desc = "Install pinned pi extension dependencies" })
+  vim.api.nvim_create_user_command("PiTaskSetup", M.install, { desc = "Install pinned pi extension dependencies" })
   vim.api.nvim_create_user_command("PiQuit", core.quit, { desc = "Confirm stopping managed agents and quit safely" })
-  vim.api.nvim_create_user_command("PiIssueView", function() require("util.pi_issue_edit").open() end,
-    { desc = "View / edit the active GitHub issue draft" })
-  vim.api.nvim_create_user_command("PiIssuePublish", function() require("util.pi_issue_edit").publish() end,
+  -- One command per action: view/edit tasks and drafts share PiTaskView/PiTaskEdit.
+  vim.api.nvim_create_user_command("PiTaskPublish", function() require("util.pi_issue_edit").publish() end,
     { desc = "Publish the issue draft after confirmation" })
-  vim.api.nvim_create_user_command("PiIssueEdit", function() require("util.pi_issue_edit").edit() end,
-    { desc = "Ask the active pi-agent to revise the issue draft" })
-  vim.api.nvim_create_user_command("PiIssueReload", function()
+  vim.api.nvim_create_user_command("PiTaskReload", function()
     local info = vim.b.pi_issue_draft
     require("util.pi_issue_edit").open(info and info.target or nil, true)
   end, { desc = "Reload the GitHub issue after confirming draft replacement" })
   vim.api.nvim_create_user_command(
-    "PiIssueDiff",
+    "PiTaskDiff",
     function(opts) M.review(core.current(), opts.args == "issue" and "issue" or "working") end,
     {
       nargs = "?",

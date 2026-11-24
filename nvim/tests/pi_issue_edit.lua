@@ -11,7 +11,9 @@ local target = { id = "test", host = "github.com", repo = "test/repo", number = 
 local other = vim.tbl_extend("force", target, { id = "other", number = 43 })
 core.workspaces[target.id], core.workspaces[other.id] = target, other
 vim.t.pi_issue = target.id
-local remote = { title = "Original issue", body = "Original body", url = "https://github.com/test/repo/issues/42" }
+local remote = { title = "Original issue", body = "Original body", url = "https://github.com/test/repo/issues/42",
+  labels = { { name = "bug" }, { name = "cli" } }, state = "open", milestone = { title = "v1" },
+  comments = { { author = { login = "jacob" }, body = "Original comment" } } }
 local choice, request = "Cancel", "Clarify the acceptance criteria."
 local run = core.run
 local on_fetch
@@ -57,6 +59,12 @@ local ok, failure = pcall(function()
   assert(remote.title == "Revised issue" and target.title == "Revised issue")
   assert(other.title == nil, "Publishing one issue must not retitle another")
   assert(vim.b[buf].pi_issue_draft.body == body, "Advance the conflict baseline after publishing")
+  local baseline = vim.json.decode(table.concat(
+    vim.fn.readfile(temp .. "/state/issue-drafts/" .. vim.fn.sha256("github.com/test/repo#42")
+      .. "/baseline.json"), "\n"))
+  assert(baseline.issue and baseline.issue.labels[1].name == "bug" and baseline.issue.comments[1].body
+    == "Original comment" and baseline.issue.milestone.title == "v1",
+    "Publishing must keep the full original issue snapshot in the local draft")
 
   remote.body = "Someone else's edit"
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# Local changes", "", "Keep my draft" })

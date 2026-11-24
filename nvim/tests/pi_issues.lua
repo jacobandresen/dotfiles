@@ -376,6 +376,165 @@ local ok, failure = pcall(function()
   vim.api.nvim_win_close(panel, true)
   assert(vim.api.nvim_eval_statusline(vim.o.tabline, { use_tabline = true }).str:find("repo#"))
   assert(vim.api.nvim_tabpage_is_valid(tab_b) and uv.fs_stat(a.path), "Closing the panel preserves tabs/worktrees")
+
+  -- Finishing (local task): commit the worktree, merge into the main checkout, mark finished.
+  local tasks = require("util.pi_tasks")
+  local lrepo = { root = temp .. "/repo", common = temp .. "/repo/.git", source = "local", repo = "repo", host = "local" }
+  local local_task = tasks.create(lrepo, "Finish me")
+  local lws = await(function() return core.prepare(lrepo, local_task, "main", true) end)
+  write(lws.path .. "/finished-work.txt", { "merged from the task worktree" })
+
+  -- Finish while pi is still running: one prompt stops pi, commits and merges.
+  await(function() core.start(lws) end)
+  assert(vim.wait(5000, function() return core.jobs[lws.id] and core.jobs[lws.id].sequence ~= nil end, 10),
+    "Stub pi did not report ready before finish")
+  local real_finish_choose, ok_finish, err_finish = core.choose
+  await(function()
+    core.choose = function(items, prompt)
+      ok_finish = prompt
+      return "Stop pi, commit and merge"
+    end
+    ok_finish, err_finish = pcall(core.finish, lws)
+    core.choose = real_finish_choose
+  end)
+  assert(ok_finish, err_finish)
+  assert(core.jobs[lws.id] and core.jobs[lws.id].exited, "Finishing must stop the running pi")
+  assert(lws.finished and core.status(lws) == "finished", "Finishing must mark the task finished")
+  assert(uv.fs_stat(lrepo.root .. "/finished-work.txt"), "Finish must merge the branch into the main checkout")
+
+  -- Finishing again repeats the merge; nothing is lost, the state stays finished.
+  await(function()
+    core.choose = function() return "Commit and merge" end
+    ok_finish, err_finish = pcall(core.finish, lws)
+    core.choose = real_finish_choose
+  end)
+  assert(ok_finish, err_finish)
+  assert(lws.finished and core.status(lws) == "finished", "A repeated finish stays finished")
+
+  -- Current-tab commands follow a draft buffer's target when no task tab has focus.
+  core.open(b)
+  vim.cmd("tabnew")
+  local ltarget = { source = "local", task_root = lrepo.root, number = local_task.number,
+    task_file = local_task.task_file, path = lrepo.root, repo = "repo", host = "local", title = local_task.title }
+  vim.b.pi_issue_draft = { target = ltarget }
+  local draft_mark = #messages
+  core.choose = function() return "Commit and merge" end
+  ui.finish_current()
+  -- Wait for the finish to fully merge (lws.finished is already set from above).
+  assert(vim.wait(8000, function()
+    for i = draft_mark, #messages do
+      if tostring(messages[i]):find("merged again", 1, true) then return true end
+    end
+    return false
+  end, 10), "finish_current must follow the draft buffer's target")
+  ui.restart_current()
+  core.choose = real_finish_choose
+  assert(vim.wait(8000, function() return lws.finished == nil end, 10), "Restarting clears the finished state")
+  assert(vim.wait(8000, function()
+    local rjob = core.jobs[lws.id]
+    return rjob and not rjob.exited and rjob.sequence ~= nil
+  end, 10), "A restart from a draft buffer relaunches pi")
+  assert(vim.tbl_contains(core.jobs[lws.id].argv, "Implement the attached task."),
+    "A restart replays the task text in a fresh conversation")
+  core.choose = function() return "Delete local task" end
+  ui.delete_current()
+  assert(vim.wait(8000, function()
+    return not core.jobs[lws.id] and not core.workspaces[lws.id]
+      and not uv.fs_stat(lws.path)
+      and vim.fn.glob(lrepo.root .. "/.tasks/" .. local_task.number .. "-*") == ""
+  end, 10), "delete_current stops pi and removes worktree, task file and sidecar")
+  core.choose = real_finish_choose
+  vim.cmd("tabclose")
+
+  -- Deleting while pi runs: deletion stops pi itself, then removes everything.
+  local delete_task = tasks.create(lrepo, "Delete me running")
+  local lws2 = await(function() return core.prepare(lrepo, delete_task, "main", true) end)
+  await(function() core.start(lws2) end)
+  assert(vim.wait(5000, function() return core.jobs[lws2.id] and core.jobs[lws2.id].sequence ~= nil end, 10),
+    "Stub pi did not report ready before delete")
+  await(function() core.delete(lws2) end)
+  assert(not core.jobs[lws2.id], "Deleting must remove the job entry")
+  assert(not uv.fs_stat(lws2.path), "Deleting must remove the worktree")
+  assert(vim.fn.glob(lrepo.root .. "/.tasks/" .. delete_task.number .. "-*") == ""
+    and vim.fn.glob(lrepo.root .. "/.tasks/" .. delete_task.number .. ".json") == "",
+    "Deleting must remove the task file and sidecar")
+  expect_error(function() tasks.meta_path(delete_task) end, "does not match")
+
+  -- Workspace states without a live job: missing / external / prepared / finished.
+  local ghost = { id = "ghost-status", path = temp .. "/never-created", number = 1, title = "Ghost",
+    source = "local", task_root = lrepo.root, repo = "repo", host = "local", branch = "task/1", base_ref = "HEAD" }
+  assert(core.status(ghost) == "missing", "A removed worktree reports itself missing")
+  ghost.path = lrepo.root
+  assert(core.status(ghost) == "prepared", "A workspace without a run is prepared")
+  vim.uv.fs_mkdir(core.directory(ghost), 448)
+  core.write(core.directory(ghost) .. "/owner.json", vim.json.encode({ pid = vim.fn.getpid(), token = "other" }))
+  assert(core.status(ghost) == "external", "An owned state directory without a job is an external editor")
+  vim.uv.fs_unlink(core.directory(ghost) .. "/owner.json")
+  vim.fn.delete(core.directory(ghost), "rf")
+  ghost.finished = os.time()
+  assert(core.status(ghost) == "finished")
+  ghost.finished = nil
+  core.workspaces[ghost.id] = ghost -- register so tab routing finds it
+
+  -- continue: refuse when not started, refuse while busy, paste when idle.
+  expect_error(function() core.continue(b) end, "with p before continuing")
+  await(function() core.start(a) end) -- resume; the stub settles idle
+  assert(vim.wait(5000, function() return core.jobs[a.id].sequence ~= nil end, 10))
+  local ajob = core.jobs[a.id]
+  assert(core.status(a) == "idle" or core.status(a) == "no changes", core.status(a))
+  ajob.activity = "working"
+  expect_error(function() core.continue(a) end, "continue once it is idle")
+  -- An idle turn that changed nothing must get the explicit implement-now message.
+  ajob.activity, ajob.worked, ajob.settled_at, a.files, a.refreshed_at = "idle", true, uv.now() - 1000, 0, uv.now()
+  assert(core.status(a) == "no changes", "A settled turn with zero worktree changes reports 'no changes'")
+  core.continue(a)
+  assert(vim.wait(3000, function()
+    local text = uv.fs_stat(core.directory(a) .. "/paste.txt")
+      and table.concat(vim.fn.readfile(core.directory(a) .. "/paste.txt"), "\n") or ""
+    return text:find("left the worktree unchanged", 1, true) ~= nil
+  end, 10), "A 'no changes' task is asked to implement now")
+  core.stop(a)
+  assert(vim.wait(4000, function() return core.jobs[a.id].exited end, 10))
+
+  -- Diff scope values are a closed set.
+  expect_error(function() core.files(a, "bogus") end, "Unknown diff scope")
+
+  -- Status/tabline rendering must survive live and absent workspaces alike.
+  core.open(b)
+  local sl = ui.statusline()
+  assert(sl:find("Pi ", 1, true) and sl:find(tasks.label(b), 1, true),
+    "The statusline shows the task label and status: " .. vim.inspect(sl))
+  core.open(ghost)
+  local ghost_sl = ui.statusline()
+  assert(ghost_sl:find("prepared", 1, true), "A prepared workspace renders its status: " .. vim.inspect(ghost_sl))
+  assert(ui.tabline():find("Tab 1", 1, true), "Tabs that are not task tabs render as plain tabs")
+  vim.cmd("tabclose")
+  core.workspaces[ghost.id] = nil
+
+  -- Launching from a repository without any commit explains the worktree prerequisite.
+  vim.fn.mkdir(temp .. "/bare", "p")
+  git("init", "-b", "main", temp .. "/bare")
+  local bare = { root = temp .. "/bare", common = temp .. "/bare/.git", source = "local", repo = "bare", host = "local" }
+  local launch_msg = #messages
+  ui.launch(bare, { { number = 1, title = "No commits" } })
+  assert(vim.wait(5000, function() return #messages > launch_msg and tostring(messages[#messages]):find("no commits yet", 1, true)
+    end, 10), "An unborn repository gets the commit-first explanation: " .. table.concat(messages, "\n"))
+  vim.fn.delete(temp .. "/bare", "rf")
+
+  -- Toggling the GitHub integration flips the setting and tells the user.
+  local before = core.settings().github_enabled
+  ui.toggle_github()
+  assert(core.settings().github_enabled == not before)
+  assert(tostring(messages[#messages]):find(before and "disabled" or "enabled", 1, true))
+  ui.toggle_github()
+  assert(core.settings().github_enabled == before)
+
+  -- Dependency installation guards on npm instead of running mid-suite.
+  local exec = vim.fn.executable
+  vim.fn.executable = function(name) return name == "npm" and 0 or exec(name) end
+  ui.install()
+  vim.fn.executable = exec
+  assert(tostring(messages[#messages]):find("npm is required", 1, true), "install explains a missing npm")
 end)
 
 for id, job in pairs(core.jobs) do

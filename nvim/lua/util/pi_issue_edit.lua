@@ -1,6 +1,7 @@
 local M = {}
 local core = require("util.pi_issues")
 local tasks = require("util.pi_tasks")
+local fields = require("util.pi_issue_fields")
 local publishing = {}
 
 local identity, fetch = tasks.identity, tasks.get
@@ -11,6 +12,7 @@ local function paths(target)
   local directory = core.settings().state_dir .. "/issue-drafts/" .. id
   return directory .. "/issue.md", directory .. "/baseline.json"
 end
+M.paths = paths -- also used by the Fields tab for GitHub draft baselines
 
 local function refresh(target, title)
   for _, workspace in pairs(core.workspaces) do
@@ -29,7 +31,7 @@ end
 local function draft(buf)
   assert(vim.api.nvim_buf_is_valid(buf), "Task buffer was closed")
   local info = vim.b[buf].pi_issue_draft
-  assert(info, "Open a task with :PiTaskView (or :PiIssueView) first")
+  assert(info, "Open a task with :PiTaskView first")
   return info
 end
 
@@ -56,7 +58,11 @@ function M.open(target, reload, edit_with_pi)
       assert((vim.uv.fs_stat(path) and read(path)) == previous,
         "Draft changed on disk while fetching; no local edits were replaced")
       core.write(path, "# " .. issue.title .. "\n\n" .. (issue.body or "") .. "\n")
-      core.write(baseline, vim.json.encode({ target = target, title = issue.title, body = issue.body or "", url = issue.url }))
+      -- The full issue snapshot (labels, assignees, milestone, comments, ...)
+      -- stays in the local baseline: editing or publishing the draft never
+      -- drops information from the original GitHub issue.
+      core.write(baseline, vim.json.encode(
+        { target = target, title = issue.title, body = issue.body or "", url = issue.url, issue = issue }))
       if buf >= 0 and vim.api.nvim_buf_is_loaded(buf) then
         vim.api.nvim_buf_call(buf, function() vim.cmd("silent edit!") end)
       end
@@ -69,7 +75,7 @@ function M.open(target, reload, edit_with_pi)
       end
       info = { target = target }
     else
-      assert(vim.uv.fs_stat(baseline), "Draft baseline is missing; use :PiIssueReload to reload explicitly")
+      assert(vim.uv.fs_stat(baseline), "Draft baseline is missing; use :PiTaskReload to reload explicitly")
       info = vim.json.decode(read(baseline))
     end
     assert(identity(info.target) == identity(target), "Task identity does not match")
@@ -89,8 +95,11 @@ function M.open(target, reload, edit_with_pi)
       vim.cmd("botright vsplit")
       vim.api.nvim_win_set_buf(0, buf)
     end
-    vim.wo.winbar = local_task and " Local task | :write save | Space ag start | Space aR restart | Space ae ask Pi "
-      or " GitHub draft | :write local save | Space aP publish | Space ae Pi "
+    -- Two tabs: Task (this buffer: title, body, relations) and Fields.
+    vim.wo.winbar = local_task
+        and "\u{f0f6} Task | :write save | Tab fields | Space ag start | Space aR restart | Space ae ask Pi "
+      or "\u{f09b} GitHub draft | :write save locally | Tab fields | Space aP publish | Space ae Pi "
+    fields.decorate(buf, target)
     if local_task then
       vim.api.nvim_create_autocmd("BufWritePost", {
         group = vim.api.nvim_create_augroup("pi_local_task_" .. buf, { clear = true }),
@@ -100,6 +109,7 @@ function M.open(target, reload, edit_with_pi)
           core.task(function()
             M.follow_rename(buf, target)
             refresh(target, fetch(target).title)
+            fields.decorate(buf, target)
             for _, workspace in pairs(core.workspaces) do
               if workspace.started and identity(workspace) == identity(target) then
                 vim.notify("Task updated. Space a R restarts " .. tasks.label(workspace)
@@ -113,6 +123,11 @@ function M.open(target, reload, edit_with_pi)
       vim.keymap.set("n", "<leader>aP", function() M.publish(buf) end,
         { buffer = buf, desc = "Publish Issue Draft (Confirm)" })
     end
+    -- Tab and Space af both flip to the Fields tab; Tab flips back.
+    vim.keymap.set("n", "<Tab>", function() fields.open(target) end,
+      { buffer = buf, nowait = true, desc = "Fields Tab" })
+    vim.keymap.set("n", "<leader>af", function() fields.open(target) end,
+      { buffer = buf, desc = "Fields Tab (Confirm)" })
     vim.keymap.set("n", "<leader>ae", function() M.agent(buf) end,
       { buffer = buf, desc = "Ask Pi to Edit Task" })
     if edit_with_pi then M.agent(buf) end
@@ -149,6 +164,48 @@ function M.follow_rename(buf, target)
   vim.notify("Renamed task file to " .. name, vim.log.levels.INFO)
 end
 
+-- Field changes made in the Fields tab of a GitHub draft, as gh issue edit
+-- flags. Compared against the original issue snapshot; nothing is re-sent when
+-- the Fields tab has not touched them.
+function M.field_diffs(overlay, issue)
+  if not overlay then return nil end
+  issue = issue or {}
+  local names_of = function(list, key) return vim.tbl_map(function(e) return e[key] or tostring(e) end, list or {}) end
+  local function changed(old_list, new_list, key)
+    local old, present, add, remove = {}, {}, {}, {}
+    for _, value in ipairs(names_of(old_list, key)) do old[value] = true end
+    for _, value in ipairs(new_list or {}) do
+      present[value] = true
+      if not old[value] then add[#add + 1] = value end
+    end
+    for value in pairs(old) do if not present[value] then remove[#remove + 1] = value end end
+    return add, remove
+  end
+  local add_labels, remove_labels = changed(issue.labels, overlay.labels, "name")
+  local add_assignees, remove_assignees = changed(issue.assignees, overlay.assignees, "login")
+  local milestone = (overlay.milestone or "") ~= ((issue.milestone or {}).title or "")
+    and (overlay.milestone ~= "" and overlay.milestone or "-") or nil
+  local state = (overlay.state or "open") ~= (issue.state or "open") and overlay.state or nil
+  if #add_labels == 0 and #remove_labels == 0 and #add_assignees == 0 and #remove_assignees == 0
+    and not milestone and not state then
+    return nil
+  end
+  return { add_labels = add_labels, remove_labels = remove_labels,
+    add_assignees = add_assignees, remove_assignees = remove_assignees, milestone = milestone, state = state }
+end
+
+-- Human summary of a field diff for the publish confirmation.
+function M.field_changes(diffs)
+  local changes = {}
+  for _, label in ipairs(diffs.add_labels or {}) do changes[#changes + 1] = "+label " .. label end
+  for _, label in ipairs(diffs.remove_labels or {}) do changes[#changes + 1] = "-label " .. label end
+  for _, assignee in ipairs(diffs.add_assignees or {}) do changes[#changes + 1] = "+assignee " .. assignee end
+  for _, assignee in ipairs(diffs.remove_assignees or {}) do changes[#changes + 1] = "-assignee " .. assignee end
+  if diffs.milestone then changes[#changes + 1] = "milestone " .. diffs.milestone end
+  if diffs.state then changes[#changes + 1] = "state " .. diffs.state end
+  return changes
+end
+
 function M.publish(buf)
   buf = buf or vim.api.nvim_get_current_buf()
   core.task(function()
@@ -157,23 +214,33 @@ function M.publish(buf)
     local ok, err = pcall(function()
       local info = draft(buf)
       assert(info.target.source ~= "local", "Local tasks save with :write; there is nothing to publish to GitHub")
+      -- Fields edited after this buffer was opened live in the baseline; pick
+      -- them (and the current snapshot reference) up before diffing.
+      local path, baseline = paths(info.target)
+      if vim.uv.fs_stat(baseline) then
+        local fresh = vim.json.decode(read(baseline))
+        info.issue, info.fields = fresh.issue or info.issue, fresh.fields
+      end
       vim.api.nvim_buf_call(buf, function()
         vim.cmd("checktime")
         vim.cmd("silent update")
       end)
       local task = tasks.parse(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
       local title, body = task.title, task.body
-      local path, baseline = paths(info.target)
+      local diffs = M.field_diffs(info.fields, info.issue)
+      local action = diffs and "Publish title, body and fields" or "Publish title and body"
       local saved = read(path)
-      if core.choose({ "Cancel", "Publish title and body" },
-        "Publish this draft to " .. identity(info.target) .. "?") ~= "Publish title and body" then return end
+      if core.choose({ "Cancel", action },
+        "Publish this draft to " .. identity(info.target) .. "?"
+          .. (diffs and ("\nFields: " .. table.concat(M.field_changes(diffs), ", ")) or "")) ~= action then return end
       local current = fetch(info.target)
       assert(current.title == info.title and (current.body or "") == info.body,
-        "Issue changed on GitHub; publishing was blocked. Review it and use :PiIssueReload before retrying")
+        "Issue changed on GitHub; publishing was blocked. Review it and use :PiTaskReload before retrying")
       assert(vim.api.nvim_buf_is_valid(buf) and not vim.bo[buf].modified and read(path) == saved,
         "Draft changed during confirmation; review it and publish again")
-      tasks.update(info.target, title, body)
+      tasks.update(info.target, title, body, diffs)
       info.title, info.body = title, body
+      info.fields = nil -- pushed; the next Fields edit starts from the current issue
       core.write(baseline, vim.json.encode(info))
       if vim.api.nvim_buf_is_valid(buf) then vim.b[buf].pi_issue_draft = info end
       refresh(info.target, title)
@@ -194,7 +261,10 @@ function M.agent(buf)
     local job = core.jobs[workspace.id]
     assert(job and not job.exited, "Start this task's pi with Space a p first")
     local request = core.input("How should pi revise this task? ", "")
-    if not request or vim.trim(request) == "" then return end
+    if not request or vim.trim(request) == "" then
+      return vim.notify("No revision request entered; nothing was sent to pi", vim.log.levels.WARN,
+        { title = "Pi Tasks" })
+    end
     draft(buf)
     assert(core.jobs[workspace.id] == job and not job.exited, "The task's pi session stopped; no request was sent")
     vim.api.nvim_buf_call(buf, function()
@@ -224,9 +294,10 @@ function M.compose(repo)
   vim.bo[buf].filetype = "markdown"
   local name = "task://new/" .. buf
   vim.api.nvim_buf_set_name(buf, name)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# ", "", "" })
+  -- New tasks start with an Actions checklist: the agent works through and keeps it current.
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# ", "", "## Actions", "", "- [ ] " })
   vim.api.nvim_win_set_buf(0, buf)
-  vim.wo.winbar = " New local task | Write a title and body | :write creates it | then Space ag starts it "
+  vim.wo.winbar = " \u{f0f6} New local task | Write a title and body | :write creates it | then Space ag starts it "
   local write
   write = vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = buf,

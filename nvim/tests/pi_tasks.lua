@@ -58,6 +58,9 @@ local ok, failure = xpcall(function()
   for _, lines in ipairs({ {}, { "# ", "", "Body" }, { "Title", "", "Body" }, { "# Title", "Body" } }) do
     expect_error(function() tasks.parse(lines) end, "Keep '# Title'")
   end
+  local progress = tasks.actions({ body = "Intro\n- [ ] first\n- [x] second\n* [x] third\n- [ ]\n- plain line" })
+  assert(progress.done == 2 and progress.total == 4, vim.inspect(progress))
+  assert(tasks.actions({ body = "no checklist" }).total == 0, "Tasks may have no action list")
   for _, fn in ipairs({
     function() tasks.repository(repo.root, "github") end,
     function() tasks.list({ host = "github.com", repo = "test/repo", root = repo.root }) end,
@@ -83,6 +86,42 @@ local ok, failure = xpcall(function()
   expect_error(function() tasks.create(repo, "Another") end, "duplicate local task ID")
   assert(not vim.uv.fs_stat(repo.root .. "/.tasks/.create.lock"), "Creation failures release their lock")
   assert(vim.uv.fs_unlink(duplicate))
+  -- Metadata sidecar: '.tasks/NNN.json' keeps the Markdown file minimal while
+  -- storing the imported snapshot, editable fields and relations.
+  local meta = { labels = { "bug", "cli" }, assignees = { "jacob" }, milestone = "v1",
+    state = "open", relations = { { kind = "relates", target = "github.com/test/repo#42" } },
+    origin = "github.com/test/repo#42", issue = { body = "snapshot", comments = { { body = "C" } },
+      labels = { { name = "bug" } }, title = "Imported issue", url = "https://github.com/test/repo/issues/42" } }
+  local c = tasks.create(repo, "Imported issue", "Snapshot below.")
+  tasks.set_meta(c, meta)
+  local read_back = tasks.get_meta(c)
+  assert(read_back.labels[2] == "cli" and read_back.issue.comments[1].body == "C",
+    "The sidecar round-trips its snapshot and fields")
+  assert(tasks.get(c).meta.labels[2] == "cli", "get() exposes the sidecar as .meta")
+  tasks.update(c, "Renamed import", "Edited body")
+  read_back = tasks.get_meta(c)
+  assert(tasks.get(c).title == "Renamed import" and tasks.get(c).body == "Edited body")
+  assert(read_back.assignees[1] == "jacob" and read_back.issue.title == "Imported issue",
+    "Local edits must keep the stored issue snapshot and metadata intact")
+  assert(read_back.relations[1].target == "github.com/test/repo#42", "Relations round-trip")
+  tasks.set_meta(c, {}) -- empty metadata removes the sidecar
+  assert(not vim.uv.fs_stat(tasks.meta_path(c)), "Empty metadata must remove the sidecar")
+  core.write(tasks.meta_path(c), "{ not json }")
+  expect_error(function() tasks.get_meta(c) end, "one JSON object")
+  assert(vim.uv.fs_unlink(tasks.meta_path(c)))
+  core.write(repo.root .. "/.tasks/999.json", "{}")
+  expect_error(function() tasks.list(repo) end, "metadata 999.json has no")
+  assert(vim.uv.fs_unlink(repo.root .. "/.tasks/999.json"))
+  assert(next(tasks.get(a).meta) == nil, "Tasks without a sidecar read as empty metadata")
+  tasks.delete(c)
+  assert(#tasks.list(repo) == 2 and vim.uv.fs_stat(repo.root .. "/.tasks/002-fix-login.md"))
+  assert(not vim.uv.fs_stat(repo.root .. "/.tasks/003.json"), "Deleting a task removes its metadata")
+  -- A deleted task must not resolve again from its remembered filename.
+  expect_error(function() tasks.get(c) end, "does not match")
+  expect_error(function() tasks.meta_path(c) end, "does not match")
+  -- A forgotten filename (renamed on disk elsewhere) is re-scanned by ID.
+  local stale = tasks.get(vim.tbl_extend("force", a, { task_file = "001-improve-search.md" }))
+  assert(stale.title == "Resumable search", "A stale remembered filename must be re-scanned by its ID")
   local invalid = repo.root .. "/.tasks/9007199254740992-too-large.md"
   core.write(invalid, "# Invalid\n\nBody\n")
   expect_error(function() tasks.list(repo) end, "Invalid task ID")
@@ -126,6 +165,8 @@ local ok, failure = xpcall(function()
   end
   assert(attachment and table.concat(vim.fn.readfile(attachment), "\n"):find("Resume reliably.", 1, true),
     "Load local task context when starting pi")
+  assert(table.concat(vim.fn.readfile(attachment), "\n"):find("Actions checklist", 1, true),
+    "The task prompt explains the action list workflow")
   assert(not vim.tbl_contains(job.argv, "--model"), "Local tasks inherit pi-agent model settings")
   assert(vim.tbl_contains(job.argv, "Implement the attached task."))
   editor.open()
@@ -159,6 +200,18 @@ local ok, failure = xpcall(function()
   assert(vim.tbl_contains(resumed.argv, "--session") and not vim.tbl_contains(resumed.argv, "Implement the attached task."))
   core.stop(workspace)
   assert(vim.wait(4000, function() return resumed.exited end, 10))
+  -- A restart opens a new conversation; its prompt must tell pi to pick up where the previous left off.
+  await(function() core.restart(workspace) end)
+  local restarted = core.jobs[workspace.id]
+  local restart_attachment
+  for _, arg in ipairs(restarted.argv) do
+    if arg:sub(1, 1) == "@" then restart_attachment = arg:sub(2) end
+  end
+  assert(restart_attachment
+    and table.concat(vim.fn.readfile(restart_attachment), "\n"):find("previous conversation already worked", 1, true),
+    "A restarted task instructs pi to pick up the existing worktree work")
+  core.stop(workspace)
+  assert(vim.wait(4000, function() return restarted.exited end, 10))
   local restored = dofile(vim.fs.dirname(core.path()) .. "/lua/util/pi_issues.lua")
   restored.load()
   assert(restored.workspaces[workspace.id].task_file == a.task_file)

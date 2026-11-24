@@ -16,7 +16,10 @@ core.choose = function()
   return choice
 end
 local remote = { title = 'Remote "task"', body = "## Description\n\n- [ ] First step\n- [x] Existing progress",
-  url = "https://github.com/test/repo/issues/42" }
+  url = "https://github.com/test/repo/issues/42", labels = { { name = "bug" }, { name = "cli" } },
+  assignees = { { login = "jacob" } },
+  state = "open", milestone = { title = "v1" },
+  comments = { { author = { login = "jacob" }, body = "Original comment" } } }
 local original_run = core.run
 core.run = function(argv, cwd, optional, stdin)
   if argv[1] ~= "gh" then return original_run(argv, cwd, optional, stdin) end
@@ -53,7 +56,7 @@ local function enabled(value)
   vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues, { github_enabled = value })
 end
 
-local ok, failure = pcall(function()
+local ok, failure = xpcall(function()
   for _, args in ipairs({
     { "init", "-b", "main" }, { "config", "user.name", "Test" },
     { "config", "user.email", "test@example.invalid" },
@@ -62,7 +65,8 @@ local ok, failure = pcall(function()
   await(function() core.git(temp .. "/repo", "add", "code.txt") end)
   await(function() core.git(temp .. "/repo", "commit", "-m", "Initial") end)
   local repo = await(function() return core.repository(temp .. "/repo") end)
-  action(function() return ui.import_task("42") end)
+  -- Disabled integration: import refuses early with an actionable message (no coroutine).
+  ui.import_task("42")
   assert(#gh_calls == 0 and messages[#messages]:find("disabled", 1, true))
   enabled(true)
   action(function() return ui.import_task("42") end)
@@ -73,6 +77,11 @@ local ok, failure = pcall(function()
   assert(imported.source == "local" and imported.number == 1)
   local copied = tasks.get(imported)
   assert(copied.title == remote.title and copied.body == remote.body, "Import must preserve title and Markdown")
+  local sidecar = vim.json.decode(table.concat(vim.fn.readfile(temp .. "/repo/.tasks/001.json"), "\n"))
+  assert(sidecar.labels[1] == "bug" and sidecar.assignees[1] == "jacob" and sidecar.milestone == "v1"
+    and sidecar.issue.milestone.title == "v1" and sidecar.issue.comments[1].body == "Original comment"
+    and sidecar.origin == "github.com/test/repo#42",
+    "Import must store the full issue snapshot and normalized fields in the sidecar")
   assert(next(core.workspaces) == nil and next(core.jobs) == nil, "Import must not move or start workspaces")
   assert(#creations == 0, "Import must not create or modify GitHub issues")
   local buf = vim.api.nvim_get_current_buf()
@@ -80,7 +89,8 @@ local ok, failure = pcall(function()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# Local revision", "", "Updated acceptance criteria." })
   enabled(false)
   local calls = #gh_calls
-  action(ui.export_task)
+  -- Disabled integration: export refuses early with an actionable message (no coroutine).
+  ui.export_task()
   assert(#gh_calls == calls and #creations == 0 and messages[#messages]:find("disabled", 1, true))
   enabled(true)
   choice = "Cancel"
@@ -129,11 +139,11 @@ local ok, failure = pcall(function()
   action(function() return ui.import_task() end)
   assert(vim.b.pi_issue_draft.target.number == 2 and #tasks.list(repo) == 2,
     "Import without an argument uses the active GitHub issue")
-end)
+end, function(err) return debug.traceback(err) end)
 
 vim.fn.delete(temp, "rf")
 if not ok then
-  io.stderr:write(tostring(failure) .. "\n")
+  io.stderr:write(tostring(failure) .. "\n\nMSGS: " .. table.concat(messages, " || ") .. "\n")
   vim.cmd("cquit 1")
 end
 print("pi task copies: disabled integration, confirmed import/export, preserved Markdown and originals passed")

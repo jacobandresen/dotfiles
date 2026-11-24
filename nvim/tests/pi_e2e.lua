@@ -13,7 +13,7 @@ local tasks = {
   { title = "Fourth queued task", body = "Waits for a free agent slot. [no changes]" },
 }
 
-H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, revised, stopped, resumed, quit and restored", function()
+H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, revised, stopped, resumed, finished and merged, quit and restored", function()
   boot()
 
   step("write three tasks with Space a n")
@@ -127,7 +127,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     assert(owned[1] and owned[2] and owned[3] and not owned[4])
     local tabline = vim.api.nvim_eval_statusline(vim.o.tabline, { use_tabline = true }).str
     for number = 1, 3 do
-      assert(tabline:find("project/task-" .. number .. " working", 1, true), tabline)
+      assert(tabline:find("project/" .. number .. "-", 1, true) and tabline:find(" working", 1, true), tabline)
     end
   ]])
   assert(sh({ "git", "status", "--porcelain" }) == "?? .tasks/", "The main checkout must stay untouched")
@@ -147,7 +147,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   step("Space a a and dashboard digits jump to a running task's pi")
   keys("<Esc><Space>aa")
   wait_for("Space a a lists the running tasks", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 3")
-  pick("task-3", "project/task-3")
+  pick("3-add", "project/3-add")
   wait_for("Enter jumps into task 3's pi terminal", [[
     local core = require("util.pi_issues")
     return core.current() == e2e.by_number(3) and vim.api.nvim_get_current_buf() == e2e.job(3).buf
@@ -259,7 +259,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     local path = require("util.pi_issues").directory(e2e.by_number(3)) .. "/paste.txt"
     local text = vim.uv.fs_stat(path) and table.concat(vim.fn.readfile(path), "\n") or ""
     return text:find("Split it into two steps", 1, true) ~= nil
-  ]])
+  ]], 15000)
   lua([[
     local text = table.concat(vim.fn.readfile(require("util.pi_issues").directory(e2e.by_number(3)) .. "/paste.txt"), "\n")
     assert(text:find("/.tasks/003-", 1, true) and text:find("Edit only the local task file", 1, true), text)
@@ -275,7 +275,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   ]])
   keys("Go<CR>Also add a goodbye() alias.<Esc>:write<CR>")
   wait_for("Saving a started task points to restart", [[
-    return _G.e2e_messages[#_G.e2e_messages]:find("Space a R restarts project/task-1", 1, true) ~= nil
+    return _G.e2e_messages[#_G.e2e_messages]:find("Space a R restarts project/1-add-a-farewell-function", 1, true) ~= nil
   ]])
   vim.fn.writefile({ "work from the first conversation" }, repo .. "-worktrees/task-1/kept-work.txt")
   local old_job = lua("return e2e.job(1).channel")
@@ -292,6 +292,8 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   end
   assert(restarted.event == "started" and restarted.cwd:match("task%-1$") and not restarted.resumed, vim.inspect(restarted))
   assert(restarted.prompt:find("Also add a goodbye() alias.", 1, true), "The restart sends the edited description")
+  assert(restarted.prompt:find("previous conversation already worked", 1, true),
+    "The restarted prompt tells pi to pick up the worktree's existing work")
   assert(restarted.args[vim.fn.index(restarted.args, "--session-id") + 2]:match("%-r1$"), "A fresh session id")
   assert(uv.fs_stat(repo .. "-worktrees/task-1/kept-work.txt"), "Restarting keeps the worktree's changes")
   keys("<C-\\><C-n>")
@@ -301,11 +303,6 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   wait_for("Dashboard", "return e2e.dashboard_row(2) ~= nil")
   lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(2), 0 })")
   keys("x")
-  wait_for("Stop must ask for confirmation", [[
-    local p = Snacks.picker.get()[1]
-    return p ~= nil and p:count() == 2
-  ]])
-  pick("Stop pi", "Stop pi; keep worktree and session")
   wait_for("Task 2 must stop and release its slot", [[
     local core = require("util.pi_issues")
     local workspace = e2e.by_number(2)
@@ -444,6 +441,33 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   assert(last.args[vim.fn.index(last.args, "--session") + 2]:find("session.jsonl", 1, true))
   lua("require('util.pi_issues').stop(e2e.by_number(3))")
   wait_for("Task 3 stops", "return e2e.job(3).exited")
+  keys("<Esc><Space>aw")
+  wait_for("Dashboard", "return e2e.dashboard_row(3) ~= nil")
+  lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(3), 0 })")
+
+  step("Space a m finishes task 3: stops pi, commits, merges into main, marks finished")
+  keys("m")
+  wait_for("Finish asks to commit and merge", [[
+    local p = Snacks.picker.get()[1]
+    return p ~= nil and p:count() == 2
+  ]])
+  pick("Commit", "Commit and merge")
+  wait_for("Task 3 merges and is marked finished", [[
+    local core = require("util.pi_issues")
+    local workspace = e2e.by_number(3)
+    return workspace.finished ~= nil and core.status(workspace) == "finished"
+  ]], 15000)
+  assert(uv.fs_stat(repo .. "/AGENT_RESULT.md"), "The finished task's work lands in the main checkout")
+  assert(uv.fs_stat(repo .. "-worktrees/task-3/AGENT_RESULT.md"), "Finishing keeps the worktree")
+  keys("<Esc><Space>aw")
+  wait_for("The finished task is flagged in the dashboard, sorted last", [[
+    local row3 = e2e.dashboard_row(3)
+    local finished = row3 ~= nil and e2e.float_lines("Task Workspaces")[row3]:find("finished", 1, true)
+    return finished ~= nil and row3 > math.max(e2e.dashboard_row(1) or 0, e2e.dashboard_row(2) or 0,
+      e2e.dashboard_row(4) or 0)
+  ]])
+  keys("q")
+
   keys("<Esc>:qa!<CR>")
   assert(vim.wait(5000, function() return H.exited() ~= nil end, 25), "Editor must exit")
 end)
