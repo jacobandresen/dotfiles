@@ -26,13 +26,15 @@ function M.path() return vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2),
 
 function M.clean(text) return (tostring(text or ""):gsub("[%z\1-\31\127]", " ")) end
 
+-- Resume a user-module coroutine; errors surface as a notification instead of crashing.
+local function resume(thread, ...)
+  local ok, err = coroutine.resume(thread, ...)
+  if not ok then notify(tostring(err)) end
+end
+
 function M.task(fn)
   local thread = coroutine.create(fn)
-  local function resume(...)
-    local ok, err = coroutine.resume(thread, ...)
-    if not ok then notify(tostring(err)) end
-  end
-  resume()
+  resume(thread)
   return thread
 end
 
@@ -40,10 +42,7 @@ function M.run(argv, cwd, optional, stdin)
   local thread = coroutine.running()
   assert(thread, "Pi commands must run inside task()")
   local process = vim.system(argv, { cwd = cwd, timeout = 30000, stdin = stdin }, function(result)
-    vim.schedule(function()
-      local ok, err = coroutine.resume(thread, result)
-      if not ok then notify(tostring(err)) end
-    end)
+    vim.schedule(function() resume(thread, result) end)
   end)
   local result = coroutine.yield()
   if result.code ~= 0 and not optional then
@@ -55,10 +54,7 @@ end
 function M.choose(items, prompt)
   local thread = coroutine.running()
   vim.ui.select(items, { prompt = prompt }, function(choice)
-    vim.schedule(function()
-      local ok, err = coroutine.resume(thread, choice)
-      if not ok then notify(tostring(err)) end
-    end)
+    vim.schedule(function() resume(thread, choice) end)
   end)
   return coroutine.yield()
 end
@@ -66,10 +62,7 @@ end
 function M.input(prompt, default)
   local thread = coroutine.running()
   vim.ui.input({ prompt = prompt, default = default }, function(value)
-    vim.schedule(function()
-      local ok, err = coroutine.resume(thread, value)
-      if not ok then notify(tostring(err)) end
-    end)
+    vim.schedule(function() resume(thread, value) end)
   end)
   return coroutine.yield()
 end
@@ -474,27 +467,45 @@ function M.sleep(ms)
   coroutine.yield()
 end
 
-local function send_update(workspace, job, task)
+local function send_update(workspace, task)
   local text = "The task description was updated. Updated task:\n\n# " .. task.title .. "\n\n" .. task.body
     .. "\n\nContinue with the updated task in this worktree; keep work that still applies."
-  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
-  vim.defer_fn(function()
-    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
-  end, 150)
+  M.paste(workspace, text, true)
   workspace.task_sha = M.task_hash(task)
   M.save(workspace)
   notify("Sent the updated task to " .. tasks.label(workspace), vim.log.levels.INFO)
+end
+
+-- Number of managed pi agents that have not exited yet.
+function M.live()
+  local count = 0
+  for _, job in pairs(M.jobs) do
+    if not job.exited then count = count + 1 end
+  end
+  return count
+end
+
+-- Bracketed paste of text into a task's pi; a truthy submit adds Enter after a
+-- short delay so pi receives the paste first.
+function M.paste(workspace, text, submit)
+  local job = M.jobs[workspace.id]
+  if not job or job.exited then return end
+  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
+  if submit then
+    vim.defer_fn(function()
+      if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
+    end, 150)
+  end
 end
 
 function M.start(workspace, issue)
   M.validate(workspace)
   local previous = M.jobs[workspace.id]
   if previous and not previous.exited then return M.show(workspace) end
-  local count = 0
-  for _, job in pairs(M.jobs) do
-    if not job.exited then count = count + 1 end
-  end
-  assert(count < M.settings().max_agents, "Agent limit reached; stop an issue from Space a w before starting another")
+  assert(
+    M.live() < M.settings().max_agents,
+    "Agent limit reached; stop an issue from Space a w before starting another"
+  )
   assert(vim.fn.executable(M.settings().pi) == 1, "pi is not installed")
   assert(
     uv.fs_stat(M.path() .. "/node_modules/pi-subagents/bundle/index.js"),
@@ -576,20 +587,12 @@ function M.start(workspace, issue)
   end
   previous = M.jobs[workspace.id]
   if previous and not previous.exited then return M.show(workspace) end
-  count = 0
-  for _, current in pairs(M.jobs) do
-    if not current.exited then count = count + 1 end
-  end
-  assert(count < M.settings().max_agents, "Agent limit reached while preparing; workspace kept for later")
+  assert(M.live() < M.settings().max_agents, "Agent limit reached while preparing; workspace kept for later")
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "hide"
   local job = { buf = buf, run = run, activity = "starting", argv = argv }
   M.lock(workspace, run)
-  count = 0
-  for _, current in pairs(M.jobs) do
-    if not current.exited then count = count + 1 end
-  end
-  if count >= M.settings().max_agents then
+  if M.live() >= M.settings().max_agents then
     M.unlock(workspace)
     error("Agent limit reached during ownership recovery; workspace kept for later", 0)
   end
@@ -676,7 +679,7 @@ function M.start(workspace, issue)
     local deadline = uv.now() + 30000
     local function ready()
       if M.jobs[workspace.id] ~= job or job.exited then return end
-      if job.sequence then return send_update(workspace, job, update) end
+      if job.sequence then return send_update(workspace, update) end
       if uv.now() < deadline then vim.defer_fn(ready, 100) end
     end
     ready()
@@ -718,8 +721,10 @@ function M.delete(workspace)
   assert(workspace.source == "local", "Only local tasks can be deleted")
   local job = M.jobs[workspace.id]
   assert(not job or job.exited, "Stop pi before deleting " .. tasks.label(workspace))
-  M.validate(workspace)
+  -- The worktree or task file may already be gone (removed externally, or a
+  -- partially failed delete); tolerate that so a stale row can always be cleaned.
   local task_path = tasks.file(workspace)
+  local missing_worktree = not uv.fs_stat(workspace.path)
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_get_name(buf) == task_path then
       assert(not vim.bo[buf].modified, "Save or discard modified task buffers before deleting " .. tasks.label(workspace))
@@ -736,7 +741,12 @@ function M.delete(workspace)
     end
   end
   local root = assert(workspace.task_root, "Local task repository is missing")
-  git(root, "worktree", "remove", "--force", workspace.path)
+  if missing_worktree then
+    git(root, "worktree", "prune") -- drop the registration left behind by an external removal
+  else
+    M.validate(workspace)
+    git(root, "worktree", "remove", "--force", workspace.path)
+  end
   tasks.delete(workspace)
   assert(vim.fn.delete(directory(workspace), "rf") == 0, "Cannot remove workspace state: " .. directory(workspace))
   M.jobs[workspace.id] = nil
@@ -753,10 +763,7 @@ function M.continue(workspace)
       and "Your last turn left the worktree unchanged, so the task is not done. Implement it now in this "
         .. "worktree with your tools, then report what changed."
     or "Continue this task where you left off in this worktree, then report what changed."
-  vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
-  vim.defer_fn(function()
-    if M.jobs[workspace.id] == job and not job.exited then vim.api.nvim_chan_send(job.channel, "\r") end
-  end, 150)
+  M.paste(workspace, text, true)
   vim.notify("Asked " .. tasks.label(workspace) .. " to continue", vim.log.levels.INFO, { title = "Pi Tasks" })
 end
 

@@ -50,6 +50,24 @@ local ok, failure = xpcall(function()
   assert(#tasks.list(repo) == 0)
   local worktrees = await(function() return core.worktrees(repo.root) end)
   for _, entry in ipairs(worktrees) do assert(entry.path ~= worktree_path) end
+
+  -- A workspace whose worktree and task file were already removed externally
+  -- (stale dashboard row) must still delete cleanly.
+  tasks.delete(tasks.create(repo, "Stale deletion"))
+  local stale = tasks.create(repo, "Stale deletion 2")
+  local stale_workspace = await(function() return core.prepare(repo, stale, "HEAD", true) end)
+  vim.fn.delete(stale_workspace.path, "rf") -- remove without git worktree remove
+  vim.uv.fs_unlink(tasks.file(stale_workspace))
+  await(function() return core.delete(stale_workspace) end)
+  assert(core.workspaces[stale_workspace.id] == nil)
+  assert(not vim.uv.fs_stat(core.directory(stale_workspace)), "Stale workspace state was not deleted")
+  local worktrees = await(function() return core.worktrees(repo.root) end)
+  for _, entry in ipairs(worktrees) do assert(entry.path ~= stale_workspace.path) end
+
+  -- tasks.delete tolerates an already-missing task file.
+  local gone = tasks.create(repo, "Already gone")
+  vim.uv.fs_unlink(tasks.file(gone))
+  await(function() return tasks.delete(gone) end)
 end, debug.traceback)
 
 vim.fn.delete(temp, "rf")

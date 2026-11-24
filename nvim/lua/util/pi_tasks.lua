@@ -240,7 +240,7 @@ end
 function M.delete(target)
   assert(source(target) == "local", "Only local tasks can be deleted")
   local path = M.file(target)
-  assert(vim.uv.fs_unlink(path))
+  if vim.uv.fs_stat(path) then assert(vim.uv.fs_unlink(path)) end
 end
 function M.create(repo, title, body)
   enabled(repo)

@@ -31,16 +31,22 @@ local function resize_with_editor(win, max_width, desired_height, redraw)
   })
 end
 
+-- Centered floating window for a scratch buffer; keeps its size on VimResized.
+local function float(buf, width, height, extra, redraw)
+  local win = vim.api.nvim_open_win(buf, true, vim.tbl_extend("force", geometry(width, height), extra))
+  resize_with_editor(win, width, height, redraw)
+  return win
+end
+
 local function show_help(lines)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].modifiable = "wipe", "markdown", false
-  local win = vim.api.nvim_open_win(buf, true, vim.tbl_extend("force", geometry(72, #lines), {
+  local win = float(buf, 72, #lines, {
     style = "minimal", border = "rounded", title = " Task Help ", title_pos = "center",
     footer = " q close ", footer_pos = "center",
-  }))
+  })
   vim.wo[win].wrap, vim.wo[win].linebreak = true, true
-  resize_with_editor(win, 72, #lines)
   for _, key in ipairs({ "q", "<Esc>" }) do
     vim.keymap.set("n", key, function() vim.api.nvim_win_close(win, false) end, { buffer = buf, nowait = true })
   end
@@ -208,6 +214,16 @@ local function ordered()
 end
 
 local rank = { waiting = 1, working = 2, ["no changes"] = 3, idle = 3, starting = 3, unknown = 3, stopping = 4 }
+-- Dashboard row color for each agent status; unknown statuses stay dim.
+local status_groups = {
+  error = "DiagnosticError",
+  missing = "DiagnosticError",
+  waiting = "DiagnosticWarn",
+  ["no changes"] = "DiagnosticWarn",
+  working = "DiagnosticInfo",
+  new = "DiagnosticHint",
+}
+
 function M.switch()
   core.load()
   local items = {}
@@ -321,11 +337,11 @@ local function draw()
   end
   local items = entries()
   local workspaces_count = #ordered()
-  local active, waiting = 0, 0
+  local waiting = 0
   for _, job in pairs(core.jobs) do
-    if not job.exited then active = active + 1 end
-    if job.activity == "waiting" then waiting = waiting + 1 end
+    if not job.exited and job.activity == "waiting" then waiting = waiting + 1 end
   end
+  local active = core.live()
   local wins = vim.fn.win_findbuf(dashboard)
   local width = #wins > 0 and vim.api.nvim_win_get_width(wins[1]) or 100
   local repo_width = math.min(28, math.floor(width * 0.3))
@@ -373,12 +389,7 @@ local function draw()
   highlight(4, 0, "Comment")
   for row, entry in pairs(dashboard_rows) do
     local status = entry.pending and "new" or core.status(entry)
-    local group = (status == "error" or status == "missing") and "DiagnosticError"
-      or (status == "waiting" or status == "no changes") and "DiagnosticWarn"
-      or status == "working" and "DiagnosticInfo"
-      or status == "new" and "DiagnosticHint"
-      or "Comment"
-    highlight(row - 1, repo_width + 5, group, repo_width + 15)
+    highlight(row - 1, repo_width + 5, status_groups[status] or "Comment", repo_width + 15)
   end
   for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
     if vim.api.nvim_win_get_height(win) < #lines and vim.api.nvim_win_get_config(win).relative ~= "" then
@@ -401,21 +412,15 @@ function M.dashboard()
   vim.api.nvim_buf_set_name(dashboard, "pi://issues/" .. dashboard)
   local height = math.max(10, vim.tbl_count(core.workspaces) + 7)
   local size = geometry(112, height)
-  local win = vim.api.nvim_open_win(
-    dashboard,
-    true,
-    vim.tbl_extend("force", size, {
-      relative = "editor",
-      style = "minimal",
-      border = "rounded",
-      title = " Task Workspaces ",
-      title_pos = "center",
-      footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  X delete  n new  ? help  q "
-        or " X delete  n new  Enter code  p pi  ? help ",
-      footer_pos = "center",
-    })
-  )
-  resize_with_editor(win, 112, height, draw)
+  local win = float(dashboard, 112, height, {
+    style = "minimal",
+    border = "rounded",
+    title = " Task Workspaces ",
+    title_pos = "center",
+    footer = size.width >= 64 and " 1-9 jump  Enter code  p pi  c continue  v task  X delete  n new  ? help  q "
+      or " X delete  n new  Enter code  p pi  ? help ",
+    footer_pos = "center",
+  }, draw)
   vim.wo.number, vim.wo.relativenumber, vim.wo.wrap, vim.wo.cursorline = false, false, false, true
   vim.wo.winblend, vim.wo.signcolumn = 0, "no"
   local function selected() return dashboard_rows[vim.api.nvim_win_get_cursor(0)[1]] end
@@ -487,14 +492,11 @@ function M.dashboard()
       vim.cmd.close()
       core.task(function()
         if entry.pending then
-          if core.choose({ "Cancel", "Delete local task file" },
-            "Delete " .. tasks.label({
-              source = "local", repo = entry.repo.repo, number = entry.pending.number,
-            }) .. "?") == "Delete local task file" then
+          local label = tasks.label({ source = "local", repo = entry.repo.repo, number = entry.pending.number })
+          if core.choose({ "Cancel", "Delete local task file" }, "Delete " .. label .. "?")
+            == "Delete local task file" then
             tasks.delete(entry.pending)
-            vim.notify("Deleted " .. tasks.label({
-              source = "local", repo = entry.repo.repo, number = entry.pending.number,
-            }), vim.log.levels.INFO, { title = "Pi Tasks" })
+            vim.notify("Deleted " .. label, vim.log.levels.INFO, { title = "Pi Tasks" })
           end
         elseif core.choose({ "Cancel", "Delete task, worktree and session" },
           "Delete " .. tasks.label(entry) .. "? This removes its task file and all worktree changes.")
@@ -519,7 +521,7 @@ function M.dashboard()
         "v: view / edit the task (GitHub uses a local draft)",
         "x: stop with confirmation; never delete work",
         "X: delete a local task (and its worktree/session) with confirmation",
-        "r: refresh file counts i: choose tasks  n: new local task",
+        "r: refresh counts    i: choose tasks    n: new local task",
         "",
         "F6: hide / show pi, including from terminal input",
         "Space a s: paste context; Enter in pi submits it",
@@ -570,20 +572,10 @@ function M.confirm_launch(lines)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable, vim.bo[buf].bufhidden = false, "wipe"
-  local win = vim.api.nvim_open_win(
-    buf,
-    true,
-    vim.tbl_extend("force", geometry(100, #lines + 2), {
-      relative = "editor",
-      style = "minimal",
-      border = "rounded",
-      title = " Review Task Launch ",
-      title_pos = "center",
-      footer = " s start / Enter prepare only / q cancel ",
-      footer_pos = "center",
-    })
-  )
-  resize_with_editor(win, 100, #lines + 2)
+  local win = float(buf, 100, #lines + 2, {
+    style = "minimal", border = "rounded", title = " Review Task Launch ", title_pos = "center",
+    footer = " s start / Enter prepare only / q cancel ", footer_pos = "center",
+  })
   -- The base-ref prompt leaves insert mode pending; s/Enter/q are normal-mode keys.
   vim.cmd.stopinsert()
   vim.wo.wrap, vim.wo.linebreak, vim.wo.signcolumn = true, true, "no"
@@ -657,11 +649,7 @@ function M.launch(repo, issues, opts)
         prepared = prepared + 1
         core.open(workspace)
         if choice == "Prepare and start" then
-          local count = 0
-          for _, job in pairs(core.jobs) do
-            if not job.exited then count = count + 1 end
-          end
-          if count < core.settings().max_agents then
+          if core.live() < core.settings().max_agents then
             core.start(workspace)
             started = started + 1
           else

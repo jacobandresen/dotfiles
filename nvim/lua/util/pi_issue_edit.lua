@@ -208,7 +208,7 @@ function M.agent(buf)
       .. "and the Markdown task body. Read the existing file first. Do not publish to GitHub, "
       .. "run gh issue edit, change other repository files, or delegate this task. "
       .. "Leave the revised draft for human review in Neovim.\nRequested revision:\n" .. request
-    vim.api.nvim_chan_send(job.channel, "\27[200~" .. prompt .. "\27[201~")
+    core.paste(workspace, prompt)
     core.show(workspace)
     vim.notify("Draft revision pasted into pi; press Enter there to submit", vim.log.levels.INFO)
   end)
