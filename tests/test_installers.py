@@ -87,8 +87,12 @@ class InstallerTests(unittest.TestCase):
              patch.object(dotfiles.pi_config, "main") as install, contextlib.redirect_stdout(io.StringIO()):
             dotfiles.use_model(args)
         command.assert_not_called()
-        self.assertEqual(api.call_args.args[1]["messages"], [],
+        chat = [call for call in api.call_args_list if call.args[0] == "/api/chat"]
+        self.assertEqual(chat[0].args[1]["messages"], [],
                          "Warmup must load the model without consuming an inference slot")
+        fim = [call for call in api.call_args_list if call.args[0] == "/api/generate"]
+        self.assertTrue(fim and fim[0].args[1]["raw"] and fim[0].args[1]["options"]["num_predict"] == 1,
+                        "The FIM model warm must not generate tokens")
         install.assert_called_once_with([])
 
     def test_use_model_pulls_missing_base_before_building_mellum(self):
@@ -103,6 +107,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([call.args for call in command.call_args_list], [
             ("ollama", "pull", dotfiles.coding_base_model()),
             ("ollama", "create", "mellum", "-f", str(dotfiles.MODELFILE)),
+            ("ollama", "pull", dotfiles.fim_base_model()),
         ])
 
     def test_use_model_rebuilds_mellum_with_an_outdated_template(self):
@@ -183,7 +188,7 @@ class InstallerTests(unittest.TestCase):
                             for call in command.call_args_list))
 
     def test_existing_font_skips_installation(self):
-        with patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0, "BigBlueTermPlus Nerd Font Mono", "")) as command, \
+        with patch.object(dotfiles, "run", return_value=subprocess.CompletedProcess([], 0, "Hack Nerd Font Mono", "")) as command, \
              contextlib.redirect_stdout(io.StringIO()):
             dotfiles.install_fonts(None)
         command.assert_called_once()
@@ -193,7 +198,7 @@ class InstallerTests(unittest.TestCase):
              patch.object(dotfiles.shutil, "which", return_value=None), \
              patch.object(dotfiles, "run") as command:
             dotfiles.install_fonts(None)
-        command.assert_called_once_with("brew", "install", "--cask", "font-bigblue-terminal-nerd-font")
+        command.assert_called_once_with("brew", "install", "--cask", "font-hack-nerd-font")
 
 
 if __name__ == "__main__":

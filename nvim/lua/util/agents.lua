@@ -60,17 +60,36 @@ local function running()
   if term and term:buf_valid() and vim.bo[term.buf].buftype == "terminal" then return term end
 end
 
+-- True while context can be sent: a managed agent runs or a pi terminal exists.
+function M.available()
+  return require("util.pi_issues").live() > 0 or running() ~= nil
+end
+
+-- The exact text to transfer: whole file, whole selected lines, or the precise
+-- character-wise range (a selection may cover part of one line).
+local function transfer_text(source)
+  local first, last_line = vim.fn.line("'<"), vim.fn.line("'>")
+  local mode = vim.fn.visualmode()
+  local text
+  if mode == "V" then
+    text = table.concat(vim.api.nvim_buf_get_lines(source, first - 1, last_line, false), "\n")
+  else
+    text = table.concat(vim.api.nvim_buf_get_text(source, first - 1, vim.fn.col("'<") - 1,
+      last_line - 1, vim.fn.col("'>"), {}), "\n")
+  end
+  return text, mode == "V" and (" lines %d-%d"):format(first, last_line)
+    or (" %d:%d-%d:%d"):format(first, vim.fn.col("'<"), last_line, vim.fn.col("'>"))
+end
+
 function M.send(visual)
   local core = require("util.pi_issues")
   local workspace = core.current()
   local source = vim.api.nvim_get_current_buf()
-  local first, last_line
   if visual then
     if vim.fn.mode():sub(1, 1) == "\22" then
       return vim.notify("Use a character or line selection, not a rectangular selection", vim.log.levels.WARN)
     end
     vim.cmd("normal! \27")
-    first, last_line = vim.fn.line("'<"), vim.fn.line("'>")
   end
   local term = not workspace and running() or nil
   local job = workspace and core.jobs[workspace.id]
@@ -85,17 +104,13 @@ function M.send(visual)
     )
   end
   local path = core.real(file):sub(#core.real(root) + 2)
-  local lines
-  if visual then
-    lines = vim.api.nvim_buf_get_lines(source, first - 1, last_line, false)
-  else
-    lines = vim.api.nvim_buf_get_lines(source, 0, -1, false)
+  local content, label = transfer_text(source)
+  if not visual then
+    content, label = table.concat(vim.api.nvim_buf_get_lines(source, 0, -1, false), "\n"), ""
   end
-  local content = table.concat(lines, "\n")
   if #content > 100000 then
     return vim.notify("Context is larger than 100 KB; send a smaller selection", vim.log.levels.WARN)
   end
-  local label = visual and (" lines %d-%d"):format(first, last_line) or ""
   local text = ("File: %s%s (%sbuffer snapshot)\n```%s\n%s\n```\n"):format(
     vim.json.encode(path),
     label,

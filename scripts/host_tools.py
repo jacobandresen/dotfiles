@@ -34,6 +34,10 @@ def coding_base_model():
     return "hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf"
 
 
+def fim_base_model():
+    return "qwen2.5-coder:1.5b-base"
+
+
 def ollama_api():
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
     return host if host.startswith(("http://", "https://")) else f"http://{host}"

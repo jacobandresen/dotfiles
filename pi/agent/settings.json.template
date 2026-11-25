@@ -7,8 +7,7 @@
   },
   "enabledModels": [
     "ollama/mellum",
-    "ollama/qwen3.5:9b",
-    "github-copilot/gpt-6.1-sol",
-    "github-copilot/claude-opus-5.5"
-  ]
+    "ollama/qwen3.5:9b"
+  ],
+  "quietStartup": true
 }

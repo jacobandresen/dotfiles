@@ -76,7 +76,7 @@ return {
       { "<leader>um", "<cmd>RenderMarkdown buf_toggle<cr>", ft = "markdown", desc = "Toggle Markdown Rendering" },
     },
     opts = {
-      enabled = false,
+      enabled = true,
       anti_conceal = { enabled = false },
     },
   },

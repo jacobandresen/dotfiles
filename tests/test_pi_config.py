@@ -44,9 +44,8 @@ class PiConfigTests(unittest.TestCase):
         self.assertEqual(json.loads((self.agent / "settings.json").read_text())["enabledModels"], [
             "ollama/mellum",
             "ollama/qwen3.5:9b",
-            "github-copilot/gpt-6.1-sol",
-            "github-copilot/claude-opus-5.5",
         ])
+        self.assertTrue(json.loads((self.agent / "settings.json").read_text())["quietStartup"])
         self.assertTrue((self.agent / "AGENTS.md").is_symlink())
 
     def test_repo_or_legacy_symlink_is_rejected(self):
@@ -74,6 +73,7 @@ class PiConfigTests(unittest.TestCase):
             "defaultProvider": "github-copilot",
             "defaultModel": "gpt-6.1-sol",
             "enabledModels": ["github-copilot/gpt-6.1-sol"],
+            "quietStartup": True,
         }
         (source / "settings.json.template").write_text(json.dumps(settings))
         (source / "models.json").write_text((config.ROOT / "pi/agent/models.json").read_text())

@@ -29,17 +29,18 @@ Check the installed tools without making changes:
 make doctor
 ```
 
-The Neovim config needs Neovim 0.12+ and BigBlueTermPlus Nerd Font Mono,
+The Neovim config needs Neovim 0.12+ and Hack Nerd Font Mono,
 installed by `make deps` or `make install-fonts`. Plugins install on first
 launch. See [nvim/DEPENDENCIES.md](nvim/DEPENDENCIES.md) for other tools.
 
 ## Included
 
-- **Neovim** — LazyVim with the dark Retrobox theme, LSP, debugging,
-  database tools, and a matching pi-agent terminal.
+- **Neovim** — LazyVim with the dark Retrobox theme, LSP, inline FIM
+  completions from Ollama, debugging, database tools, and a matching pi-agent
+  terminal.
 - **Midnight Commander** — matching retrobox and Turbo Pascal skins; F4 opens
   Neovim.
-- **kitty and zsh** — BigBlueTermPlus Nerd Font Mono, matching retro terminal
+- **kitty and zsh** — Hack Nerd Font Mono, matching Catppuccin Latte terminal
   colors, a 120×40 kitty layout, a DOS-style prompt, and a cat-eared `λ ~/`
   launcher icon (`kitty.app.png` on macOS).
 - **pi** — configured to use Ollama `mellum` by default, with Qwen 3.5 9B and

@@ -3,6 +3,7 @@ local core = require("util.pi_issues")
 local tasks = require("util.pi_tasks")
 local dashboard
 local dashboard_rows = {}
+local last_footer
 local accents = vim.api.nvim_create_namespace("pi_issues_dashboard")
 
 local function geometry(max_width, desired_height)
@@ -461,6 +462,31 @@ local function draw()
     local status = entry.pending and "new" or core.status(entry)
     highlight(row - 1, repo_width + 5, status_groups[status] or "Comment", repo_width + 17)
   end
+  -- The footer only lists keys that currently do something: row commands use
+  -- the rows on screen, workspace commands appear once a workspace exists,
+  -- agent commands once pi runs, and page keys once the list overflows.
+  local footer
+  if width >= 64 and #all > 0 then
+    footer = " 1-9 jump  Enter code  p pi  "
+    if workspaces_count > 0 then footer = footer .. "c continue  m finish  d diff  D base  R restart  " end
+    local live = core.live()
+    if live > 0 then footer = footer .. "x stop  E revise  a switch  " end
+    footer = footer .. "v task  f fields  "
+    if core.settings().github_enabled then footer = footer .. "e export  I import  g issues  " end
+    footer = footer .. "X delete  n new  ? help  q "
+  elseif #all == 0 then
+    footer = " n new  i choose  ? help  q "
+  elseif workspaces_count > 0 then
+    footer = " m finish  f fields  v task  X delete  n new  ? help "
+  else
+    footer = " f fields  v task  X delete  n new  ? help "
+  end
+  if footer ~= last_footer then
+    last_footer = footer
+    for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
+      vim.api.nvim_win_set_config(win, { footer = footer })
+    end
+  end
   for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
     if vim.api.nvim_win_get_height(win) < #lines and vim.api.nvim_win_get_config(win).relative ~= "" then
       vim.api.nvim_win_set_config(win, geometry(112, #lines))
@@ -487,12 +513,8 @@ function M.dashboard()
     border = "rounded",
     title = " \u{f07b} Task Workspaces ",
     title_pos = "center",
-    -- GitHub keys appear in the footer only when the integration is on.
-    footer = size.width >= 64
-      and (" 1-9 jump  Enter code  p pi  c continue  m merge  v task  f fields  E revise  "
-        .. (core.settings().github_enabled and "e export  I import  " or "")
-        .. "X delete  n new  ? help  q ")
-      or " m merge  f fields  v task  X delete  n new  ? help ",
+    -- draw() replaces this with only the currently applicable keys.
+    footer = "",
     footer_pos = "center",
   }, draw)
   vim.wo.number, vim.wo.relativenumber, vim.wo.wrap, vim.wo.cursorline = false, false, false, true
@@ -572,22 +594,14 @@ function M.dashboard()
       require("util.pi_issue_edit").open(w)
       require("util.pi_issue_edit").edit()
     end, function(entry)
+      -- A pending task has no agent to ask; just open its text for editing.
       require("util.pi_issue_edit").open(draft_target(entry))
-      require("util.pi_issue_edit").edit()
     end),
-    e = action(function(w)
-      core.task(function() M.export_task(w) end)
-    end, function(entry)
-      core.task(function() M.export_task(draft_target(entry)) end)
-    end),
-    -- popup: close the dashboard, then open the next surface.
-    I = popup(M.import_task),
-    a = popup(M.switch),
-    Q = popup(core.quit),
     x = action(function(w)
       -- Stopping never deletes work; no confirmation needed.
       core.task(function() core.stop(w) end)
     end),
+    Q = popup(core.quit),
     X = function()
       local entry = selected()
       if not entry then return end
@@ -612,37 +626,62 @@ function M.dashboard()
     end,
     r = refresh,
     ["?"] = function()
-      local lines = {
-        "# Task workspaces",
-        "",
-        "Enter: open code tab    p: start / focus pi",
-        "new rows: written tasks without a workspace; p / Enter / 1-9 start them",
-        "1-9: jump to that task's pi (or code tab when stopped)",
-        "Unfinished tasks come first; finished ones are dimmed below.",
-        "[ / ]: previous / next page (shown when list overflows)",
-        "c: ask an idle pi to continue (e.g. after \"no changes\")",
-        "R: restart with the current task text (new conversation, worktree kept)",
-        "Restarted and resumed tasks are told to pick up where the previous conversation left off.",
-        "Tasks carry an ## Actions checklist; pi completes the items and the row shows progress (2/5).",
-        "m: finish: stop pi if running, commit, merge into your main checkout, mark finished",
-        "Space a a: switch task from anywhere    Space a g: start this task",
-        "d: working diff        D: changes since the recorded base",
-        "v: view / edit the task (GitHub uses a local draft)",
-        "f: fields (labels, assignees, milestone, state, relations)",
-        "E: ask pi to revise the task text    a: switch task    Q: stop pi agents and quit",
-        "Issue metadata (labels, assignees, milestone, comments) lives in the",
-        "task's .tasks/NNN.json sidecar; imported issue data is never dropped.",
-        "x: stop pi (worktree and session are kept)",
-        "X: delete a local task (and its worktree/session) with confirmation",
-        "r: refresh counts    i: choose tasks    n: new local task",
-        "",
-        "F6: hide / show pi, including from terminal input",
-        "Space a s: paste context; Enter in pi submits it",
-        "Space a r: paste a foreground reviewer request",
-        "Local tasks: :write saves.",
-        "",
-        "Agent state does not verify tests or mark a task complete.",
-      }
+      -- Only list keys that work right now: row commands appear once tasks
+      -- exist, agent commands once a workspace exists, stop once pi runs.
+      local pending_count = 0
+      local workspace_count = 0
+      for _, entry in ipairs(entries()) do
+        if entry.pending then pending_count = pending_count + 1 else workspace_count = workspace_count + 1 end
+      end
+      local lines = { "# Task workspaces", "" }
+      if workspace_count > 0 then
+        lines[#lines + 1] = "Enter: open code tab    p: start / focus pi"
+        lines[#lines + 1] = "1-9: jump to that task's pi (or code tab when stopped)"
+        lines[#lines + 1] = "Unfinished tasks come first; finished ones are dimmed below."
+      end
+      if pending_count > 0 then
+        lines[#lines + 1] = "new rows: written tasks without a workspace; p / Enter / 1-9 start them"
+      end
+      if page_count > 1 then
+        lines[#lines + 1] = "[ / ]: previous / next page"
+      end
+      if workspace_count > 0 then
+        lines[#lines + 1] = "c: ask an idle pi to continue (e.g. after \"no changes\")"
+        lines[#lines + 1] = "R: restart with the current task text (new conversation, worktree kept)"
+        lines[#lines + 1] = "Restarted and resumed tasks are told to pick up where the previous conversation left off."
+        lines[#lines + 1] = "Tasks carry an ## Actions checklist; pi completes the items and the row shows progress (2/5)."
+        lines[#lines + 1] = "m: finish: stop pi if running, commit, merge into your main checkout, mark finished"
+        lines[#lines + 1] = "d: working diff        D: changes since the recorded base"
+        if core.live() > 0 then
+          lines[#lines + 1] = "x: stop pi (worktree and session are kept)"
+          lines[#lines + 1] = "E: ask the selected task's running pi to revise its task text"
+        end
+      end
+      if pending_count + workspace_count > 0 then
+        -- List a global key only while the mapping exists (see M.setup).
+        local extras = {}
+        if core.live() > 0 then extras[#extras + 1] = "Space a a: switch task from anywhere" end
+        if core.current() ~= nil or (vim.b.pi_issue_draft or {}).target ~= nil then
+          extras[#extras + 1] = "Space a g: start this task"
+        end
+        if #extras > 0 then lines[#lines + 1] = table.concat(extras, "    ") end
+        lines[#lines + 1] = "v: view / edit the task (GitHub uses a local draft)"
+        lines[#lines + 1] = "f: fields (labels, assignees, milestone, state, relations)"
+        lines[#lines + 1] = "Q: stop pi agents and quit"
+        lines[#lines + 1] = "X: delete a task (and its worktree/session) with confirmation"
+        lines[#lines + 1] = "Issue metadata (labels, assignees, milestone, comments) lives in the"
+        lines[#lines + 1] = "task's .tasks/NNN.json sidecar; imported issue data is never dropped."
+      end
+      lines[#lines + 1] = "r: refresh counts    i: choose tasks    n: new local task"
+      lines[#lines + 1] = ""
+      lines[#lines + 1] = "F6: hide / show pi, including from terminal input"
+      if pending_count + workspace_count > 0 then
+        lines[#lines + 1] = "Space a s: paste context; Enter in pi submits it"
+        lines[#lines + 1] = "Space a r: paste a foreground reviewer request"
+        lines[#lines + 1] = "Local tasks: :write saves."
+      end
+      lines[#lines + 1] = ""
+      lines[#lines + 1] = "Agent state does not verify tests or mark a task complete."
       if core.settings().github_enabled then
         lines[#lines + 1] = "g: GitHub issues    e: export to a new issue    I: import open issues"
         lines[#lines + 1] = "Drafts: Space a P confirms publishing."
@@ -666,12 +705,34 @@ function M.dashboard()
   end
   maps["["] = function() page = page > 1 and page - 1 or page_count; draw() end
   maps["]"] = function() page = page < page_count and page + 1 or 1; draw() end
-  maps.g = function()
-    if not core.require_github() then return end
-    popup(function() M.tasks("github") end)()
+  -- Switching is only meaningful while an agent runs (Space a a globally is
+  -- kept in sync by M.setup's poll); map it here only then.
+  if core.live() > 0 then maps.a = popup(M.switch) end
+  -- GitHub actions are mapped (and so listed by which-key) only while the
+  -- integration is on; Space a G toggles it and closes stale panels.
+  if core.settings().github_enabled then
+    maps.e = action(function(w)
+      core.task(function() M.export_task(w) end)
+    end, function(entry)
+      core.task(function() M.export_task(draft_target(entry)) end)
+    end)
+    -- popup: close the dashboard, then open the next surface.
+    maps.I = popup(M.import_task)
+    maps.g = function() popup(function() M.tasks("github") end)() end
+  else
+    maps.g = nil
   end
+  -- which-key (and :map) descriptions matching the footer / help names.
+  local desc = {
+    ["<CR>"] = "Open the Task's Code Tab", p = "Start / Focus Pi", R = "Restart in a New Conversation",
+    c = "Continue", m = "Finish: Commit, Merge, Mark Finished", d = "Working Diff", D = "Diff vs Recorded Base",
+    x = "Stop Pi", v = "View / Edit Task", f = "Fields", a = "Switch Task", r = "Refresh",
+    e = "Export to a New GitHub Issue", I = "Import Open GitHub Issues", g = "GitHub Issues",
+    X = "Delete Task", i = "Choose Tasks", n = "New Local Task", ["?"] = "Help",
+    q = "Close", ["<Esc>"] = "Close",
+  }
   for key, fn in pairs(maps) do
-    vim.keymap.set("n", key, fn, { buffer = dashboard, nowait = true })
+    vim.keymap.set("n", key, fn, { buffer = dashboard, nowait = true, desc = desc[key] })
   end
   draw()
   refresh()
@@ -1083,8 +1144,8 @@ function M.install()
   end)
 end
 
--- Runtime switch for the GitHub integration (Space a G / :PiTaskGithub); the
--- dashboard and task pickers pick it up the next time they open.
+-- Runtime switch for the GitHub integration (Space a G / :PiTaskGithub); open
+-- panels are closed so the next open rebuilds their keys and footers.
 function M.toggle_github()
   vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues or {}, { github_enabled = not core.settings().github_enabled })
   vim.notify(
@@ -1092,11 +1153,63 @@ function M.toggle_github()
     vim.log.levels.INFO,
     { title = "Pi Tasks" }
   )
+  -- The dashboard reuses a loaded buffer; close it so the next open rebuilds
+  -- its mappings (and which-key entries) for the new state.
+  if dashboard and vim.api.nvim_buf_is_valid(dashboard) then
+    for _, win in ipairs(vim.fn.win_findbuf(dashboard)) do
+      vim.api.nvim_win_close(win, true)
+    end
+  end
 end
 
 function M.setup()
   core.setup()
   core.load()
+  -- Context-bound keys exist (and are listed by which-key) only while their
+  -- context is live: switching and sending context need a running pi, and
+  -- every task command (start, view, edit, fields, restart, finish, review)
+  -- needs a task selected in the current tab or buffer. Jobs and buffers
+  -- change outside this module, so a light poll plus BufEnter keeps the
+  -- mappings in sync.
+  local edit = require("util.pi_issue_edit")
+  local fields = require("util.pi_issue_fields")
+  local agents = require("util.agents")
+  local function task_selected()
+    local info = vim.b.pi_issue_draft
+    return core.current() ~= nil or (info and info.target) ~= nil
+  end
+  local function contextual_maps()
+    return {
+      { "<leader>aa", M.switch, "Switch Task (running first)", core.live() > 0 },
+      { "<leader>ag", M.start_current, "Start / Focus This Task's Pi", task_selected() },
+      { "<leader>av", edit.open, "View / Edit Active Task", task_selected() },
+      { "<leader>ae", edit.edit, "Edit Active Task with Pi", task_selected() },
+      { "<leader>af", fields.open, "Pi Task Fields (Labels, Assignees, Milestone)", task_selected() },
+      { "<leader>aR", M.restart_current, "Restart Task with Its Current Description", task_selected() },
+      { "<leader>am", M.finish_current, "Finish Task: Commit, Merge and Mark Finished", task_selected() },
+      { "<leader>ar", agents.review, "Review Task with Pi Subagent", task_selected() },
+      -- Sending context pastes into pi's input; it needs a live pi anywhere
+      -- (agent or standalone terminal), not a selected task.
+      { "<leader>as", function() agents.send(false) end, "Send File to Pi", agents.available() },
+      { "<leader>as", function() agents.send(true) end, "Send Selection to Pi", agents.available(), "x" },
+    }
+  end
+  local function refresh_dynamic_maps()
+    for _, map in ipairs(contextual_maps()) do
+      local mode = map[5] or "n"
+      -- maparg in dict mode yields an EMPTY table when nothing is mapped.
+      local mapped = vim.fn.maparg(map[1], mode, false, true)
+      local exists = type(mapped) == "table" and next(mapped) ~= nil
+      if map[4] and not exists then
+        vim.keymap.set(mode, map[1], map[2], { desc = map[3] })
+      elseif not map[4] and exists then
+        pcall(vim.keymap.del, mode, map[1])
+      end
+    end
+  end
+  refresh_dynamic_maps()
+  local switch_timer = vim.uv.new_timer()
+  switch_timer:start(500, 2000, vim.schedule_wrap(refresh_dynamic_maps))
   vim.api.nvim_create_user_command("PiTasks", function(opts)
     M.tasks(opts.args ~= "" and opts.args or "local")
   end, { nargs = "?", complete = function() return { "local", "github" } end, desc = "Choose local or GitHub tasks" })
@@ -1145,6 +1258,10 @@ function M.setup()
     group = vim.api.nvim_create_augroup("pi_issues_ui", { clear = true }),
     pattern = "PiIssuesChanged",
     callback = draw,
+  })
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = vim.api.nvim_create_augroup("pi_issues_ui_maps", { clear = true }),
+    callback = function() vim.schedule(refresh_dynamic_maps) end,
   })
 end
 

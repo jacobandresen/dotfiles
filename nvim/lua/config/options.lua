@@ -3,6 +3,11 @@ local opt = vim.opt
 
 vim.g.snacks_animate = false -- no animations anywhere
 vim.g.trouble_lualine = false -- no symbol breadcrumb in the statusline
+
+-- Pi task agents: concurrent task workspaces. 3 matches OLLAMA_NUM_PARALLEL
+-- (ollama/ollama.env); going higher only queues agents behind the same
+-- request slots, and each extra running agent slows the others' decoding.
+vim.g.pi_issues = { max_agents = 3 }
 -- no remote-plugin hosts: nothing here needs them
 for _, p in ipairs({ "python3", "node", "perl", "ruby" }) do vim.g["loaded_" .. p .. "_provider"] = 0 end
 
@@ -20,7 +25,7 @@ opt.statuscolumn = "" -- native gutter: numbers, signs only when present
 opt.numberwidth = 3
 
 if vim.g.neovide then
-  vim.o.guifont = "JetBrainsMono Nerd Font:h14"
+  vim.o.guifont = "Hack Nerd Font:h14"
 end
 
 -- Filetypes are registered here rather than in autocmds.lua, which LazyVim

@@ -223,6 +223,90 @@ local ok, failure = xpcall(function()
   Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
   local ui = require("util.pi_issues_ui")
   ui.setup()
+  -- GitHub keys exist (and appear in which-key) only while the integration is on.
+  local function dash_buf()
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_get_name(b):find("^pi://issues/", 1, false) then return b end
+    end
+  end
+  local function dash_desc(key)
+    local buffer = dash_buf()
+    vim.api.nvim_set_current_win(vim.fn.win_findbuf(buffer)[1])
+    local mapping = vim.fn.maparg(key, "n", false, true)
+    return type(mapping) == "table" and mapping.desc or "missing"
+  end
+  local function dash_footer()
+    local win = vim.fn.win_findbuf(dash_buf())[1]
+    local footer = vim.api.nvim_win_get_config(win).footer or ""
+    if type(footer) == "table" then
+      footer = table.concat(vim.tbl_map(function(chunk)
+        return type(chunk) == "table" and chunk[1] or tostring(chunk)
+      end, footer))
+    end
+    return footer
+  end
+  assert(core.settings().github_enabled == false, "Tests run with the GitHub integration off")
+  ui.dashboard()
+  assert(dash_desc("e") == "missing" and dash_desc("I") == "missing" and dash_desc("g") == "missing",
+    "The dashboard must not map GitHub actions while the integration is off")
+  assert(dash_footer():find("export", 1, true) == nil and dash_footer():find("? help", 1, true),
+    ("The footer must not list GitHub actions while the integration is off (footer=%s)"):format(dash_footer()))
+  -- Every listed key must currently do something: agent commands wait for a
+  -- running agent, workspace commands need a workspace, both exist here.
+  assert(dash_footer():find("E revise", 1, true) == nil and dash_footer():find("x stop", 1, true) == nil
+    and dash_footer():find("a switch", 1, true) == nil,
+    "Revise, stop and switch need a running agent and must not be listed when none runs")
+  assert(dash_footer():find("m finish", 1, true) and dash_footer():find("D base", 1, true)
+    and dash_footer():find("R restart", 1, true),
+    ("Workspace commands must be listed while a workspace exists (footer=%s)"):format(dash_footer()))
+  assert(dash_desc("m") == "Finish: Commit, Merge, Mark Finished" and dash_desc("d") == "Working Diff"
+    and dash_desc("p") == "Start / Focus Pi", "Dashboard keys carry descriptions")
+  vim.fn.feedkeys("?", "xt") -- the dashboard help popup must open and adapt
+  local help_buf = vim.api.nvim_get_current_buf()
+  local help_text = table.concat(vim.api.nvim_buf_get_lines(help_buf, 0, -1, false), "\n")
+  assert(help_text:find("new local task", 1, true), "The task help must list creation commands")
+  assert(help_text:find("export", 1, true) == nil,
+    "The task help must not list GitHub actions while the integration is off")
+  assert(help_text:find("revise", 1, true) == nil,
+    "The task help must not list task revision while no agent runs")
+  vim.fn.feedkeys("q", "xt")
+  -- Space a a / a s appear only while an agent runs; every task command
+  -- (Space a g / v / e / f / R / m / r) only while a task is selected; the
+  -- poll keeps all of them in sync.
+  local expect_map = core.live() > 0
+  local expect_task = core.current() ~= nil or (vim.b.pi_issue_draft or {}).target ~= nil
+  assert(vim.wait(4000, function()
+    for _, map in ipairs({ { "<leader>aa", expect_map }, { "<leader>as", expect_map },
+      { "<leader>ag", expect_task }, { "<leader>av", expect_task }, { "<leader>ae", expect_task },
+      { "<leader>af", expect_task }, { "<leader>aR", expect_task }, { "<leader>am", expect_task },
+      { "<leader>ar", expect_task } }) do
+      if (vim.fn.maparg(map[1], "n") ~= "") ~= map[2] then return false end
+    end
+    return true
+  end, 20), "The pi key mappings must follow the running-agent and task-selection state")
+  -- In a tab with no current task the task keys must disappear.
+  vim.cmd.tabnew()
+  vim.cmd.enew()
+  local unselected_ok = vim.wait(4000, function()
+    for _, key in ipairs({ "<leader>ag", "<leader>av", "<leader>ae", "<leader>af",
+      "<leader>aR", "<leader>am", "<leader>ar" }) do
+      if vim.fn.maparg(key, "n") ~= "" then return false end
+    end
+    return true
+  end, 20)
+  vim.cmd.tabclose()
+  assert(unselected_ok, "Task command mappings must be absent when no task is selected")
+  ui.toggle_github()
+  assert(core.settings().github_enabled and not vim.api.nvim_buf_is_valid(dash_buf() or -1),
+    "Toggling must close a stale dashboard so its keys rebuild")
+  ui.dashboard()
+  assert(dash_desc("e") == "Export to a New GitHub Issue" and dash_desc("I") == "Import Open GitHub Issues"
+    and dash_desc("g") == "GitHub Issues",
+    ("The dashboard maps GitHub actions with descriptions while the integration is on (e=%s I=%s g=%s)")
+      :format(dash_desc("e"), dash_desc("I"), dash_desc("g")))
+  assert(dash_footer():find("e export", 1, true), "The footer lists GitHub actions while the integration is on")
+  ui.toggle_github() -- restore the off state for the rest of the suite
+  assert(core.settings().github_enabled == false)
   ui.tasks()
   assert(vim.wait(5000, function()
     local picker = Snacks.picker.get()[1]
@@ -307,6 +391,32 @@ local ok, failure = xpcall(function()
   core.stop(active)
   assert(vim.wait(4000, function() return running.exited end, 10))
   core.input = input
+  -- Visual selection transfer: the exact charwise range reaches the agent's input.
+  await(function() core.start(active) end)
+  running = core.jobs[active.id]
+  assert(vim.wait(5000, function() return running.sequence ~= nil and not running.exited end, 10),
+    table.concat(messages, "\n"))
+  vim.fn.writefile({ "alpha beta gamma", "delta" }, active.path .. "/notes.txt")
+  vim.cmd("edit " .. vim.fn.fnameescape(active.path .. "/notes.txt"))
+  local notes = vim.api.nvim_get_current_buf()
+  vim.fn.setpos(".", { notes, 1, 7, 0 })
+  vim.fn.feedkeys("v\27", "xt") -- the last visual mode must be charwise
+  vim.fn.setpos("'<", { notes, 1, 7, 0 })
+  vim.fn.setpos("'>", { notes, 1, 10, 0 })
+  require("util.agents").send(true)
+  local pasted
+  assert(vim.wait(5000, function()
+    local found = vim.fs.find("paste.txt", { path = temp, limit = 50 })[1]
+    if not found then return false end
+    local handle = assert(io.open(found, "rb"))
+    pasted = handle:read("a")
+    handle:close()
+    return pasted and pasted:find("beta", 1, true) ~= nil
+  end, 10), table.concat(messages, "\n") .. "\npaste: " .. tostring(pasted))
+  assert(pasted:find('File: "notes.txt" 1:7-1:10 (buffer snapshot)', 1, true)
+    and pasted:find("\nbeta\n```", 1, true), "The exact selection must reach pi: " .. tostring(pasted))
+  assert(not pasted:find("alpha", 1, true), "A charwise selection must not transfer whole lines")
+  vim.cmd.stopinsert()
   local fresh = temp .. "/fresh"
   vim.fn.mkdir(fresh, "p")
   await(function() core.git(fresh, "init", "-b", "main") end)

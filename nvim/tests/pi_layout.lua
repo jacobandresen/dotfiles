@@ -76,8 +76,12 @@ local ok, failure = pcall(function()
     { vim.fn.getcwd(), vim.fn.stdpath("data") .. "/lazy/snacks.nvim", temp }
   )
   lua([[
-    for _, key in ipairs(require("plugins.ai")[1].keys) do
-      if key[1] == "<F6>" then vim.keymap.set(key.mode, key[1], key[2]) end
+    for _, plugin in ipairs(require("plugins.ai")) do
+      if plugin[1] == "folke/snacks.nvim" then
+        for _, key in ipairs(plugin.keys) do
+          if key[1] == "<F6>" then vim.keymap.set(key.mode, key[1], key[2]) end
+        end
+      end
     end
     local core = require("util.pi_issues")
     _G.pi_terminal_buf = vim.api.nvim_create_buf(false, true)

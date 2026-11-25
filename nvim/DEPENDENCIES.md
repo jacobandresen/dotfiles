@@ -9,7 +9,7 @@ adapters, formatters).
 - **Neovim** >= 0.12 (`vim.lsp.config`, `:lsp restart`)
 - **git** — plugin management, gitsigns
 - **ripgrep** (`rg`) — live grep / grep word
-- **BigBlueTermPlus Nerd Font Mono** — installed by `make install-fonts` for
+- **Hack Nerd Font Mono** — installed by `make install-fonts` for
   Neovide and the configured kitty terminal; includes Nerd Font tool icons
 - **A truecolor terminal** (`COLORTERM=truecolor`) — required by the configured
   Neovim colours
@@ -20,6 +20,10 @@ adapters, formatters).
 
 ## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
 
+- **minuet-ai.nvim** with the local Ollama `qwen2.5-coder:1.5b-base` FIM model
+  — inline ghost-text completions in all buffers. `<A-a>` accepts the
+  suggestion, `<A-l>` one line, `<A-w>` one word, `<A-[>`/`<A-]>` cycle,
+  `<A-e>` dismisses. `make use-model` pulls and warms the model.
 - **pi-agent** using its configured default model — `<leader>ap` toggles the terminal;
   `<leader>as` sends the file or selection. Its Markdown output uses the
   Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.

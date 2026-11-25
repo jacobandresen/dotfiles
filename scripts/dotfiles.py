@@ -21,7 +21,7 @@ import urllib.request
 
 import pi_config
 import hashes
-from host_tools import HOME, ROOT, api_json, api_ready, coding_base_model, coding_model, has_model, ollama_api, ram_profile, run
+from host_tools import HOME, ROOT, api_json, api_ready, coding_base_model, coding_model, fim_base_model, has_model, ollama_api, ram_profile, run
 
 DOCKER_APP = Path("/Applications/Docker.app")
 OLLAMA_APP = Path("/Applications/Ollama.app")
@@ -354,20 +354,20 @@ def install_compose(_):
 
 
 def install_fonts(_):
-    if shutil.which("fc-list") and "bigbluetermplus nerd font mono" in run("fc-list", check=False, capture_output=True, text=True).stdout.casefold():
-        print("  ✓ BigBlueTermPlus Nerd Font Mono already installed")
+    if shutil.which("fc-list") and "hack nerd font mono" in run("fc-list", check=False, capture_output=True, text=True).stdout.casefold():
+        print("  ✓ Hack Nerd Font Mono already installed")
         return
     if platform.system() == "Darwin":
-        run("brew", "install", "--cask", "font-bigblue-terminal-nerd-font")
+        run("brew", "install", "--cask", "font-hack-nerd-font")
         return
-    destination = HOME / ".local/share/fonts/BigBlueTerminalNerdFont"
+    destination = HOME / ".local/share/fonts/HackNerdFont"
     with tempfile.TemporaryDirectory() as work:
-        archive = Path(work) / "BigBlueTerminal.tar.xz"
-        release_asset("ryanoasis/nerd-fonts", FONT_VERSION, "BigBlueTerminal.tar.xz", archive, FONT_SHA256)
+        archive = Path(work) / "Hack.tar.xz"
+        release_asset("ryanoasis/nerd-fonts", FONT_VERSION, "Hack.tar.xz", archive, FONT_SHA256)
         destination.mkdir(parents=True, exist_ok=True)
         run("tar", "-xJf", str(archive), "-C", str(destination))
     run("fc-cache", "-f", str(destination.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"  ✓ BigBlueTerminal Nerd Font -> {destination}")
+    print(f"  ✓ Hack Nerd Font -> {destination}")
 
 
 def install_ollama(_):
@@ -380,6 +380,9 @@ def install_ollama(_):
     override = ROOT / "ollama/ollama.service.d/override.conf"
     service = (ROOT / "ollama/ollama-warm-model.service").read_text()
     service = service.replace("__USER__", getpass.getuser()).replace("__REPO_DIR__", str(ROOT))
+    sysctl = ROOT / "ollama/ollama.sysctl"
+    run("sudo", "cp", str(sysctl), "/etc/sysctl.d/60-ollama.conf")
+    run("sudo", "sysctl", "-p", "/etc/sysctl.d/60-ollama.conf")
     run("sudo", "mkdir", "-p", "/etc/systemd/system/ollama.service.d")
     run("sudo", "cp", str(override), "/etc/systemd/system/ollama.service.d/override.conf")
     run("sudo", "tee", "/etc/systemd/system/ollama-warm-model.service", input=service.encode(), stdout=subprocess.DEVNULL)
@@ -511,6 +514,25 @@ def use_model(args):
     if response.get("error"):
         fail(response["error"])
     print(f"  {model} loaded")
+    # Neovim inline autocomplete uses the small qwen2.5-coder FIM model; its
+    # own template passes FIM tokens through, and the warm request keeps it
+    # resident next to mellum (OLLAMA_MAX_LOADED_MODELS=2).
+    fim = fim_base_model()
+    if not has_model(fim):
+        print(f"  pulling {fim} for Neovim inline autocomplete...")
+        run("ollama", "pull", fim)
+    print(f"  warming {fim} (keep-alive {keepalive})...")
+    warm = api_json("/api/generate", {
+        "model": fim,
+        "prompt": "<|fim_prefix|><|fim_suffix|><|fim_middle|>",
+        "raw": True,
+        "stream": False,
+        "keep_alive": keepalive,
+        "options": {"num_predict": 1},
+    }, timeout=900)
+    if warm.get("error"):
+        fail(warm["error"])
+    print(f"  {fim} loaded")
     pi_config.main([])
 
 

@@ -31,7 +31,7 @@ endif
 deps-macos:
 	@$(CLI) install-homebrew
 	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
-	brew install --cask ollama kitty font-bigblue-terminal-nerd-font
+	brew install --cask ollama kitty font-hack-nerd-font
 	@$(MAKE) deps-common
 	@echo "Docker Desktop is optional: make deps-docker-macos"
 
