@@ -4,27 +4,43 @@
       "baseUrl": "http://127.0.0.1:11434/v1",
       "api": "openai-completions",
       "apiKey": "not-needed",
-      "compat": {"supportsDeveloperRole": false, "supportsReasoningEffort": true, "thinkingFormat": "openai"},
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "thinkingFormat": "openai"
+      },
       "models": [
         {
           "id": "mellum",
           "name": "JetBrains Mellum 2.1",
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "reasoning": true,
-          "thinkingLevelMap": {"off": "none"},
-          "contextWindow": 16384,
+          "thinkingLevelMap": {
+            "off": "none"
+          },
+          "contextWindow": 32768,
           "maxTokens": 8192,
-          "samplingParams": {"temperature": 0.2}
+          "samplingParams": {
+            "temperature": 0.2
+          }
         },
         {
           "id": "qwen3.5:9b",
           "name": "Qwen 3.5 9B",
-          "input": ["text"],
+          "input": [
+            "text"
+          ],
           "reasoning": true,
-          "thinkingLevelMap": {"off": "none"},
-          "contextWindow": 16384,
+          "thinkingLevelMap": {
+            "off": "none"
+          },
+          "contextWindow": 32768,
           "maxTokens": 8192,
-          "samplingParams": {"temperature": 0.6}
+          "samplingParams": {
+            "temperature": 0.6
+          }
         }
       ]
     }

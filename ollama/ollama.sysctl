@@ -1,0 +1,3 @@
+# vm.swappiness=5 keeps ollama's model weights resident instead of swapping
+# them out under desktop memory pressure (see ollama.service.d/override.conf).
+vm.swappiness=5

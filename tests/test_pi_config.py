@@ -38,9 +38,14 @@ class PiConfigTests(unittest.TestCase):
                          "Ollama honours reasoning_effort; it ignores chat_template_kwargs")
         models = json.loads((self.agent / "models.json").read_text())["providers"]["ollama"]["models"]
         self.assertEqual([model["id"] for model in models], ["mellum", "qwen3.5:9b"])
-        self.assertEqual(models[0]["contextWindow"], 16384)
+        self.assertEqual(models[0]["contextWindow"], 32768)
         self.assertEqual(models[0]["thinkingLevelMap"], {"off": "none"}, "Thinking off must reach Ollama")
         self.assertEqual(models[0]["samplingParams"]["temperature"], 0.2)
+        self.assertEqual(json.loads((self.agent / "settings.json").read_text())["compaction"], {
+            "enabled": True,
+            "reserveTokens": 16384,
+            "keepRecentTokens": 12288,
+        })
         self.assertEqual(json.loads((self.agent / "settings.json").read_text())["enabledModels"], [
             "ollama/mellum",
             "ollama/qwen3.5:9b",
@@ -79,7 +84,12 @@ class PiConfigTests(unittest.TestCase):
         (source / "models.json").write_text((config.ROOT / "pi/agent/models.json").read_text())
         with patch.object(config, "ROOT", source.parents[1]):
             config.install(self.agent)
-        self.assertEqual(json.loads((self.agent / "settings.json").read_text()), settings)
+        base = json.loads((self.agent / "settings.json").read_text())
+        # Compaction is only injected when the template's default model is a
+        # known model in models.json (it needs a context window to derive from).
+        base.pop("compaction", None)
+        self.assertEqual(base, settings,
+                         "template stays authoritative for everything except compaction")
 
 
 if __name__ == "__main__":

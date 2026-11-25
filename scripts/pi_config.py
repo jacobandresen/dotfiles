@@ -29,6 +29,17 @@ def install(agent_dir, dry_run=False):
     if agent_dir.resolve().is_relative_to(ROOT) or agent_dir.is_symlink() or agent_dir.parent.is_symlink():
         raise ValueError("pi config directory must be a real directory outside this repository")
     settings = json.loads((ROOT / "pi/agent/settings.json.template").read_text())
+    models = json.loads((ROOT / "pi/agent/models.json").read_text())
+    model = next((m for m in models["providers"]["ollama"]["models"]
+                  if m["id"] == settings["defaultModel"]), None)
+    if model:
+        # Half the context window stays free for prefill; the rest of the
+        # transcript is summarised so long-running tasks never hit the window.
+        settings["compaction"] = {
+            "enabled": True,
+            "reserveTokens": model["contextWindow"] // 2,
+            "keepRecentTokens": model["contextWindow"] * 3 // 8,
+        }
     if dry_run:
         print(f"Would configure {agent_dir} for {settings['defaultModel']}")
         return
@@ -39,7 +50,6 @@ def install(agent_dir, dry_run=False):
     skills = agent_dir / "skills"
     if skills.is_symlink() and skills.resolve() == ROOT / "pi/agent/skills":
         skills.unlink()
-    models = json.loads((ROOT / "pi/agent/models.json").read_text())
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
     if not host.startswith(("http://", "https://")):
         host = "http://" + host
