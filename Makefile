@@ -30,8 +30,9 @@ endif
 
 deps-macos:
 	@$(CLI) install-homebrew
-	brew install git neovim lazydocker ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
+	brew install git neovim lazydocker lazygit luarocks imagemagick tectonic ripgrep fd jq make pkgconf node python zsh midnight-commander coreutils
 	brew install --cask ollama kitty font-hack-nerd-font
+	npm install --global tree-sitter-cli @mermaid-js/mermaid-cli
 	@$(MAKE) deps-common
 	@echo "Docker Desktop is optional: make deps-docker-macos"
 
@@ -47,12 +48,14 @@ deps-common:
 	@$(CLI) install-cli-tools
 
 deps-arch:
-	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker docker docker-compose zstd
+	sudo pacman -Syu --needed git neovim curl python zsh ripgrep fd jq base-devel pkgconf nodejs npm unzip fontconfig kitty mc lazydocker lazygit luarocks imagemagick texlive docker docker-compose zstd wl-clipboard xclip
+	sudo npm install --global tree-sitter-cli @mermaid-js/mermaid-cli
 	@$(MAKE) deps-common
 
 deps-ubuntu deps-debian:
 	sudo apt-get update
-	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io zstd
+	sudo apt-get install -y git curl python3 zsh ripgrep fd-find jq build-essential pkg-config nodejs npm unzip fontconfig kitty mc docker.io zstd lazygit luarocks imagemagick texlive-latex-base wl-clipboard xclip
+	sudo npm install --global tree-sitter-cli @mermaid-js/mermaid-cli
 	@$(CLI) install-neovim
 	@$(MAKE) --no-print-directory deps-compose
 	@$(MAKE) deps-common

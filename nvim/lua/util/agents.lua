@@ -50,10 +50,14 @@ function M.toggle(resume)
     return core.task(function() core.start(workspace) end)
   end
   if vim.fn.executable("pi") ~= 1 then return vim.notify("pi is not installed", vim.log.levels.WARN) end
+  if not Snacks then
+    return vim.notify("Snacks is not available yet; try again shortly", vim.log.levels.WARN)
+  end
   Snacks.terminal.toggle(command, opts())
 end
 
 local function running()
+  if not Snacks then return end
   local options = opts()
   options.create = false
   local term = Snacks.terminal.get(command, options)
