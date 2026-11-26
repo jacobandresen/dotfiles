@@ -100,10 +100,13 @@ extension with `npm ci`. With another plugin manager, run `:TaskbaySetup` once.
 
 ## 🎬 Watch a voyage
 
-`asciinema play demo/taskbay.cast` replays a one-minute session: two tasks
-written, two agents at sea at once, a diff inspected, one task brought home and
-merged. It's recorded with the offline scripted agent; `python3 demo/record.py`
-records a fresh take (needs tmux).
+![taskbay demo: two tasks written, two agents at sea at once, a diff inspected, one task brought home and merged](demo/taskbay.gif)
+
+Two tasks are written, two boats sail at once, the plunder is inspected, and one
+task is brought home and merged. The voyage uses the offline scripted agent, so
+every take is the same. `python3 demo/record.py` records a fresh take (needs tmux)
+and `python3 demo/gif.py` turns it into this GIF (needs Pillow). To replay it in a
+terminal: `asciinema play demo/taskbay.cast`.
 
 ## Why hackers like it
 
