@@ -18,7 +18,7 @@ adapters, formatters).
 - **git-pi** — installed by `make install`; `git-pi start <issue>` creates an
   isolated worktree and starts pi, while `<leader>gD` shows a compact diff.
 
-## AI (`lua/plugins/ai.lua`, `taskbay/`)
+## AI (`lua/plugins/ai.lua`)
 
 - **minuet-ai.nvim** with the local Ollama `qwen2.5-coder:1.5b-base` FIM model
   — inline ghost-text completions in all buffers. `<A-a>` accepts the
@@ -28,13 +28,13 @@ adapters, formatters).
   `<leader>as` sends the file or selection. Its Markdown output uses the
   Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.
 - **Node.js/npm** — the pinned `pi-subagents` dependency of taskbay's pi driver.
-  Run `:TaskbaySetup` once after installing this configuration. No package
-  installation, issue requests or model calls run on editor startup.
+  lazy.nvim installs it through taskbay's `build.lua` when the plugin is installed
+  or updated. No issue requests or model calls run on editor startup.
 - **gh**, authenticated for the issue repository — optional, only for the explicitly
   enabled GitHub integration. Local tasks need Git but no remote or GitHub account.
 
 Task workspaces (write tasks, run agents in worktrees, review, merge, GitHub
-import/publish) are the local [taskbay](taskbay/README.md) plugin; its README
+import/publish) are the [taskbay.nvim](https://github.com/jacobandresen/taskbay.nvim) plugin; its README
 documents the workflow, keys, options and drivers. New terminals and task
 sessions inherit pi-agent's model and thinking settings, including
 `PI_CODING_AGENT_DIR`; taskbay forces no provider or model unless its `pi`

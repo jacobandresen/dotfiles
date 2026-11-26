@@ -1,4 +1,4 @@
--- This config's directory (nvim/): the local taskbay plugin and the pi theme live in it.
+-- This config's directory (nvim/): the pi theme lives in it.
 local config = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h")
 
 return {
@@ -64,11 +64,10 @@ return {
   },
 
   {
-    -- Task workspaces for coding agents: the local taskbay plugin (nvim/taskbay), run with pi.
+    -- Task workspaces for coding agents (latest main; lazy runs its build.lua), run with pi.
     -- 3 agents match OLLAMA_NUM_PARALLEL (ollama/ollama.env); more only queue behind the same
     -- request slots, and each extra running agent slows the others' decoding.
-    dir = config .. "/taskbay",
-    name = "taskbay",
+    "jacobandresen/taskbay.nvim",
     lazy = false,
     dependencies = { "folke/snacks.nvim" },
     opts = {

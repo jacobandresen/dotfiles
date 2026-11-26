@@ -1,8 +1,0 @@
-{
-  "name": "taskbay-pi-agent",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "pi-subagents": "0.89.1"
-  }
-}

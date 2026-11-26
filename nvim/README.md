@@ -1,7 +1,7 @@
 # Neovim Configuration
 
-A Neovim configuration built on LazyVim, with the pi coding agent and the local
-[taskbay](taskbay/README.md) plugin for task workspaces.
+A Neovim configuration built on LazyVim, with the pi coding agent and the
+[taskbay.nvim](https://github.com/jacobandresen/taskbay.nvim) plugin for task workspaces.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ active session model. Keep the AI menu and keymaps limited to pi.
 
 ## Tasks (taskbay)
 
-[taskbay](taskbay/README.md) lives in `taskbay/` and is loaded from
+[taskbay.nvim](https://github.com/jacobandresen/taskbay.nvim) is installed by lazy.nvim (latest `main`) from
 `lua/plugins/ai.lua` with this config's options: three agents at most (matching
 `OLLAMA_NUM_PARALLEL`), pi with the Retrobox theme, and the state directory of
 the earlier pi-issues workflow, so existing workspaces keep working.
@@ -37,9 +37,7 @@ lists the ones the selected row supports.
 | `Space a G` | GitHub integration on / off |
 | `Space a q` | Stop agents and quit |
 
-Run the plugin's offline suite with `make test-pi`, line coverage with
-`nvim --headless -u NONE -i NONE -l nvim/taskbay/tests/coverage.lua`, and the
-opt-in run against the real pi and a local model with `make test-pi-real`.
+The plugin's tests live in its own repository.
 
 ## Other Keys
 

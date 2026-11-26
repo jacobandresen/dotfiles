@@ -1,7 +1,6 @@
 .PHONY: install deps doctor ram-profile use-model install-mellum verify-model
 .PHONY: install-nvim install-zsh install-mc install-kitty install-pi install-workflow update-pi install-ollama install-docker install-fonts
 .PHONY: deps-arch deps-compose deps-debian deps-ubuntu deps-macos deps-docker-macos deps-common
-.PHONY: test-pi test-pi-real
 
 OS := $(shell uname -s)
 PYTHON ?= python3
@@ -118,12 +117,3 @@ ram-profile:
 doctor:
 	@$(CLI) doctor
 
-# Offline suite of the taskbay plugin (nvim/taskbay); its e2e tests drive this config.
-test-pi:
-	@nvim --headless -u NONE -i NONE -l nvim/taskbay/tests/run.lua
-
-# Opt-in: real pi + pinned extension + a local model (default from pi/agent/settings.json.template).
-# PI_REAL_MODEL=ollama/<id> picks another local model; PI_REAL_TIMEOUT is in seconds.
-PI_REAL_TIMEOUT ?= 1800
-test-pi-real:
-	@PI_REAL_TIMEOUT=$(PI_REAL_TIMEOUT) timeout $$(($(PI_REAL_TIMEOUT) + 120)) nvim --headless -u NONE -i NONE -l nvim/taskbay/tests/real.lua
