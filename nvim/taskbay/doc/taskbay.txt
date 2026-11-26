@@ -20,7 +20,7 @@ and conversation of its own. Every agent is a pirate boat sailing out of the
 taskbay; you are the fleet captain. You write the orders (a Markdown task),
 review the plunder (the diff) and decide what goes into your branch.
 
-Requirements: Neovim 0.11+, Git, snacks.nvim, and a coding agent (the default
+Requirements: Neovim 0.12+, Git, snacks.nvim, and a coding agent (the default
 driver runs pi; its extension needs npm once, see |:TaskbaySetup|). gh is
 optional, for the GitHub integration.
 

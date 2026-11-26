@@ -73,7 +73,7 @@ to import GitHub issues as tasks and publish tasks as issues.
 
 You need:
 
-- Neovim 0.11 or newer (tested with 0.12), and Git
+- Neovim 0.12 or newer, and Git
 - [snacks.nvim](https://github.com/folke/snacks.nvim) for the pickers and the terminal
 - A crew. The default agent driver is [pi](https://github.com/earendil-works/pi);
   its status extension needs Node.js/npm once, for `:TaskbaySetup`
