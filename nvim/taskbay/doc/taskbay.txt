@@ -150,8 +150,9 @@ require("taskbay").review()                                 *taskbay.review()*
 8. DRIVERS                                                    *taskbay-drivers*
 
 The agent and the issue tracker are driver modules: taskbay.agents.<name>
-(pi ships) and taskbay.remotes.<name> (GitHub ships). Their interfaces, the
-status file an agent reports through and the normalised issue shape are
-described in the README.
+(pi ships) and taskbay.remotes.<name> (GitHub ships). The header comments of
+lua/taskbay/agents/pi.lua and lua/taskbay/remotes/github.lua describe their
+interfaces, the status file an agent reports through and the normalised issue
+shape.
 
  vim:tw=78:ts=8:ft=help:norl:
