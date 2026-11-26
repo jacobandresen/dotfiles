@@ -18,7 +18,7 @@ adapters, formatters).
 - **git-pi** — installed by `make install`; `git-pi start <issue>` creates an
   isolated worktree and starts pi, while `<leader>gD` shows a compact diff.
 
-## AI (`lua/plugins/ai.lua`, `lua/util/agents.lua`)
+## AI (`lua/plugins/ai.lua`, `taskbay/`)
 
 - **minuet-ai.nvim** with the local Ollama `qwen2.5-coder:1.5b-base` FIM model
   — inline ghost-text completions in all buffers. `<A-a>` accepts the
@@ -27,166 +27,19 @@ adapters, formatters).
 - **pi-agent** using its configured default model — `<leader>ap` toggles the terminal;
   `<leader>as` sends the file or selection. Its Markdown output uses the
   Retrobox palette in `themes/pi-retrobox.json`. Buffers reload on focus.
-- **gh**, authenticated for the issue repository — optional, only for explicitly
+- **Node.js/npm** — the pinned `pi-subagents` dependency of taskbay's pi driver.
+  Run `:TaskbaySetup` once after installing this configuration. No package
+  installation, issue requests or model calls run on editor startup.
+- **gh**, authenticated for the issue repository — optional, only for the explicitly
   enabled GitHub integration. Local tasks need Git but no remote or GitHub account.
-- **Node.js/npm** — the pinned `pi-subagents@0.89.1` dependency. Run
-  `:PiTaskSetup` once after installing this configuration. No package installation,
-  issue requests, or model calls run on editor startup. Pi 1.5.2 is integration-tested.
 
-New terminals and task sessions inherit pi-agent's model and thinking settings,
-including `PI_CODING_AGENT_DIR` and project configuration. Neovim does not force a
-provider or model unless explicitly set in `vim.g.pi_issues`. Resumed sessions
-retain Pi's saved-session model behavior. Foreground reviewers use the model
-reported by the active task session, including after a model switch.
-
-### Local tasks by default
-
-`Space a n` / `:PiTaskNew` opens a blank Markdown task. Write `# Task title`,
-a blank line, and your own description or checklist. `:write` creates
-`.tasks/001-task-title.md` in the primary Git checkout; no remote, predefined
-task or agent is required. An empty title is rejected without losing the draft.
-`:PiTaskNew Improve search` creates a titled file directly, with no boilerplate.
-Task completion is never inferred from agent state.
-
-Tasks run in Git worktrees branched from a commit, so a freshly initialised
-repository needs a first commit before a task can start.
-
-`Space a i` / `:PiTasks` lists local tasks. `Ctrl-n` in the picker or `n` in the
-workspace panel opens a blank task. `Ctrl-o` edits; `?` shows actions in normal
-mode. `Ctrl-s` searches titles and bodies locally.
-Task IDs come from filenames and must be unique; keep filenames stable.
-Normal `:write` saves the task directly, with no draft publication step. You can
-commit `.tasks/` deliberately or keep it untracked. Task-file edits always use the
-primary checkout, even while code is edited in a separate worktree.
-
-`util/pi_tasks.lua` provides shared repository, list, get, update and identity
-operations for local tasks and GitHub issues. Worktree routing, saved sessions,
-agent limits, diff review and task editing reuse the same workflow.
-
-### Daily task workflow
-
-| Key | Action |
-| --- | --- |
-| `Space a n` | Write a new local task; `:write` creates its file |
-| `Space a i` | Pick local tasks; Tab selects several, Enter starts them now (base `HEAD`), `Ctrl-b` reviews / picks a base first |
-| `Space a g` | Start (or focus) the task in the current task buffer or tab |
-| `Space a R` / `:PiTaskRestart` | Restart the task with its current description in a new conversation; the worktree is kept (dashboard: `R`). Resuming with `p` after an edit sends the updated task into the existing conversation instead |
-| `Space a a` | Switch task: running ones first; Enter jumps to its pi, `Ctrl-o` to its code tab |
-| `Space a w` | Compact workspace panel, including written tasks not started yet (`new`); `1`-`9` jump to a task's pi (or start a `new` one), Enter opens code, `p` starts/focuses pi, `c` asks an idle pi to continue |
-| `F6` / `Space a p` | Hide/show Pi without stopping it; F6 also works in terminal mode |
-| `Space a s` | Paste file/selection context into that task's pi; Enter submits |
-| `Space a r` | Paste a foreground reviewer request using the existing extension |
-| `Space a v` / `:PiTaskView` | View/edit the active task; GitHub uses a local draft |
-| `Space a e` / `:PiTaskEdit` | Ask its active pi-agent to revise the task file or draft |
-| `Space g D` | Wide diff left, changed files right |
-| `Space a q` | Confirm stopping owned agents and quit (`:PiQuit`) |
-
-The launch review shows repository, base commit, branches and paths. Press `s`
-to prepare and start, Enter to prepare without model calls, or `q` to cancel.
-Local tasks use sibling `<repo>-worktrees/task-<number>/` directories and
-`task/<number>` branches, based on the locally selected ref (`HEAD` by default).
-GitHub issues retain `<repo>-worktrees/<number>/` and `issue/<number>`.
-Matching branches are reused only after confirmation. Uncommitted
-changes in the main checkout are not copied. The initial limit is three live
-task agents; extra tasks are prepared, not queued for automatic execution.
-Override it explicitly with `vim.g.pi_issues = { max_agents = 2 }` in your options.
-
-The panel uses restrained status accents and cached file counts. `x` confirms
-stopping one agent, `r` refreshes, and `?` shows help. State describes the agent,
-not whether tests passed. Existing workspaces restore without starting agents;
-`p` resumes the exact saved conversation, without repeating the issue prompt.
-Files, branches and sessions are never automatically removed or published.
-
-Diff labels separate staged, unstaged and untracked files. `Ctrl-g` switches
-between working changes and all changes since the recorded issue base;
-`Ctrl-r` refreshes, `Ctrl-f`/`Ctrl-b` scroll the preview, and `Alt-w` cycles windows.
-Use the picker's `?` help for its preview-only/maximize controls. Binary files
-show Git's binary summary; untracked text gets a real addition diff.
-
-Context is a labeled buffer snapshot, including unsaved edits, bounded to 100 KB.
-Sending refuses files (including symlinks) outside the selected worktree and never
-starts another agent. Press `F6` to hide Pi directly from terminal input, including
-standalone sessions opened with `Space a p`. Press `F6` again to restore it.
-Use `Ctrl-\ Ctrl-n` to leave terminal input for other Neovim keys.
-Use `:PiQuit` for cancellable bulk shutdown: modified files and Cancel keep agents
-running. Ordinary/forced Neovim exits retain their normal semantics and stop owned
-jobs on actual exit, not during a failed quit attempt. After a crash, the next
-start offers lock recovery only if both recorded processes have exited.
-
-**Extension reuse:** pi-subagents supplies the foreground reviewer/scout/worker,
-tool execution, and result rendering. Neovim owns persistent task tabs and
-top-level interactive pi processes because the extension's child inspectors are
-not attachable Neovim terminals. Managed tabs intentionally expose only direct,
-foreground, explicit-model delegation, not its detached/workflow launchers or
-inspector shortcuts. Existing personal pi settings/authentication are untouched.
-These workflow checks and worktrees are **not a permissions sandbox**; commands
-still have the user's filesystem, credentials, network and shared-service access.
-
-### Optional GitHub integration
-
-GitHub integration is disabled by default. Enable it in `lua/config/options.lua`:
-
-```lua
-vim.g.pi_issues = { github_enabled = true }
-```
-
-Then use `:PiTasks github` to select GitHub issues. Local task
-selection remains the default even when GitHub is enabled. Existing GitHub
-workspace metadata is retained; fetching or publishing an issue requires the
-setting above. This controls task integration, not pi-agent's AI provider:
-using a hosted model still requires that model's network/authentication.
-
-In the issue picker, `Ctrl-o` opens an issue without creating a worktree or
-starting an agent. In the workspace panel, `v` opens that workspace's issue.
-`Space a v` / `:PiTaskView` opens the active issue as an editable local draft.
-Keep `# Issue title` on the first line, a blank second line, then the Markdown
-body. `:write` saves locally, not to GitHub. Drafts persist under Neovim's
-pi-issues state directory, outside worktrees, and reopen without losing edits.
-
-`Space a e` / `:PiTaskEdit` asks for revision instructions and pastes a bounded
-draft-only request into the matching active pi-agent. Press Enter in pi to
-submit it, then return to the draft to review its edits. This does not start
-another agent or authorize publishing. Unsaved buffer edits are saved first.
-
-From the draft, `Space a P` / `:PiTaskPublish` confirms publishing its title and
-body using `gh issue edit`. Changes on GitHub since the draft was fetched block
-publishing; `:PiTaskReload` explicitly confirms discarding the local draft and
-fetching the current issue. No comments, labels, assignees or issue state are
-changed. GitHub's CLI does not provide an atomic compare-and-update here, so
-avoid simultaneous edits while publishing.
-
-### Copy tasks between local files and GitHub
-
-With GitHub integration enabled, `:PiTaskImport 42` reads issue 42 from the
-current repository's GitHub remote and confirms creating a new local task with
-the same title/body. In an active GitHub issue workspace, `:PiTaskImport` uses
-that issue. Imported tasks receive a new local ID; the GitHub issue is unchanged.
-
-Open a local task or activate its workspace, then use `:PiTaskExport`. It saves
-any open task-buffer edits, shows the destination repository, and confirms
-creating a **new** GitHub issue with the task's title/body. The local file,
-worktree and conversation remain in place. Repeating export creates another
-issue; this is an explicit copy, not automatic two-way synchronization.
-Comments, labels, assignees and GitHub issue state are not copied.
-
-Focused checks, from the repository root (no hosted model requests). `make test-pi`
-runs all of them; `pi_e2e.lua` boots the real config and uses keystrokes to write tasks,
-start three agents at once, queue a fourth, stop/resume, quit and restore, with a
-scripted offline pi (`PI_E2E_VERBOSE=1` prints steps, `PI_E2E_KEEP=1` keeps its files).
-`make test-pi-real` runs the same flow with the real pi against a local model only
-(`PI_REAL_MODEL=ollama/<id>`; hosted or unpulled models are refused):
-
-```sh
-make test-pi
-make test-pi-real   # opt-in: real pi + extension + your local default model (slow on CPU)
-timeout 180 nvim --headless -u NONE -i NONE -l nvim/tests/pi_e2e.lua
-timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issues.lua
-timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_layout.lua
-python3 nvim/tests/pi_extension.py
-timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issue_edit.lua
-timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_tasks.lua
-timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_task_copy.lua
-```
+Task workspaces (write tasks, run agents in worktrees, review, merge, GitHub
+import/publish) are the local [taskbay](taskbay/README.md) plugin; its README
+documents the workflow, keys, options and drivers. New terminals and task
+sessions inherit pi-agent's model and thinking settings, including
+`PI_CODING_AGENT_DIR`; taskbay forces no provider or model unless its `pi`
+options set one. Worktrees are not a permissions sandbox: agents keep the user's
+filesystem, credentials and network access.
 
 Plugin updates are explicit (`:Lazy update`); startup does not update plugins.
 The generated `lazy-lock.json` is local and ignored by git.

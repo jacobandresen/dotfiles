@@ -1,4 +1,5 @@
--- Run: timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_layout.lua
+-- Run: timeout 30 nvim --headless -u NONE -i NONE -l tests/layout.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp, "p")
 local function command(...)
@@ -58,32 +59,26 @@ local ok, failure = pcall(function()
   lua(
     [[
     local root, snacks, temp = ...
-    vim.opt.rtp:prepend(root .. "/nvim")
+    vim.g.mapleader = " "
+    vim.opt.rtp:prepend(root)
     vim.opt.rtp:append(snacks)
     _G.Snacks = require("snacks")
     Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
-    local core = require("util.pi_issues")
-    vim.g.pi_issues = { state_dir = temp .. "/state", github_enabled = true }
+    local core = require("taskbay.core")
+    vim.g.taskbay = { state_dir = temp .. "/state", remote_enabled = true }
     _G.LazyVim = { root = setmetatable({ detectors = {}, cache = {} }, { __call = function() return temp end }) }
     _G.workspace = {
       id = "test", path = temp, common = temp .. "/.git", branch = "main",
       repo = "test/repo", number = 42, title = "Readable issue review", base_ref = "main",
     }
     core.workspaces.test = workspace
-    require("util.pi_issues_ui").setup()
+    require("taskbay.ui").setup()
     core.open(workspace)
   ]],
-    { vim.fn.getcwd(), vim.fn.stdpath("data") .. "/lazy/snacks.nvim", temp }
+    { plugin, vim.fn.stdpath("data") .. "/lazy/snacks.nvim", temp }
   )
   lua([[
-    for _, plugin in ipairs(require("plugins.ai")) do
-      if plugin[1] == "folke/snacks.nvim" then
-        for _, key in ipairs(plugin.keys) do
-          if key[1] == "<F6>" then vim.keymap.set(key.mode, key[1], key[2]) end
-        end
-      end
-    end
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     _G.pi_terminal_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[pi_terminal_buf].bufhidden = "hide"
     vim.api.nvim_buf_call(pi_terminal_buf, function()
@@ -103,22 +98,22 @@ local ok, failure = pcall(function()
   lua([[
     assert(vim.bo[pi_terminal_buf].channel == pi_terminal_job)
     vim.cmd.stopinsert()
-    require("util.agents").toggle()
+    require("taskbay.terminal").toggle()
     vim.fn.jobstop(pi_terminal_job)
     vim.fn.jobwait({ pi_terminal_job }, 3000)
-    require("util.pi_issues").jobs.test = nil
+    require("taskbay.core").jobs.test = nil
   ]])
   -- Let the pending stopinsert land before the standalone terminal requests insert mode.
   assert(poll(3000, function() return rpc("nvim_get_mode").mode == "n" end), "Leaving the issue terminal")
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local executable = workspace.path .. "/.git/pi-test-bin/pi"
     core.write(executable, "#!/bin/sh\ntrap 'exit 0' TERM HUP\nwhile :; do sleep 1; done\n")
     assert(vim.uv.fs_chmod(executable, 493))
     _G.original_path = vim.env.PATH
     vim.env.PATH = vim.fs.dirname(executable) .. ":" .. original_path
-    vim.t.pi_issue = nil
-    require("util.agents").toggle()
+    vim.t.taskbay_workspace = nil
+    require("taskbay.terminal").toggle()
     _G.standalone_pi_buf = vim.api.nvim_get_current_buf()
     _G.standalone_pi_job = vim.bo.channel
     assert(vim.bo.buftype == "terminal" and standalone_pi_job > 0)
@@ -137,15 +132,15 @@ local ok, failure = pcall(function()
   lua([[
     assert(vim.bo.channel == standalone_pi_job)
     vim.cmd.stopinsert()
-    require("util.agents").toggle()
+    require("taskbay.terminal").toggle()
     vim.fn.jobstop(standalone_pi_job)
     assert(vim.fn.jobwait({ standalone_pi_job }, 3000)[1] ~= -1)
     vim.env.PATH = original_path
-    vim.t.pi_issue = "test"
+    vim.t.taskbay_workspace = "test"
   ]])
   for _, width in ipairs({ 140, 80 }) do
     rpc("nvim_ui_try_resize", width, 40)
-    lua("require('util.pi_issues_ui').review(workspace)")
+    lua("require('taskbay.review').review(workspace)")
     assert(
       poll(
         5000,
@@ -169,7 +164,7 @@ local ok, failure = pcall(function()
     ]])
   end
   lua([[
-    local ui = require("util.pi_issues_ui")
+    local ui = require("taskbay.ui")
     ui.dashboard()
     local config = vim.api.nvim_win_get_config(0)
     assert(config.relative == "editor" and config.width <= vim.o.columns - 4)
@@ -177,7 +172,7 @@ local ok, failure = pcall(function()
     vim.cmd.close()
   ]])
   rpc("nvim_ui_try_resize", 140, 40)
-  lua("require('util.pi_issues_ui').dashboard()")
+  lua("require('taskbay.ui').dashboard()")
   rpc("nvim_ui_try_resize", 80, 24)
   lua([[
     local config = vim.api.nvim_win_get_config(0)
@@ -186,39 +181,56 @@ local ok, failure = pcall(function()
     vim.cmd.close()
   ]])
   lua([[
-    local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
-    _G.original_repository, _G.original_run, _G.original_launch = core.repository, core.run, ui.launch
-    core.repository = function()
-      return { root = workspace.path, host = "github.com", repo = "test/repo", default_branch = "main" }
+    local core, ui = require("taskbay.core"), require("taskbay.ui")
+    _G.original_repository, _G.original_run, _G.original_import = core.repository, core.run, require("taskbay.remote").import_issues
+    core.repository = function(root, kind)
+      if kind == "local" then return original_repository(root, kind) end
+      return { source = "github", root = workspace.path, host = "github.com", repo = "test/repo", default_branch = "main" }
     end
     core.run = function(argv, ...)
       if argv[1] == "gh" then
         return { code = 0, stdout = vim.json.encode({
-          { number = 1, title = "First issue" }, { number = 2, title = "Second issue" }, { number = 3, title = "Third issue" },
+          { number = 1, title = "First issue", labels = { { name = "bug" } }, state = "closed" },
+          { number = 2, title = "Second issue" }, { number = 3, title = "Third issue" },
         }) }
       end
       return original_run(argv, ...)
     end
-    ui.launch = function(repo, issues) _G.selected_issues = { repo = repo.repo, issues = issues } end
+    require("taskbay.remote").import_issues = function(repo, issues) _G.selected_issues = { repo = repo.repo, issues = issues } end
     ui.dashboard()
     _G.issue_dashboard_win = vim.api.nvim_get_current_win()
   ]])
-  lua("vim.cmd.close(); require('util.pi_issues_ui').tasks('github')")
+  lua("vim.cmd.close(); require('taskbay.remote').import_picker()")
   assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
   lua([[
-    local editor = require("util.pi_issue_edit")
+    local editor = require("taskbay.editor")
     local open = editor.open
     local viewed
     editor.open = function(target) viewed = target end
     local picker = Snacks.picker.get()[1]
     local issue = picker:current()
+    local first = vim.tbl_filter(function(item) return item.number == 1 end, picker:items())[1]
+    assert(first.text:find("[bug]", 1, true) and first.text:find("(closed)", 1, true), "Rows show labels and state")
     picker.opts.actions.view_issue(picker)
     assert(viewed and viewed.number == issue.number and viewed.repo == "test/repo")
     assert(viewed.path == workspace.path and viewed.host == "github.com")
     editor.open = open
-    require("util.pi_issues_ui").tasks("github")
+    require("taskbay.remote").import_picker()
   ]])
   assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
+  lua([[
+    local fields = require("taskbay.fields")
+    local open, seen = fields.open, nil
+    fields.open = function(target) seen = target end
+    local picker = Snacks.picker.get()[1]
+    picker.opts.actions.view_fields(picker)
+    fields.open = open
+    assert(seen and seen.repo == "test/repo", "Ctrl-f opens the issue's Fields tab")
+    require("taskbay.remote").import_picker()
+  ]])
+  assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
+  lua("local picker = Snacks.picker.get()[1]; picker.opts.actions.more_issues(picker)")
+  assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end), "Ctrl-l reloads with more issues")
   lua(
     "assert(not vim.api.nvim_win_is_valid(issue_dashboard_win), 'GitHub picker replaces the workspace panel')"
   )
@@ -232,12 +244,12 @@ local ok, failure = pcall(function()
   lua([[
     assert(selected_issues.repo == "test/repo" and #selected_issues.issues == 2)
     assert(selected_issues.issues[1].number ~= selected_issues.issues[2].number)
-    local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
-    ui.tasks("github")
+    local core, ui = require("taskbay.core"), require("taskbay.ui")
+    require("taskbay.remote").import_picker()
   ]])
   assert(poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end))
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     core.repository = function() error("Server search must retain the selected repository") end
     core.input = function()
       _G.search_thread = coroutine.running()
@@ -252,21 +264,27 @@ local ok, failure = pcall(function()
     "Server search must keep its original repository across asynchronous input"
   )
   lua([[
-    local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
+    local core, ui = require("taskbay.core"), require("taskbay.ui")
     Snacks.picker.get()[1]:close()
-    core.repository, core.run, ui.launch = original_repository, original_run, original_launch
+    core.repository, core.run, require("taskbay.remote").import_issues = original_repository, original_run, original_import
     core.workspaces.second = vim.tbl_extend("force", workspace, { id = "second", number = 43, title = "Second issue" })
     ui.dashboard()
-    vim.api.nvim_win_set_cursor(0, { 7, 0 })
+    vim.api.nvim_win_set_cursor(0, { 5, 0 })
     core.workspaces.earlier = vim.tbl_extend("force", workspace, { id = "earlier", number = 1, title = "Inserted issue" })
     core.changed()
     local row = vim.api.nvim_win_get_cursor(0)[1]
     assert(vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]:find("#43", 1, true),
       "Live refresh must preserve the selected workspace, not its old row")
+    -- The header names agents waiting for an answer only when there are any.
+    core.jobs.second = { activity = "waiting" }
+    core.changed()
+    local header = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+    assert(header:find("1 of 3 agents running  ·  1 waiting for you  ·  3 tasks", 1, true), header)
+    core.jobs.second = nil
     vim.cmd.close()
   ]])
   lua([[
-    local core, ui = require("util.pi_issues"), require("util.pi_issues_ui")
+    local core, ui = require("taskbay.core"), require("taskbay.ui")
     core.repository = function()
       return { root = workspace.path, task_root = workspace.path, source = "local", host = "local", repo = "test/empty" }
     end
@@ -277,34 +295,26 @@ local ok, failure = pcall(function()
     ui.dashboard()
     _G.empty_dashboard_win = vim.api.nvim_get_current_win()
   ]])
-  rpc("nvim_input", "i")
-  assert(
-    poll(3000, function() return lua("return Snacks.picker.get()[1] ~= nil") end),
-    "An empty repository must leave a visible issue picker instead of silently closing"
-  )
   lua([[
-    local picker = Snacks.picker.get()[1]
-    assert(picker:count() == 0 and picker.opts.title == "No local tasks / test/empty")
-    assert(not vim.api.nvim_win_is_valid(empty_dashboard_win))
-    local footers = {}
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      footers[#footers + 1] = vim.inspect(vim.api.nvim_win_get_config(win).footer)
-    end
-    assert(table.concat(footers):find("Ctrl-n", 1, true), "New-task controls must actually be visible")
+    assert(vim.api.nvim_win_is_valid(empty_dashboard_win), "The empty panel must stay open before creating")
+    assert(vim.fn.maparg("i", "n", false, true).buffer ~= nil, "i must stay a panel key")
   ]])
-  rpc("nvim_input", "<C-\\><C-n>?")
+  rpc("nvim_input", "?")
   assert(poll(3000, function()
     return lua([[
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
-        if table.concat(lines, "\n"):find("Ctrl-n: create a local task", 1, true) then return true end
+        if table.concat(lines, "\n"):find("n  new task", 1, true) then return true end
       end
       return false
     ]])
   end), "The visible help shortcut must open actionable task help")
-  rpc("nvim_input", "q<C-n>")
+  rpc("nvim_input", "q n")
   assert(poll(3000, function() return lua("return vim.bo.buftype == 'acwrite'") end),
-    "Ctrl-n must open an editable blank task from an empty picker")
+    "n must open an editable blank task from an empty workspace panel")
+  lua([[
+    assert(not vim.api.nvim_win_is_valid(empty_dashboard_win), "Creating a task closes the empty panel")
+  ]])
   lua([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "# ")
   ]])
@@ -312,14 +322,31 @@ local ok, failure = pcall(function()
     "A blank task must be ready for typing its title")
   rpc("nvim_input", "My self-written task<CR><CR>My own instructions.<Esc>:write<CR>")
   assert(poll(3000, function()
-    return lua("return vim.b.pi_issue_draft ~= nil and vim.b.pi_issue_draft.target.source == 'local'")
+    return lua("return vim.b.taskbay_task ~= nil and vim.b.taskbay_task.target.source == 'local'")
   end), "A user must be able to type and save a new task using normal editor keys")
   lua([[
-    local task = require("util.pi_tasks").get(vim.b.pi_issue_draft.target)
+    local task = require("taskbay.store").get(vim.b.taskbay_task.target)
     assert(task.title == "My self-written task" and task.body:find("My own instructions.", 1, true))
     assert(not task.body:find("Acceptance criteria", 1, true), "Do not insert a predefined task")
     assert(not vim.bo.modified and vim.bo.buftype == "")
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
+    core.repository, core.run = original_repository, original_run
+  ]])
+  lua([[
+    local core = require("taskbay.core")
+    core.repository = function() return { root = workspace.path, host = "github.com", repo = "test/none" } end
+    core.run = function(argv, ...)
+      if argv[1] == "gh" then return { code = 0, stdout = "[]" } end
+      return original_run(argv, ...)
+    end
+    require("taskbay.remote").import_picker()
+  ]])
+  assert(poll(3000, function()
+    return lua("local p = Snacks.picker.get()[1]; return p ~= nil and p.opts.title:find('No open issues', 1, true) ~= nil")
+  end), "An empty import says there are no open issues")
+  lua([[
+    Snacks.picker.get()[1]:close()
+    local core = require("taskbay.core")
     core.repository, core.run = original_repository, original_run
   ]])
 end)
@@ -332,5 +359,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi UI: diff geometry, live resizing, multiselection, scoped search and dashboard refresh passed")
+print("taskbay layout: diff geometry, live resizing, multiselection, scoped search and dashboard refresh passed")
 vim.cmd("qa!")

@@ -1,21 +1,35 @@
 -- The Fields tab is the advanced half of a task. The Task buffer shows the
 -- minimal view (title, Markdown body, relations); Fields edits labels,
 -- assignees, milestone, state and relations and shows read-only issue data.
--- Local tasks store everything in the '.tasks/NNN.json' sidecar; GitHub drafts
+-- Local tasks store everything in the '.tasks/NNN.json' sidecar; remote drafts
 -- overlay edits onto the baseline snapshot, so nothing from the original issue
--- is ever dropped or mutated.
+-- is ever dropped or mutated. Issues arrive normalised by their driver (taskbay/remotes).
 local M = {}
-local core = require("util.pi_issues")
-local tasks = require("util.pi_tasks")
+local core = require("taskbay.core")
+local tasks = require("taskbay.store")
 
 local KINDS = { "relates", "blocks", "blocked_by", "duplicate_of" }
 local KIND_TEXT = { relates = "relates", blocks = "blocks", blocked_by = "blocked by", duplicate_of = "duplicate of" }
 local KIND_OF = { relates = "relates", blocks = "blocks", ["blocked-by"] = "blocked_by", ["duplicate-of"] = "duplicate_of" }
 local STATE = { open = true, closed = true, [""] = true }
 
-local function editor() return require("util.pi_issue_edit") end
-local function identity(target) return tasks.identity(target) end
-local ns = vim.api.nvim_create_namespace("pi_issue_relations")
+local function editor() return require("taskbay.editor") end
+local identity = tasks.identity
+
+-- Read-only issue data shown below the editable fields (a normalised issue's details).
+local function readonly(origin, issue)
+  return { origin = origin, author = issue.author, created_at = issue.created_at, updated_at = issue.updated_at,
+    closed_at = issue.closed_at, comments = issue.comments }
+end
+
+-- Task buffers (Task tab) showing this target.
+local function task_bufs(target)
+  return vim.tbl_filter(function(buf)
+    local draft = vim.b[buf].taskbay_task
+    return draft and draft.target and identity(draft.target) == identity(target) or false
+  end, vim.api.nvim_list_bufs())
+end
+local ns = vim.api.nvim_create_namespace("taskbay_relations")
 
 -- Normalised, editable view of a target's issue data. `write(values)` persists
 -- the edited fields; everything outside the editable keys keeps its storage.
@@ -26,17 +40,14 @@ function M.fields(target)
   }
   if target.source == "local" then
     local meta = tasks.get_meta(target)
-    local issue = meta.issue or {}
     fields.labels = meta.labels or {}
     fields.assignees = meta.assignees or {}
     fields.milestone = meta.milestone
-    fields.state = meta.state or "open"
+    fields.state = (meta.state or "open"):lower() -- tasks imported before state was normalised hold OPEN
     fields.relations = meta.relations or {}
-    fields.readonly = {
-      origin = meta.origin, author = issue.author and issue.author.login,
-      created_at = issue.createdAt, updated_at = issue.updatedAt, closed_at = issue.closedAt,
-      comments = issue.comments and #issue.comments,
-    }
+    -- Imports from before the tracker drivers kept only GitHub's raw issue; read details from it.
+    local details = meta.details or (meta.issue and tasks.remote("github").normalise(meta.issue)) or {}
+    fields.readonly = readonly(meta.origin, details)
     fields.write = function(values)
       local raw = tasks.get_meta(target) -- keep the snapshot and any custom keys
       raw.labels, raw.assignees, raw.milestone, raw.state, raw.relations =
@@ -46,26 +57,15 @@ function M.fields(target)
     return fields
   end
   local _, baseline_path = editor().paths(target)
-  local names = function(list, key)
-    return vim.tbl_map(function(entry) return entry[key] or tostring(entry) end, list or {})
-  end
-  local function read()
-    return vim.json.decode(table.concat(vim.fn.readfile(baseline_path), "\n"))
-  end
-  local base = read()
-  local issue, overlay = base.issue or {}, base.fields or {}
-  fields.labels = overlay.labels or names(issue.labels, "name")
-  fields.assignees = overlay.assignees or names(issue.assignees, "login")
-  fields.milestone = overlay.milestone ~= nil and overlay.milestone or (issue.milestone and issue.milestone.title)
-  fields.state = overlay.state or issue.state or "open"
-  fields.relations = overlay.relations or {}
-  fields.readonly = {
-    origin = tasks.identity(target), author = issue.author and issue.author.login,
-    created_at = issue.createdAt, updated_at = issue.updatedAt, closed_at = issue.closedAt,
-    comments = issue.comments and #issue.comments,
-  }
+  local base = core.read_json(baseline_path)
+  local issue = base.issue or {}
+  -- Saved Fields replace the issue's values as a whole (a cleared milestone stays cleared).
+  local saved = base.fields or issue
+  fields.labels, fields.assignees, fields.milestone = saved.labels or {}, saved.assignees or {}, saved.milestone
+  fields.state, fields.relations = saved.state or "open", saved.relations or {}
+  fields.readonly = readonly(identity(target), issue)
   fields.write = function(values)
-    base = read()
+    base = core.read_json(baseline_path)
     base.fields = { labels = values.labels, assignees = values.assignees,
       milestone = values.milestone, state = values.state, relations = values.relations }
     core.write(baseline_path, vim.json.encode(base))
@@ -164,12 +164,12 @@ end
 
 function M.open(target)
   target = target or core.current()
-  if not target then return vim.notify("Choose a task with Space a i first", vim.log.levels.WARN) end
+  if not target then return vim.notify("Choose a task in " .. core.key("panel") .. " first", vim.log.levels.WARN) end
   if target.source ~= "local" then
-    -- GitHub fields live on the draft's baseline; make sure it exists first.
+    -- A remote draft's fields live on its baseline; make sure it exists first.
     local _, baseline = editor().paths(target)
     if not vim.uv.fs_stat(baseline) then
-      return vim.notify("Open the draft first with Space a v; its Fields tab follows then", vim.log.levels.INFO)
+      return vim.notify("Open the issue first (Ctrl-o in the import picker); its Fields tab follows then", vim.log.levels.INFO)
     end
   end
   core.task(function()
@@ -181,7 +181,7 @@ function M.open(target)
       buf = vim.api.nvim_create_buf(true, false)
       vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = "acwrite", "hide", false
       vim.api.nvim_buf_set_name(buf, name)
-      vim.b[buf].pi_fields_for = identity(target)
+      vim.b[buf].taskbay_fields_for = identity(target)
       vim.api.nvim_create_autocmd("BufWriteCmd", {
         buffer = buf,
         callback = function()
@@ -193,14 +193,9 @@ function M.open(target)
             fields.write(values)
             vim.bo[buf].modified = false
             vim.notify("Saved fields for " .. tasks.label(target), vim.log.levels.INFO)
-            for _, probe in ipairs(vim.api.nvim_list_bufs()) do
-              local draft = vim.b[probe].pi_issue_draft
-              if draft and draft.target and tasks.identity(draft.target) == tasks.identity(target) then
-                M.decorate(probe, target)
-              end
-            end
+            for _, probe in ipairs(task_bufs(target)) do M.decorate(probe, target) end
             for _, workspace in pairs(core.workspaces) do
-              if tasks.identity(workspace) == tasks.identity(target) then core.changed() end
+              if identity(workspace) == identity(target) then core.changed() end
             end
           end)
         end,
@@ -213,10 +208,9 @@ function M.open(target)
     vim.bo[buf].filetype = "text"
     vim.api.nvim_set_current_buf(buf)
     -- Tab flips back to the Task tab, matching Tab in the Task tab; q also returns.
-    vim.wo.winbar = " \u{f02c} Fields | :write save | Space ag start | Tab task | q back to the task "
+    vim.wo.winbar = " \u{f02c} Fields  ·  :write save  ·  Tab task  ·  q back "
     vim.keymap.set("n", "q", function() M.close(target) end, { buffer = buf, nowait = true })
     vim.keymap.set("n", "<Tab>", function() M.close(target) end, { buffer = buf, nowait = true, desc = "Task Tab" })
-    vim.keymap.set("n", "<leader>af", function() M.close(target) end, { buffer = buf, desc = "Back to Task" })
   end)
 end
 
@@ -225,12 +219,8 @@ end
 function M.close(target)
   target = target or core.current()
   assert(target, "Return to a task with the Task/Fields tabs open")
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    local draft = vim.b[buf].pi_issue_draft
-    if draft and draft.target and tasks.identity(draft.target) == identity(target) then
-      return vim.api.nvim_set_current_buf(buf)
-    end
-  end
+  local buf = task_bufs(target)[1]
+  if buf then return vim.api.nvim_set_current_buf(buf) end
   editor().open(target)
 end
 

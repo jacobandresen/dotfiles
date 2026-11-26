@@ -10,7 +10,10 @@ import unittest
 
 class PiExtensionTest(unittest.TestCase):
     def configure_agent(self, directory, root):
-        source = root.parent / "pi/agent"
+        # The pi settings template and local models: TASKBAY_PI_AGENT_DIR, else the dotfiles' pi/agent.
+        source = Path(os.environ.get("TASKBAY_PI_AGENT_DIR", root.parents[1] / "pi/agent"))
+        if not (source / "settings.json.template").exists():
+            self.skipTest(f"no pi settings template in {source}")
         settings = json.loads((source / "settings.json.template").read_text())
         (Path(directory) / "settings.json").write_text(json.dumps(settings))
         (Path(directory) / "models.json").write_text((source / "models.json").read_text())
@@ -37,13 +40,12 @@ class PiExtensionTest(unittest.TestCase):
             self.assertEqual(marker.read_text(), "ok")
 
     def test_cancelled_editor_exit_preserves_jobs(self):
-        repository = Path(__file__).resolve().parents[2]
         for choice, dirty in [("1", "no"), ("2", "yes"), ("2", "task")]:
             with self.subTest(choice=choice, dirty=dirty), tempfile.TemporaryDirectory(prefix="pi-exit-test-") as directory:
                 result = subprocess.run(
-                    ["nvim", "--headless", "-u", "NONE", "-i", "NONE", "-l", "nvim/tests/pi_exit.lua"],
-                    env={**os.environ, "PI_EXIT_TEST_DIR": directory, "PI_EXIT_CHOICE": choice, "PI_EXIT_DIRTY": dirty},
-                    cwd=repository, capture_output=True, text=True, timeout=10,
+                    ["nvim", "--headless", "-u", "NONE", "-i", "NONE", "-l", str(Path(__file__).resolve().parent / "exit.lua")],
+                    env={**os.environ, "TASKBAY_EXIT_TEST_DIR": directory, "TASKBAY_EXIT_CHOICE": choice, "TASKBAY_EXIT_DIRTY": dirty},
+                    cwd=directory, capture_output=True, text=True, timeout=10,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((Path(directory) / "result").read_text().strip(), "preserved")
@@ -62,7 +64,7 @@ class PiExtensionTest(unittest.TestCase):
             }
             result = subprocess.run(
                 ["pi", "--mode", "rpc", "--offline", "-na", "-ne", "-ns", "-np",
-                 "--session-id", "issue-offline-test", "--no-mcp", "-e", str(root / "pi/extension.ts")],
+                 "--session-id", "issue-offline-test", "--no-mcp", "-e", str(root / "agents/pi/extension.ts")],
                 input='{"type":"get_commands","id":"probe"}\n',
                 text=True, capture_output=True, timeout=30, cwd=directory, env=environment,
             )

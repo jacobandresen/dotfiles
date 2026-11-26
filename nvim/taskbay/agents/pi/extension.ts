@@ -27,7 +27,7 @@ export default async function (pi: ExtensionAPI) {
       version: 1, run, sequence: ++sequence, activity: waiting ? "waiting" : activity,
       outcome, cwd: ctx.cwd, session: ctx.sessionManager.getSessionId(),
       session_file: ctx.sessionManager.getSessionFile(),
-      model: expectedModel ?? "unavailable",
+      model: expectedModel, // omitted while pi has no model yet
     };
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, JSON.stringify(snapshot), { mode: 0o600 });

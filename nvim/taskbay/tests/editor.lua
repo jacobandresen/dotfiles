@@ -1,16 +1,18 @@
--- Run: timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issue_edit.lua
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nvim")
-local core = require("util.pi_issues")
-local editor = require("util.pi_issue_edit")
+-- Run: timeout 30 nvim --headless -u NONE -i NONE -l tests/editor.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+vim.opt.rtp:prepend(plugin)
+vim.g.mapleader = " "
+local core = require("taskbay.core")
+local editor = require("taskbay.editor")
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp, "p")
-vim.g.pi_issues = { state_dir = temp .. "/state", github_enabled = true }
+vim.g.taskbay = { state_dir = temp .. "/state", remote_enabled = true }
 local messages, edits = {}, {}
 vim.notify = function(message) messages[#messages + 1] = tostring(message) end
 local target = { id = "test", host = "github.com", repo = "test/repo", number = 42, path = temp }
 local other = vim.tbl_extend("force", target, { id = "other", number = 43 })
 core.workspaces[target.id], core.workspaces[other.id] = target, other
-vim.t.pi_issue = target.id
+vim.t.taskbay_workspace = target.id
 local remote = { title = "Original issue", body = "Original body", url = "https://github.com/test/repo/issues/42",
   labels = { { name = "bug" }, { name = "cli" } }, state = "open", milestone = { title = "v1" },
   comments = { { author = { login = "jacob" }, body = "Original comment" } } }
@@ -43,7 +45,7 @@ local ok, failure = pcall(function()
   editor.open()
   local buf = vim.api.nvim_get_current_buf()
   local path = vim.api.nvim_buf_get_name(buf)
-  assert(vim.b[buf].pi_issue_draft.target.number == 42)
+  assert(vim.b[buf].taskbay_task.target.number == 42)
   assert(lines(buf)[1] == "# Original issue" and lines(buf)[3] == "Original body")
   assert(#edits == 0 and not next(core.jobs), "Viewing an issue must not publish or start agents")
   local body = 'Acceptance criteria:\n"quotes" and --flags stay literal.'
@@ -58,12 +60,12 @@ local ok, failure = pcall(function()
   assert(#edits == 1 and edits[1].body == body, "Publish the Markdown body through stdin")
   assert(remote.title == "Revised issue" and target.title == "Revised issue")
   assert(other.title == nil, "Publishing one issue must not retitle another")
-  assert(vim.b[buf].pi_issue_draft.body == body, "Advance the conflict baseline after publishing")
+  assert(vim.b[buf].taskbay_task.body == body, "Advance the conflict baseline after publishing")
   local baseline = vim.json.decode(table.concat(
     vim.fn.readfile(temp .. "/state/issue-drafts/" .. vim.fn.sha256("github.com/test/repo#42")
       .. "/baseline.json"), "\n"))
-  assert(baseline.issue and baseline.issue.labels[1].name == "bug" and baseline.issue.comments[1].body
-    == "Original comment" and baseline.issue.milestone.title == "v1",
+  assert(baseline.issue and baseline.issue.raw.labels[1].name == "bug" and baseline.issue.raw.comments[1].body
+    == "Original comment" and baseline.issue.raw.milestone.title == "v1" and baseline.issue.milestone == "v1",
     "Publishing must keep the full original issue snapshot in the local draft")
 
   remote.body = "Someone else's edit"
@@ -106,10 +108,14 @@ local ok, failure = pcall(function()
     assert(channel == 123)
     sent = text
   end
-  vim.t.pi_issue = other.id
-  expect_message(function() editor.agent(buf) end, "Switch to this task's workspace")
+  vim.t.taskbay_workspace = other.id
+  expect_message(function() editor.agent(buf) end, "Switch to this task's tab first")
+  local own = core.workspaces[target.id]
+  core.workspaces[target.id] = nil
+  expect_message(function() editor.agent(buf) end, "Start this task from Space a w")
+  core.workspaces[target.id] = own
   assert(not sent, "Never send an issue draft to another issue's agent")
-  vim.t.pi_issue = target.id
+  vim.t.taskbay_workspace = target.id
   request = nil
   editor.agent(buf)
   assert(not sent, "Cancelled revision instructions must not reach pi")
@@ -117,13 +123,13 @@ local ok, failure = pcall(function()
   vim.api.nvim_buf_set_lines(buf, 2, -1, false, { "Unsaved draft body" })
   editor.agent(buf)
   assert(shown == target and sent:find(vim.json.encode(path), 1, true))
-  assert(sent:find("Do not publish to GitHub", 1, true) and sent:find(request, 1, true))
+  assert(sent:find("Do not publish the issue", 1, true) and sent:find(request, 1, true))
   assert(not vim.bo[buf].modified and vim.fn.readfile(path)[3] == "Unsaved draft body",
     "Save local edits before asking pi to revise them")
   local count = #edits
   assert(count == 2, "Requesting agent revisions must not edit the live issue")
   core.jobs[target.id].exited = true
-  expect_message(function() editor.agent(buf) end, "Start this task's pi")
+  expect_message(function() editor.agent(buf) end, "Start this task's agent")
   vim.api.nvim_chan_send = send
 
   core.run = run
@@ -140,5 +146,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi issue drafts: local edits, confirmed publication, conflicts, reload and agent routing passed")
+print("taskbay editor: local edits, confirmed publication, conflicts, reload and agent routing passed")
 vim.cmd("qa!")

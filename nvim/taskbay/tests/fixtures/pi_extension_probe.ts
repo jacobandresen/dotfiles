@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import extension from "../../pi/extension.ts";
+import extension from "../../agents/pi/extension.ts";
 
 export default async function (pi: ExtensionAPI) {
   const handlers = new Map<string, Function[]>();

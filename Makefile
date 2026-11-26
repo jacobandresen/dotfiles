@@ -118,18 +118,12 @@ ram-profile:
 doctor:
 	@$(CLI) doctor
 
-# Offline Neovim/pi task suite; pi_e2e drives the real config with keystrokes.
-PI_LUA_TESTS := pi_tasks pi_issues pi_issue_edit pi_issue_fields pi_task_copy pi_task_delete pi_layout pi_e2e
+# Offline suite of the taskbay plugin (nvim/taskbay); its e2e tests drive this config.
 test-pi:
-	@test -f nvim/pi/node_modules/pi-subagents/bundle/index.js || \
-		{ echo "Pinned pi extension missing: run :PiTaskSetup (or cd nvim/pi && npm ci --ignore-scripts --omit=dev)"; exit 1; }
-	@for test in $(PI_LUA_TESTS); do \
-		timeout 180 nvim --headless -u NONE -i NONE -l nvim/tests/$$test.lua || exit 1; echo; \
-	done
-	@timeout 180 $(PYTHON) nvim/tests/pi_extension.py
+	@nvim --headless -u NONE -i NONE -l nvim/taskbay/tests/run.lua
 
 # Opt-in: real pi + pinned extension + a local model (default from pi/agent/settings.json.template).
 # PI_REAL_MODEL=ollama/<id> picks another local model; PI_REAL_TIMEOUT is in seconds.
 PI_REAL_TIMEOUT ?= 1800
 test-pi-real:
-	@PI_REAL_TIMEOUT=$(PI_REAL_TIMEOUT) timeout $$(($(PI_REAL_TIMEOUT) + 120)) nvim --headless -u NONE -i NONE -l nvim/tests/pi_real.lua
+	@PI_REAL_TIMEOUT=$(PI_REAL_TIMEOUT) timeout $$(($(PI_REAL_TIMEOUT) + 120)) nvim --headless -u NONE -i NONE -l nvim/taskbay/tests/real.lua

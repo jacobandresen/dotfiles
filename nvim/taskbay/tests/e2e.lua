@@ -1,8 +1,8 @@
 -- End-to-end: write tasks, pick three, run three pi agents at once, using the real
 -- LazyVim config and real keystrokes. pi is replaced by a scripted, offline stand-in.
--- Run from the repository root: timeout 180 nvim --headless -u NONE -i NONE -l nvim/tests/pi_e2e.lua
+-- Run: timeout 180 nvim --headless -u NONE -i NONE -l tests/e2e.lua
 local uv = vim.uv
-local H = dofile(vim.fn.getcwd() .. "/nvim/tests/pi_harness.lua")()
+local H = dofile(vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h") .. "/harness.lua")()
 local repo, release, sh, lua, keys, wait_for, pick, step, agents, boot =
   H.repo, H.release, H.sh, H.lua, H.keys, H.wait_for, H.pick, H.step, H.agents, H.boot
 
@@ -13,8 +13,19 @@ local tasks = {
   { title = "Fourth queued task", body = "Waits for a free agent slot. [no changes]" },
 }
 
-H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, revised, stopped, resumed, finished and merged, quit and restored", function()
+H.run("taskbay e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, revised, stopped, resumed, finished and merged, quit and restored", function()
   boot()
+
+  step("an error prompt is reported instead of hanging the harness")
+  keys(":lua error('e2e-prompt')<CR>")
+  assert(vim.wait(30000, function() return H.rpc("nvim_get_mode").blocking end, 50), "The error must raise a prompt")
+  -- Only the deferred request gets a short timeout; the slow traced editor needs longer for the rest.
+  local rpc_timeout = H.opts.rpc_timeout
+  H.opts.rpc_timeout = 1000
+  local ok, err = pcall(lua, "return 1")
+  H.opts.rpc_timeout = rpc_timeout
+  assert(not ok and err:find("blocked at a prompt", 1, true) and err:find("e2e-prompt", 1, true), err)
+  assert(lua("return 2") == 2, "The editor answers again once the prompt is dismissed")
 
   step("write three tasks with Space a n")
   for index = 1, 3 do
@@ -26,14 +37,14 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     ]])
     keys(task.title .. "<CR><CR>" .. task.body .. "<Esc>:write<CR>")
     wait_for("Writing task " .. index .. " must create it", [[
-      local info = vim.b.pi_issue_draft
+      local info = vim.b.taskbay_task
       return info ~= nil and info.target.number == ... and vim.bo.buftype == "" and not vim.bo.modified
     ]], 8000, index)
   end
-  step("write a fourth task with :PiTaskNew")
-  keys("<Esc>:PiTaskNew " .. tasks[4].title .. "<CR>")
-  wait_for(":PiTaskNew <title> must create and open task 4",
-    "return vim.b.pi_issue_draft ~= nil and vim.b.pi_issue_draft.target.number == 4")
+  step("write a fourth task with :TaskbayNew")
+  keys("<Esc>:TaskbayNew " .. tasks[4].title .. "<CR>")
+  wait_for(":TaskbayNew <title> must create and open task 4",
+    "return vim.b.taskbay_task ~= nil and vim.b.taskbay_task.target.number == 4")
   keys("Go<CR>" .. tasks[4].body .. "<Esc>:write<CR>")
   wait_for("Saving task 4 must keep the body", "return not vim.bo.modified")
   local files = vim.fn.readdir(repo .. "/.tasks")
@@ -50,7 +61,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   wait_for("Written tasks appear in Space a w before they start", [[
     local lines = e2e.float_lines("Task Workspaces") or {}
     local text = table.concat(lines, "\n")
-    if not text:find("0 workspaces    4 new", 1, true) then return false end
+    if not text:find("0 of 3 agents running  ·  4 tasks", 1, true) then return false end
     for number = 1, 4 do
       local row = e2e.dashboard_row(number)
       if not row or not lines[row]:find(" new ", 1, true) then return false end
@@ -62,20 +73,17 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     "return _G.e2e_messages[#_G.e2e_messages]:find('Not started yet', 1, true) ~= nil")
   keys("q")
 
-  step("pick three tasks with Space a i and Tab, then start them")
-  keys("<Esc><Space>ai")
-  wait_for("Space a i must list the four local tasks",
-    "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 4")
-  keys("<Tab><Tab><Tab>")
-  wait_for("Tab must select three tasks", "return #Snacks.picker.get()[1]:selected() == 3")
-  lua([[
-    local numbers = {}
-    for _, item in ipairs(Snacks.picker.get()[1]:selected()) do numbers[#numbers + 1] = item.number end
-    table.sort(numbers)
-    assert(vim.deep_equal(numbers, { 1, 2, 3 }), vim.inspect(numbers))
-  ]])
-  keys("<CR>")
-  lua([[assert(not e2e.prompt_open() and not e2e.float_lines("Review Task Launch"), "Enter starts without prompts")]])
+  step("start three tasks from the workspace panel")
+  for number = 1, 3 do
+    keys("<C-\\><C-n><Esc><Space>aw")
+    wait_for("Workspace panel must list task " .. number, "return e2e.dashboard_row(" .. number .. ") ~= nil")
+    lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(" .. number .. "), 0 })")
+    keys("p")
+    wait_for("Task " .. number .. " must start from the workspace panel", [[
+      local job = e2e.job(...)
+      return job ~= nil and not job.exited and job.activity == "working"
+    ]], 15000, number)
+  end
   wait_for("Three pi agents must be working at the same time", [[
     for number = 1, 3 do
       local job = e2e.job(number)
@@ -83,8 +91,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     end
     return e2e.live() == 3
   ]], 15000)
-  wait_for("Launch must report three started",
-    "return table.concat(_G.e2e_messages, '\\n'):find('3 prepared; 3 started', 1, true) ~= nil")
+  lua([[assert(not e2e.prompt_open(), "Starting from the panel shows no prompts")]])
 
   step("check isolation of the three running agents")
   local started = {}
@@ -109,12 +116,12 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     assert(sh({ "git", "branch", "--show-current" }, event.cwd) == "task/" .. number)
   end
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local tabs = vim.api.nvim_list_tabpages()
     assert(#tabs == 4, "One code tab per task plus the original: " .. #tabs)
     local owned = {}
     for _, tab in ipairs(tabs) do
-      local id = vim.t[tab].pi_issue
+      local id = vim.t[tab].taskbay_workspace
       if id then
         owned[core.workspaces[id].number] = true
         local terminal = false
@@ -137,54 +144,49 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   wait_for("Space a w must open the dashboard", "return e2e.float_lines('Task Workspaces') ~= nil")
   lua([[
     local text = table.concat(e2e.float_lines("Task Workspaces"), "\n")
-    assert(text:find("3 active / 3 slots", 1, true), text)
+    assert(text:find("3 of 3 agents running", 1, true), text)
     for number = 1, 3 do
       assert(e2e.float_lines("Task Workspaces")[e2e.dashboard_row(number)]:find("working", 1, true), text)
     end
   ]])
   keys("q")
 
-  step("Space a a and dashboard digits jump to a running task's pi")
-  keys("<Esc><Space>aa")
-  wait_for("Space a a lists the running tasks", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 3")
-  pick("3-add", "project/3-add")
+  step("Enter and dashboard digits jump to a running task's pi")
+  keys("<Esc><Space>aw")
+  wait_for("Workspace panel lists task 3", "return e2e.dashboard_row(3) ~= nil")
+  lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(3), 0 })")
+  wait_for("The footer follows the selected running task", [[
+    local _, win = e2e.float_lines("Task Workspaces")
+    return vim.inspect(vim.api.nvim_win_get_config(win).footer):find("x stop", 1, true) ~= nil
+  ]])
+  keys("<CR>")
   wait_for("Enter jumps into task 3's pi terminal", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     return core.current() == e2e.by_number(3) and vim.api.nvim_get_current_buf() == e2e.job(3).buf
   ]])
   keys("<C-\\><C-n><Space>aw")
-  wait_for("Dashboard numbers its rows", "local row = e2e.dashboard_row(2); return row ~= nil and e2e.float_lines('Task Workspaces')[row]:match('^ 2 ') ~= nil")
+  wait_for("Dashboard numbers its rows", [[
+    local lines, win = e2e.float_lines("Task Workspaces")
+    local row = e2e.dashboard_row(2)
+    return row ~= nil and lines[row]:match("^ 2 ") ~= nil and win == vim.api.nvim_get_current_win()
+  ]])
   keys("2")
   wait_for("2 jumps into task 2's pi terminal", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     return core.current() == e2e.by_number(2) and vim.api.nvim_get_current_buf() == e2e.job(2).buf
       and not e2e.float_lines("Task Workspaces")
   ]])
   keys("<C-\\><C-n>")
 
   step("a fourth task is prepared but must wait for a slot")
-  keys("<Esc><Space>ai")
-  wait_for("Picker must reopen", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 4")
-  keys("Fourth")
-  wait_for("Search must narrow to task 4", [[
-    local p = Snacks.picker.get()[1]
-    return p:current() ~= nil and p:current().number == 4 and #p:selected() == 0
-  ]])
-  keys("<C-b>")
-  wait_for("Ctrl-b must ask for the base ref", "return e2e.prompt_open()")
-  keys("<CR>")
-  wait_for("Ctrl-b must show the launch review", "return e2e.float_lines('Review Task Launch') ~= nil")
-  lua([[
-    local text = table.concat(e2e.float_lines("Review Task Launch"), "\n")
-    for _, needle in ipairs({ "Base: HEAD", "/task-4", "task/4", "Fourth queued task", "Limit: 3" }) do
-      assert(text:find(needle, 1, true), "Launch review is missing " .. needle .. ":\n" .. text)
-    end
-  ]])
-  keys("s")
+  keys("<C-\\><C-n><Esc><Space>aw")
+  wait_for("Workspace panel must list task 4", "return e2e.dashboard_row(4) ~= nil")
+  lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(4), 0 })")
+  keys("p")
   wait_for("The fourth task must be prepared without starting",
-    "return table.concat(_G.e2e_messages, '\\n'):find('1 prepared; 0 started', 1, true) ~= nil")
+    "return table.concat(_G.e2e_messages, '\\n'):find('when a slot is free', 1, true) ~= nil")
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     assert(e2e.live() == 3 and not e2e.job(4), "Never exceed three live agents")
     assert(core.status(e2e.by_number(4)) == "prepared")
     assert(core.current() == e2e.by_number(4), "The prepared task opens its own tab")
@@ -215,7 +217,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     return true
   ]])
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     for number = 1, 3 do
       assert(core.status(e2e.by_number(number)) == "idle")
       assert(core.jobs[e2e.by_number(number).id].model == "e2e/scripted-agent")
@@ -224,68 +226,87 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
 
   step("Space a s sends context to the agent of the current tab only")
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     core.open(e2e.by_number(2))
     vim.cmd.edit(e2e.by_number(2).path .. "/app.py")
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { "# context for task two" })
   ]])
   keys("<Esc><Space>as")
   wait_for("Context must reach agent 2", [[
-    local path = require("util.pi_issues").directory(e2e.by_number(2)) .. "/paste.txt"
+    local path = require("taskbay.core").directory(e2e.by_number(2)) .. "/paste.txt"
     return vim.uv.fs_stat(path) ~= nil and table.concat(vim.fn.readfile(path), "\n"):find("context for task two", 1, true) ~= nil
   ]])
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     for _, number in ipairs({ 1, 3 }) do
       assert(not vim.uv.fs_stat(core.directory(e2e.by_number(number)) .. "/paste.txt"), "Context leaked to " .. number)
     end
   ]])
   keys("<C-\\><C-n>")
 
-  step("Space a e asks the task's own agent to revise its task file")
-  lua("require('util.pi_issues').open(e2e.by_number(3))")
-  keys("<Esc><Space>ae")
-  wait_for("Space a e must open the task and ask for a revision", "return e2e.prompt_open()")
+  step("Space a e in the task file asks the task's own agent to revise it")
+  lua("require('taskbay.core').open(e2e.by_number(3))")
+  keys("<Esc><Space>av")
+  wait_for("Space a v opens task 3's file", "return vim.b.taskbay_task ~= nil and vim.b.taskbay_task.target.number == 3")
+  keys("<Space>ae")
+  wait_for("Space a e must ask for a revision", "return e2e.prompt_open() and vim.fn.mode() == 'i'")
   lua([[
     local shown
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
       local buf = vim.api.nvim_win_get_buf(win)
-      if vim.api.nvim_buf_get_name(buf):find("/.tasks/003-", 1, true) and vim.b[buf].pi_issue_draft then shown = true end
+      if vim.api.nvim_buf_get_name(buf):find("/.tasks/003-", 1, true) and vim.b[buf].taskbay_task then shown = true end
     end
-    assert(shown and vim.t.pi_issue == e2e.by_number(3).id, "Space a e opens the canonical task file in its own tab")
+    assert(shown and vim.t.taskbay_workspace == e2e.by_number(3).id, "The canonical task file opens in its own tab")
   ]])
-  keys("Split it into two steps<CR>")
+  keys("Split it into two steps")
+  wait_for("The request is typed into the prompt",
+    "return vim.bo.filetype == 'snacks_input' and vim.api.nvim_get_current_line():find('two steps', 1, true) ~= nil")
+  keys("<CR>")
   wait_for("The revision request must reach agent 3", [[
-    local path = require("util.pi_issues").directory(e2e.by_number(3)) .. "/paste.txt"
+    local path = require("taskbay.core").directory(e2e.by_number(3)) .. "/paste.txt"
     local text = vim.uv.fs_stat(path) and table.concat(vim.fn.readfile(path), "\n") or ""
     return text:find("Split it into two steps", 1, true) ~= nil
   ]], 15000)
   lua([[
-    local text = table.concat(vim.fn.readfile(require("util.pi_issues").directory(e2e.by_number(3)) .. "/paste.txt"), "\n")
+    local text = table.concat(vim.fn.readfile(require("taskbay.core").directory(e2e.by_number(3)) .. "/paste.txt"), "\n")
     assert(text:find("/.tasks/003-", 1, true) and text:find("Edit only the local task file", 1, true), text)
   ]])
   keys("<C-\\><C-n>")
 
-  step("edit task 1's description and restart it with Space a R")
-  lua("require('util.pi_issues').open(e2e.by_number(1))")
+  step("edit task 1's description and restart it with R in the panel")
+  lua("require('taskbay.core').open(e2e.by_number(1))")
   keys("<Esc><Space>av")
   wait_for("Space a v opens task 1's file in its tab", [[
-    local info = vim.b.pi_issue_draft
-    return info ~= nil and info.target.number == 1 and vim.t.pi_issue == e2e.by_number(1).id
+    local info = vim.b.taskbay_task
+    return info ~= nil and info.target.number == 1 and vim.t.taskbay_workspace == e2e.by_number(1).id
   ]])
   keys("Go<CR>Also add a goodbye() alias.<Esc>:write<CR>")
   wait_for("Saving a started task points to restart", [[
-    return _G.e2e_messages[#_G.e2e_messages]:find("Space a R restarts project/1-add-a-farewell-function", 1, true) ~= nil
+    return _G.e2e_messages[#_G.e2e_messages]:find("R restarts project/1-add-a-farewell-function", 1, true) ~= nil
   ]])
   vim.fn.writefile({ "work from the first conversation" }, repo .. "-worktrees/task-1/kept-work.txt")
   local old_job = lua("return e2e.job(1).channel")
-  keys("<Space>aR")
+  keys("<Space>aw")
+  wait_for("Panel", "return e2e.dashboard_row(1) ~= nil")
+  lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(1), 0 })")
+  keys("R")
   wait_for("Restart asks before stopping a running agent", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 2")
   pick("Restart", "Restart with the current task")
   wait_for("Task 1 restarts in a new conversation", [[
     local job = e2e.job(1)
     return job ~= nil and job.channel ~= ... and not job.exited and job.sequence ~= nil and e2e.live() == 3
   ]], 10000, old_job)
+  lua([[
+    local id, terms = e2e.by_number(1).id, 0
+    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+      if vim.t[tab].taskbay_workspace == id then
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+          if vim.bo[vim.api.nvim_win_get_buf(win)].buftype == "terminal" then terms = terms + 1 end
+        end
+      end
+    end
+    assert(terms == 1, "The restarted agent replaces the old terminal in the task tab: " .. terms)
+  ]])
   local restarted
   for _, event in ipairs(agents()) do
     if event.event == "started" then restarted = event end
@@ -304,7 +325,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(2), 0 })")
   keys("x")
   wait_for("Task 2 must stop and release its slot", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local workspace = e2e.by_number(2)
     return e2e.job(2).exited and core.status(workspace) == "stopped" and e2e.live() == 2
       and not vim.uv.fs_stat(core.directory(workspace) .. "/owner.json")
@@ -320,7 +341,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   ]], 10000)
   assert(not uv.fs_stat(repo .. "-worktrees/task-4/AGENT_RESULT.md"), "The scripted agent was told to change nothing")
   wait_for("A settled agent that changed nothing is flagged", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     return core.status(e2e.by_number(4)) == "no changes" and core.status(e2e.by_number(3)) == "idle"
   ]])
   keys("<C-\\><C-n><Esc><Space>aw")
@@ -331,7 +352,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(4), 0 })")
   keys("c")
   wait_for("c asks task 4's own agent to continue and submits it", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local path = core.directory(e2e.by_number(4)) .. "/paste.txt"
     local text = vim.uv.fs_stat(path) and table.concat(vim.fn.readfile(path, "b"), "\n") or ""
     return text:find("left the worktree unchanged", 1, true) ~= nil and text:find("\27[201~\r", 1, true) ~= nil
@@ -347,17 +368,17 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   keys("q")
 
   step("resume task 2 after another agent stops")
-  lua("require('util.pi_issues').stop(e2e.by_number(1))")
+  lua("require('taskbay.core').stop(e2e.by_number(1))")
   wait_for("Task 1 stops", "return e2e.job(1).exited and e2e.live() == 2")
   lua([[
-    local tasks = require("util.pi_tasks")
+    local tasks = require("taskbay.store")
     local task = tasks.get(e2e.by_number(2))
     tasks.update(e2e.by_number(2), task.title, task.body .. "\n\nAlso document farewell().")
-    require("util.pi_issues").open(e2e.by_number(2))
+    require("taskbay.core").open(e2e.by_number(2))
   ]])
   keys("<Esc><Space>ap")
   wait_for("Resuming after an edit sends the updated task into the conversation", [[
-    local path = require("util.pi_issues").directory(e2e.by_number(2)) .. "/paste.txt"
+    local path = require("taskbay.core").directory(e2e.by_number(2)) .. "/paste.txt"
     local text = vim.uv.fs_stat(path) and table.concat(vim.fn.readfile(path, "b"), "\n") or ""
     return text:find("The task description was updated", 1, true) ~= nil
       and text:find("Also document farewell().", 1, true) ~= nil and text:find("\27[201~\r", 1, true) ~= nil
@@ -372,13 +393,13 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   end
   assert(resumed and resumed.cwd:match("task%-2$") and resumed.prompt == "", "Resume without replaying the task")
 
-  step(":PiQuit stops every agent and keeps worktrees")
+  step(":TaskbayQuit stops every agent and keeps worktrees")
   local pids = {}
   for _, event in ipairs(agents()) do
     if event.event == "started" then pids[#pids + 1] = event.pid end
   end
-  keys("<C-\\><C-n><Esc>:PiQuit<CR>")
-  wait_for(":PiQuit must refuse while a file has unsaved edits",
+  keys("<C-\\><C-n><Esc>:TaskbayQuit<CR>")
+  wait_for(":TaskbayQuit must refuse while a file has unsaved edits",
     "return _G.e2e_messages[#_G.e2e_messages]:find('Save or discard modified files', 1, true) ~= nil")
   assert(H.exited() == nil, "Unsaved edits must keep the editor open")
   lua([[
@@ -386,15 +407,15 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
     assert(vim.bo[buf].modified)
     vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
   ]])
-  keys(":PiQuit<CR>")
-  wait_for(":PiQuit must ask before stopping agents", [[
+  keys(":TaskbayQuit<CR>")
+  wait_for(":TaskbayQuit must ask before stopping agents", [[
     local p = Snacks.picker.get()[1]
     return p ~= nil and p:count() == 2
   ]])
   pick("Stop agents", "Stop agents and quit")
-  assert(vim.wait(8000, function() return H.exited() ~= nil end, 25), "PiQuit must exit the editor")
+  assert(vim.wait(8000, function() return H.exited() ~= nil end, 25), "TaskbayQuit must exit the editor")
   for _, pid in ipairs(pids) do
-    assert(vim.wait(2000, function() return not uv.kill(pid, 0) end, 25), "pi process " .. pid .. " survived :PiQuit")
+    assert(vim.wait(2000, function() return not uv.kill(pid, 0) end, 25), "pi process " .. pid .. " survived :TaskbayQuit")
   end
   for number = 1, 3 do
     assert(uv.fs_stat(repo .. "-worktrees/task-" .. number .. "/AGENT_RESULT.md"), "Worktree " .. number .. " kept")
@@ -406,26 +427,34 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   keys("<Space>aw")
   wait_for("Dashboard lists the four saved workspaces", [[
     local text = table.concat(e2e.float_lines("Task Workspaces") or {}, "\n")
-    return text:find("0 active / 3 slots", 1, true) ~= nil and text:find("4 workspaces", 1, true) ~= nil
+    return text:find("0 of 3 agents running", 1, true) ~= nil and text:find("4 tasks", 1, true) ~= nil
   ]])
   lua([[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     for number = 1, 4 do
       assert(core.status(e2e.by_number(number)) == "stopped", "Task " .. number .. " restored as stopped")
     end
   ]])
   vim.wait(300)
   assert(#agents() == before_restart, "Restoring workspaces must not start pi")
-  keys("q<Space>ai")
-  wait_for("Task picker", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 4")
-  keys("<C-o>")
-  wait_for("Ctrl-o opens task 1's file", "return vim.b.pi_issue_draft ~= nil and vim.b.pi_issue_draft.target.number == 1")
-  keys("<Esc><Space>ag")
-  wait_for("Space a g in the task buffer resumes task 1", [[
+  keys("<C-\\><C-n><Esc><Space>aw")
+  wait_for("Workspace panel must list the restored workspaces", "return e2e.dashboard_row(1) ~= nil")
+  keys("v")
+  wait_for("v opens task 1's file from the panel",
+    "return vim.b.taskbay_task ~= nil and vim.b.taskbay_task.target.number == 1")
+  keys("<Esc><Space>aw")
+  wait_for("Panel", "return e2e.dashboard_row(1) ~= nil")
+  lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(1), 0 })")
+  keys("<CR>")
+  wait_for("Enter opens a stopped task's tab without starting pi",
+    "return require('taskbay.core').current() == e2e.by_number(1) and (e2e.job(1) or { exited = true }).exited")
+  assert(#agents() == before_restart, "Opening a stopped task must not start pi")
+  keys("<Esc><Space>ap")
+  wait_for("Space a p in the task tab resumes task 1", [[
     local job = e2e.job(1)
-    return job ~= nil and not job.exited and job.sequence ~= nil and require("util.pi_issues").current() == e2e.by_number(1)
+    return job ~= nil and not job.exited and job.sequence ~= nil and require("taskbay.core").current() == e2e.by_number(1)
   ]])
-  lua("require('util.pi_issues').stop(e2e.by_number(1))")
+  lua("require('taskbay.core').stop(e2e.by_number(1))")
   wait_for("Task 1 stops", "return e2e.job(1).exited")
   keys("<C-\\><C-n><Esc><Space>aw")
   wait_for("Dashboard", "return e2e.dashboard_row(3) ~= nil")
@@ -433,19 +462,19 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   keys("p")
   wait_for("p resumes task 3 in the new editor", [[
     local job = e2e.job(3)
-    return job ~= nil and not job.exited and job.sequence ~= nil and require("util.pi_issues").current() == e2e.by_number(3)
+    return job ~= nil and not job.exited and job.sequence ~= nil and require("taskbay.core").current() == e2e.by_number(3)
   ]])
   local last = agents()[#agents()]
   assert(last.event == "started" and last.resumed and last.cwd:match("task%-3$") and last.prompt == "",
     "Resume the saved session after a restart: " .. vim.inspect(last))
   assert(last.args[vim.fn.index(last.args, "--session") + 2]:find("session.jsonl", 1, true))
-  lua("require('util.pi_issues').stop(e2e.by_number(3))")
+  lua("require('taskbay.core').stop(e2e.by_number(3))")
   wait_for("Task 3 stops", "return e2e.job(3).exited")
   keys("<Esc><Space>aw")
   wait_for("Dashboard", "return e2e.dashboard_row(3) ~= nil")
   lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(3), 0 })")
 
-  step("Space a m finishes task 3: stops pi, commits, merges into main, marks finished")
+  step("m in the panel finishes task 3: stops pi, commits, merges into main, marks finished")
   keys("m")
   wait_for("Finish asks to commit and merge", [[
     local p = Snacks.picker.get()[1]
@@ -453,7 +482,7 @@ H.run("pi e2e: wrote 4 tasks, ran 3 agents at once, queued a 4th, sent context, 
   ]])
   pick("Commit", "Commit and merge")
   wait_for("Task 3 merges and is marked finished", [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local workspace = e2e.by_number(3)
     return workspace.finished ~= nil and core.status(workspace) == "finished"
   ]], 15000)

@@ -1,3 +1,6 @@
+-- This config's directory (nvim/): the local taskbay plugin and the pi theme live in it.
+local config = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h")
+
 return {
   -- Inline AI ghost text (fill-in-the-middle) from the local Ollama
   -- qwen2.5-coder:1.5b-base FIM model (pulled and warmed by `make use-model`).
@@ -61,46 +64,17 @@ return {
   },
 
   {
-    "folke/snacks.nvim",
-    init = function() require("util.pi_issues_ui").setup() end,
-    -- <leader>aa / ag / av / ae / af / aR / am / ar are mapped (and listed by
-    -- which-key) only while their context is live; pi_issues_ui.setup owns them.
-    keys = {
-      { "<leader>aq", function() require("util.pi_issues").quit() end, desc = "Stop Pi Agents and Quit" },
-      {
-        "<leader>ai",
-        function() require("util.pi_issues_ui").tasks() end,
-        desc = "Choose Local Tasks for Pi",
-      },
-      {
-        "<leader>an",
-        function() require("util.pi_issues_ui").new_task() end,
-        desc = "Write a New Local Task",
-      },
-      {
-        "<leader>aG",
-        function() require("util.pi_issues_ui").toggle_github() end,
-        desc = "Toggle GitHub Issue Integration",
-      },
-      {
-        "<leader>aw",
-        function() require("util.pi_issues_ui").dashboard() end,
-        desc = "Pi Task Workspaces",
-      },
-      {
-        "<leader>ap",
-        function() require("util.agents").toggle(true) end,
-        desc = "Pi Agent",
-      },
-      {
-        "<F6>",
-        function()
-          vim.cmd.stopinsert()
-          require("util.agents").toggle()
-        end,
-        mode = { "n", "t" },
-        desc = "Hide / Show Pi Agent",
-      },
+    -- Task workspaces for coding agents: the local taskbay plugin (nvim/taskbay), run with pi.
+    -- 3 agents match OLLAMA_NUM_PARALLEL (ollama/ollama.env); more only queue behind the same
+    -- request slots, and each extra running agent slows the others' decoding.
+    dir = config .. "/taskbay",
+    name = "taskbay",
+    lazy = false,
+    dependencies = { "folke/snacks.nvim" },
+    opts = {
+      max_agents = 3,
+      state_dir = vim.fn.stdpath("state") .. "/pi-issues", -- keeps workspaces started before the rename
+      pi = { args = { "--theme", config .. "/themes/pi-retrobox.json", "--use-theme", "retrobox" } },
     },
   },
 }

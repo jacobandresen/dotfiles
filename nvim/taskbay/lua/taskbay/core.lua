@@ -1,37 +1,72 @@
 local M = { workspaces = {}, jobs = {} }
-local tasks = require("util.pi_tasks")
+local tasks = require("taskbay.store")
 local uv = vim.uv
 local token = vim.fn.sha256(tostring(uv.hrtime()) .. ":" .. vim.fn.getpid()):sub(1, 24)
 local initialized = false
 local loaded = false
 
-local function notify(message, level) vim.notify(message, level or vim.log.levels.ERROR, { title = "Pi Tasks" }) end
+local function notify(message, level) vim.notify(message, level or vim.log.levels.ERROR, { title = "Taskbay" }) end
+
+-- Keys taskbay maps (setup) and names in its hints; settings.keys overrides any of them.
+local default_keys = {
+  panel = "<leader>aw", new = "<leader>an", agent = "<leader>ap", toggle = "<F6>", quit = "<leader>aq",
+  remote = "<leader>aG", task = "<leader>av", send = "<leader>as", review = "<leader>ar",
+  revise = "<leader>ae", publish = "<leader>aP",
+}
 
 function M.settings()
   local settings = vim.tbl_extend("force", {
     max_agents = 3,
-    github_enabled = false,
-    state_dir = vim.fn.stdpath("state") .. "/pi-issues",
-    pi = "pi",
-  }, vim.g.pi_issues or {})
+    remote = "github", -- the issue tracker driver: taskbay/remotes/<remote>.lua
+    remote_enabled = false,
+    agent = "pi", -- the coding agent driver: taskbay/agents/<agent>.lua
+    state_dir = vim.fn.stdpath("state") .. "/taskbay",
+  }, vim.g.taskbay or {})
+  settings.keys = vim.tbl_extend("force", default_keys, settings.keys or {})
   assert(
     type(settings.max_agents) == "number" and settings.max_agents >= 1 and settings.max_agents % 1 == 0,
-    "pi_issues.max_agents must be a positive integer"
+    "taskbay.max_agents must be a positive integer"
   )
-  assert(type(settings.github_enabled) == "boolean", "pi_issues.github_enabled must be a boolean")
+  assert(type(settings.remote_enabled) == "boolean", "taskbay.remote_enabled must be a boolean")
   return settings
 end
 
--- GitHub-dependent commands stay available everywhere but explain themselves
--- when the integration is off: one actionable hint instead of a deep assert.
-function M.require_github()
-  if M.settings().github_enabled then return true end
-  vim.notify("The GitHub integration is disabled; press Space a G to enable it (or :PiTaskGithub)",
-    vim.log.levels.WARN, { title = "Pi Tasks" })
+-- The configured issue tracker driver (GitHub by default).
+function M.remote() return tasks.remote(M.settings().remote) end
+
+-- Tracker commands stay available everywhere but explain themselves when the
+-- integration is off: one actionable hint instead of a deep assert.
+function M.require_remote()
+  if M.settings().remote_enabled then return true end
+  vim.notify("The " .. M.remote().title .. " integration is disabled; press " .. M.key("remote") .. " to enable it (or :TaskbayRemote)",
+    vim.log.levels.WARN, { title = "Taskbay" })
   return false
 end
 
-function M.path() return vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h") .. "/pi" end
+-- A configured key as hints show it: "<leader>aw" with a Space leader reads "Space a w".
+function M.key(name)
+  local lhs, words = M.settings().keys[name], {}
+  while lhs ~= "" do
+    local special = lhs:match("^<([^>]+)>")
+    if special then
+      words[#words + 1] = special:lower() == "leader" and ((vim.g.mapleader or "\\") == " " and "Space"
+        or (vim.g.mapleader or "\\")) or special
+      lhs = lhs:sub(#special + 3)
+    else
+      words[#words + 1] = vim.fn.strcharpart(lhs, 0, 1)
+      lhs = lhs:sub(#words[#words] + 1)
+    end
+  end
+  return table.concat(words, " ")
+end
+
+-- The configured coding agent driver (pi by default).
+function M.agent()
+  local name = M.settings().agent
+  assert(type(name) == "string" and name:match("^[%w_]+$"), "Unknown agent: " .. tostring(name))
+  local ok, driver = pcall(require, "taskbay.agents." .. name)
+  return assert(ok and driver, "Unknown agent: " .. name)
+end
 
 function M.clean(text) return (tostring(text or ""):gsub("[%z\1-\31\127]", " ")) end
 
@@ -49,7 +84,7 @@ end
 
 function M.run(argv, cwd, optional, stdin)
   local thread = coroutine.running()
-  assert(thread, "Pi commands must run inside task()")
+  assert(thread, "Taskbay commands must run inside task()")
   local process = vim.system(argv, { cwd = cwd, timeout = 30000, stdin = stdin }, function(result)
     vim.schedule(function() resume(thread, result) end)
   end)
@@ -60,9 +95,24 @@ function M.run(argv, cwd, optional, stdin)
   return result, process
 end
 
+-- A multi-line prompt: its first line is the title; with snacks the rest shows above the choices.
 function M.choose(items, prompt)
   local thread = coroutine.running()
-  vim.ui.select(items, { prompt = prompt }, function(choice)
+  local lines = vim.split(vim.trim(prompt), "\n")
+  local details = vim.tbl_filter(function(line) return line ~= "" end, vim.list_slice(lines, 2))
+  local opts = { prompt = prompt }
+  if #details > 0 then
+    opts = { prompt = lines[1], snacks = {
+      preview = function(ctx) ctx.preview:set_lines(details) return true end,
+      win = { preview = { wo = { number = false, relativenumber = false, signcolumn = "no", wrap = true } } },
+      layout = { layout = { box = "vertical", backdrop = false, width = 0.6, min_width = 60,
+        height = #details + #items + 5, border = "rounded", title = "{title}", title_pos = "center",
+        { win = "preview", height = #details, border = "bottom" },
+        { win = "input", height = 1, border = "bottom" },
+        { win = "list" } } },
+    } }
+  end
+  vim.ui.select(items, opts, function(choice)
     vim.schedule(function() resume(thread, choice) end)
   end)
   return coroutine.yield()
@@ -96,12 +146,18 @@ function M.inside(path, root)
   return path == root or path:sub(1, #root + 1) == root .. "/"
 end
 
-function M.current() return M.workspaces[vim.t.pi_issue or ""] end
+function M.current() return M.workspaces[vim.t.taskbay_workspace or ""] end
 
+-- Where the user works: the task tab's worktree, else LazyVim's root when LazyVim is
+-- loaded, else the buffer's Git root, else the working directory.
 function M.root()
   local workspace = M.current()
-  return workspace and workspace.path or LazyVim.root()
+  if workspace then return workspace.path end
+  if _G.LazyVim then return LazyVim.root() end
+  return vim.fs.root(0, ".git") or vim.fn.getcwd()
 end
+
+function M.read_json(path) return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")) end
 
 local function directory(workspace) return M.settings().state_dir .. "/" .. workspace.id end
 M.directory = directory
@@ -119,26 +175,8 @@ function M.write(path, data)
 end
 
 local fields = {
-  "id",
-  "common",
-  "repo",
-  "host",
-  "number",
-  "title",
-  "url",
-  "path",
-  "branch",
-  "base_ref",
-  "base_sha",
-  "session",
-  "session_file",
-  "started",
-  "source",
-  "task_root",
-  "task_file",
-  "task_sha",
-  "restarts",
-  "finished",
+  "id", "common", "repo", "host", "number", "title", "url", "path", "branch", "base_ref", "base_sha",
+  "session", "session_file", "started", "source", "task_root", "task_file", "task_sha", "restarts", "finished",
 }
 function M.save(workspace)
   local data = { version = 1 }
@@ -157,7 +195,7 @@ function M.load()
     if kind == "directory" and name:match("^[a-f0-9]+$") then
       local path = root .. "/" .. name .. "/workspace.json"
       if uv.fs_stat(path) then
-        local ok, data = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")) end)
+        local ok, data = pcall(M.read_json, path)
         if
           ok
           and type(data) == "table"
@@ -172,11 +210,8 @@ function M.load()
           and type(data.base_ref) == "string"
           and type(data.base_sha) == "string"
           and type(data.session) == "string"
-          and type(data.number) == "number"
-          and data.number > 0
-          and data.number <= 9007199254740991
-          and data.number % 1 == 0
-          and (data.source == nil or data.source == "github"
+          and tasks.valid_id(data.number)
+          and (data.source == nil or (type(data.source) == "string" and data.source ~= "local")
             or (data.source == "local" and type(data.task_root) == "string" and type(data.task_file) == "string"))
         then
           M.workspaces[name] = data
@@ -219,12 +254,33 @@ function M.unborn(repo)
     and M.run({ "git", "symbolic-ref", "--quiet", "HEAD" }, repo.root, true).code == 0
 end
 
+local function session_name(workspace) return (workspace.source == "local" and "task-" or "issue-") .. workspace.id end
+
+-- Number of changed paths in a worktree (a rename counts once), or nil and Git's error.
+local function changed_count(path)
+  local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, path, true)
+  if result.code ~= 0 then return nil, M.clean(result.stderr) end
+  local records = vim.split(result.stdout, "\0", { plain = true, trimempty = true })
+  local count, i = 0, 1
+  while i <= #records do
+    count = count + 1
+    i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
+  end
+  return count
+end
+
+local function close_watcher(job)
+  if job.watcher and not job.watcher:is_closing() then
+    job.watcher:stop()
+    job.watcher:close()
+  end
+end
+
 function M.prepare(repo, issue, ref, reuse, base_sha)
   M.load()
-  assert(repo.source == "local" or M.settings().github_enabled,
-    "GitHub integration is disabled; set vim.g.pi_issues.github_enabled = true to enable it")
-  assert(type(issue.number) == "number" and issue.number > 0 and issue.number <= 9007199254740991
-    and issue.number % 1 == 0, "Invalid issue number")
+  assert(repo.source == "local" or M.settings().remote_enabled,
+    "The issue tracker integration is disabled; set vim.g.taskbay.remote_enabled = true to enable it")
+  assert(tasks.valid_id(issue.number), "Invalid issue number")
   local target = {
     source = repo.source, host = repo.host, repo = repo.repo, number = issue.number,
     task_root = repo.task_root or (repo.source == "local" and repo.root or nil),
@@ -284,8 +340,8 @@ function M.prepare(repo, issue, ref, reuse, base_sha)
     branch = branch,
     base_ref = ref,
     base_sha = sha,
-    session = (repo.source == "local" and "task-" or "issue-") .. id,
   }
+  workspace.session = session_name(workspace)
   M.save(workspace)
   M.workspaces[id] = workspace
   return workspace
@@ -309,7 +365,7 @@ end
 
 function M.open(workspace)
   for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
-    if vim.t[tab].pi_issue == workspace.id then
+    if vim.t[tab].taskbay_workspace == workspace.id then
       vim.api.nvim_set_current_tabpage(tab)
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
         if
@@ -325,8 +381,8 @@ function M.open(workspace)
   end
   assert(uv.fs_stat(workspace.path), "Worktree is missing: " .. workspace.path)
   vim.cmd.tabnew()
-  vim.t.pi_issue = workspace.id
-  require("util.pi_issues_ui").tabs()
+  vim.t.taskbay_workspace = workspace.id
+  require("taskbay.ui").tabs()
   vim.api.nvim_cmd({ cmd = "tcd", args = { workspace.path } }, {})
   local buf = vim.api.nvim_get_current_buf()
   vim.bo[buf].buftype = "nofile"
@@ -338,16 +394,11 @@ function M.open(workspace)
     "",
     workspace.url or "",
     "",
-    "Space a p   Pi agent (configured default model)",
-    "F6          Hide / show Pi, also from terminal input",
-    "Space a s   Send file / selection",
-    "Space a r   Reviewer subagent",
-    "Space a m   Finish: commit, merge, mark finished",
-    "Space g D   Review changes",
-    "Space f f   Find files in this worktree",
-    "Space a v   View / edit task",
-    "Space a e   Ask pi to revise task",
-    "Space a w   All task workspaces",
+    M.key("panel") .. "   Task workspaces: start, stop, restart, finish, diff",
+    M.key("agent") .. "   Start / show / hide the agent (" .. M.key("toggle") .. " from the terminal)",
+    M.key("task") .. "   Task text (" .. M.key("revise") .. " there asks the agent to revise it)",
+    M.key("send") .. "   Send file / selection to the agent",
+    M.key("review") .. "   Reviewer subagent",
     "",
     "Worktree: " .. workspace.path,
     "Branch: " .. workspace.branch,
@@ -369,7 +420,7 @@ function M.lock(workspace, run)
   vim.fn.mkdir(directory(workspace), "p", 448)
   local fd = uv.fs_open(path, "wx", 384)
   if not fd then
-    local ok, owner = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")) end)
+    local ok, owner = pcall(M.read_json, path)
     if
       ok
       and type(owner) == "table"
@@ -388,7 +439,7 @@ function M.lock(workspace, run)
       local guard =
         assert(uv.fs_open(recovery_path, "wx", 384), "Another editor is recovering this workspace: " .. recovery_path)
       local recovered, recovered_fd = pcall(function()
-        local current = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+        local current = M.read_json(path)
         assert(
           type(current.pid) == "number"
             and not alive(current.pid)
@@ -413,12 +464,12 @@ end
 function M.unlock(workspace)
   local path = directory(workspace) .. "/owner.json"
   if not uv.fs_stat(path) then return end
-  local ok, owner = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")) end)
+  local ok, owner = pcall(M.read_json, path)
   if ok and owner.token == token then assert(uv.fs_unlink(path)) end
 end
 
 function M.changed()
-  vim.api.nvim_exec_autocmds("User", { pattern = "PiIssuesChanged", modeline = false })
+  vim.api.nvim_exec_autocmds("User", { pattern = "TaskbayChanged", modeline = false })
   vim.cmd.redrawstatus()
 end
 
@@ -441,7 +492,7 @@ function M.accept_status(workspace, job, data)
   -- Snapshots can coalesce; a settle outcome also proves a turn ran.
   if data.activity == "working" or (data.outcome and data.outcome ~= "unknown") then job.worked = true end
   if settled then job.settled_at = uv.hrtime() end
-  job.model = M.clean(data.model)
+  job.model = type(data.model) == "string" and M.clean(data.model) or nil
   workspace.session = data.session
   workspace.session_file = type(data.session_file) == "string" and data.session_file or nil
   M.save(workspace)
@@ -465,7 +516,7 @@ function M.show(workspace)
   vim.api.nvim_win_set_buf(0, job.buf)
   vim.api.nvim_win_set_width(0, math.max(30, math.floor(vim.o.columns * 0.4)))
   vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn = false, false, "no"
-  vim.wo.winbar = " \u{f085} Pi " .. tasks.label(workspace) .. " "
+  vim.wo.winbar = " \u{f085} " .. M.agent().title .. " " .. tasks.label(workspace) .. " "
   if not job.exited then vim.cmd.startinsert() end
 end
 
@@ -487,7 +538,7 @@ local function send_update(workspace, task)
   notify("Sent the updated task to " .. tasks.label(workspace), vim.log.levels.INFO)
 end
 
--- Number of managed pi agents that have not exited yet.
+-- Number of managed agents that have not exited yet.
 function M.live()
   local count = 0
   for _, job in pairs(M.jobs) do
@@ -496,8 +547,8 @@ function M.live()
   return count
 end
 
--- Bracketed paste of text into a task's pi; a truthy submit adds Enter after a
--- short delay so pi receives the paste first.
+-- Bracketed paste of text into a task's agent; a truthy submit adds Enter after a
+-- short delay so the agent receives the paste first.
 function M.paste(workspace, text, submit)
   local job = M.jobs[workspace.id]
   if not job or job.exited then return end
@@ -515,31 +566,18 @@ function M.start(workspace, issue)
   if previous and not previous.exited then return M.show(workspace) end
   assert(
     M.live() < M.settings().max_agents,
-    "Agent limit reached; stop an issue from Space a w before starting another"
+    "Agent limit reached; stop an issue from " .. M.key("panel") .. " before starting another"
   )
-  assert(vim.fn.executable(M.settings().pi) == 1, "pi is not installed")
-  assert(
-    uv.fs_stat(M.path() .. "/node_modules/pi-subagents/bundle/index.js"),
-    "Run :PiTaskSetup to install the pinned pi extension"
-  )
+  local agent = M.agent()
+  agent.check()
   if workspace.session_file then
-    assert(
-      uv.fs_stat(workspace.session_file),
-      "Saved pi session is missing; inspect the workspace before starting a new conversation"
-    )
-    local header = vim.json.decode(vim.fn.readfile(workspace.session_file, "", 1)[1] or "")
-    assert(
-      header.type == "session"
-        and type(header.cwd) == "string"
-        and M.real(header.cwd) == workspace.path
-        and header.id == workspace.session,
-      "Saved pi session identity or working directory does not match"
-    )
+    assert(uv.fs_stat(workspace.session_file),
+      "Saved agent session is missing; inspect the workspace before starting a new conversation")
+    assert(agent.session_matches(workspace.session_file, workspace),
+      "Saved agent session identity or working directory does not match")
   elseif workspace.started then
-    error(
-      "The previous pi run did not report a saved session. Inspect its terminal; no new conversation was started.",
-      0
-    )
+    error("The previous agent run did not report a saved session. Inspect its terminal; "
+      .. "no new conversation was started.", 0)
   end
   if not workspace.started and (not issue or issue.body == nil) then
     issue = tasks.get(workspace)
@@ -554,22 +592,7 @@ function M.start(workspace, issue)
     workspace.task_sha = M.task_hash(issue)
   end
   local run = vim.fn.sha256(token .. tostring(uv.hrtime())):sub(1, 24)
-  local argv = {
-    M.settings().pi,
-    "--theme",
-    vim.fs.dirname(M.path()) .. "/themes/pi-retrobox.json",
-    "--use-theme",
-    "retrobox",
-    "--extension",
-    M.path() .. "/extension.ts",
-  }
-  if M.settings().provider then vim.list_extend(argv, { "--provider", M.settings().provider }) end
-  if M.settings().model then vim.list_extend(argv, { "--model", M.settings().model }) end
-  if workspace.session_file then
-    vim.list_extend(argv, { "--session", workspace.session_file })
-  else
-    vim.list_extend(argv, { "--session-id", workspace.session, "--name", tasks.label(workspace) })
-  end
+  local spec = { session = workspace.session, session_file = workspace.session_file, name = tasks.label(workspace) }
   if not workspace.started then
     local body = issue and issue.body or ""
     assert(#body <= 100000, "Task body is too large; provide bounded task context manually")
@@ -599,17 +622,16 @@ function M.start(workspace, issue)
       .. "Implement only this task in this worktree. Follow repository instructions. "
       .. "Run relevant tests with a timeout and report actual results. Leave changes for human review; "
       .. "do not commit, merge, push, close issues, install dependencies, or remove worktrees without asking. "
-      .. "If explicitly asked to delegate, use pi-subagents in the foreground with async: false, "
-      .. "the current cwd, an explicit provider/model ID matching your active session model, "
-      .. "and no managed worktree. Do not start background or external agents.\n"
-    local task_file = directory(workspace) .. "/" .. run .. "-task.md"
-    M.write(task_file, prompt)
-    vim.list_extend(argv, { "--", "@" .. task_file, "Implement the attached task." })
+      .. agent.delegation .. "\n"
+    spec.prompt_file = directory(workspace) .. "/" .. run .. "-task.md"
+    M.write(spec.prompt_file, prompt)
   end
+  local argv = agent.command(spec)
   assert(M.live() < M.settings().max_agents, "Agent limit reached while preparing; workspace kept for later")
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "hide"
   local job = { buf = buf, run = run, activity = "starting", argv = argv }
+  local previous = M.jobs[workspace.id]
   M.lock(workspace, run)
   if M.live() >= M.settings().max_agents then
     M.unlock(workspace)
@@ -623,40 +645,34 @@ function M.start(workspace, issue)
     {},
     vim.schedule_wrap(function(err, filename)
       if err then
-        notify("Pi status watcher: " .. err)
+        notify("Agent status watcher: " .. err)
         return
       end
       if filename ~= run .. ".json" or job.exited then return end
-      local ok, data = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(status_file), "\n")) end)
+      local ok, data = pcall(M.read_json, status_file)
       if not ok then
-        notify("Cannot read pi status: " .. status_file)
+        notify("Cannot read agent status: " .. status_file)
         return
       end
       M.accept_status(workspace, job, data)
     end)
   )
-  if not watching then
-    job.watcher:close()
-    job.exited = true
-    job.activity = "error"
+  local function fail(message)
+    close_watcher(job)
+    job.exited, job.activity = true, "error"
     M.unlock(workspace)
-    error("Cannot watch pi lifecycle: " .. tostring(watch_error), 0)
+    error(message, 0)
   end
+  if not watching then fail("Cannot watch the agent lifecycle: " .. tostring(watch_error)) end
   local started, start_error = pcall(vim.api.nvim_buf_call, buf, function()
     job.channel = vim.fn.jobstart(argv, {
       term = true,
       cwd = workspace.path,
-      env = {
-        NVIM_PI_STATUS = status_file,
-        NVIM_PI_RUN = run,
-      },
+      env = agent.env(status_file, run),
       on_exit = function(_, code)
         vim.schedule(function()
           job.exited, job.code, job.activity = true, code, (job.stop_requested or code == 0) and "stopped" or "error"
-          if job.watcher and not job.watcher:is_closing() then
-            job.watcher:stop()
-            job.watcher:close()
-          end
+          close_watcher(job)
           if M.jobs[workspace.id] == job then
             M.unlock(workspace)
             M.changed()
@@ -665,13 +681,11 @@ function M.start(workspace, issue)
       end,
     })
   end)
-  if not started or job.channel <= 0 then
-    job.exited = true
-    job.activity = "error"
-    job.watcher:stop()
-    job.watcher:close()
-    M.unlock(workspace)
-    error(start_error or "Could not start pi", 0)
+  if not started or job.channel <= 0 then fail(start_error or ("Could not start " .. agent.title)) end
+  -- A new run (resume or restart) takes over the windows of the previous run's terminal.
+  if previous and previous ~= job and vim.api.nvim_buf_is_valid(previous.buf) then
+    for _, win in ipairs(vim.fn.win_findbuf(previous.buf)) do vim.api.nvim_win_set_buf(win, buf) end
+    vim.api.nvim_buf_delete(previous.buf, { force = true })
   end
   local pid = vim.fn.jobpid(job.channel)
   M.write(
@@ -684,7 +698,7 @@ function M.start(workspace, issue)
     if M.jobs[workspace.id] == job and not job.exited and not job.sequence then
       job.activity = "unknown"
       notify(
-        "Pi lifecycle reporting is unavailable for "
+        "Agent lifecycle reporting is unavailable for "
           .. tasks.label(workspace)
           .. "; inspect its terminal"
       )
@@ -694,7 +708,7 @@ function M.start(workspace, issue)
   M.show(workspace)
   M.changed()
   if update then
-    -- Resumed after the task file changed: tell the conversation once pi reports it is ready.
+    -- Resumed after the task file changed: tell the conversation once the agent reports it is ready.
     local deadline = uv.now() + 30000
     local function ready()
       if M.jobs[workspace.id] ~= job or job.exited then return end
@@ -705,7 +719,7 @@ function M.start(workspace, issue)
   end
 end
 
--- Stop a running pi and yield until it has exited. Finishing, restarting and
+-- Stop a running agent and yield until it has exited. Finishing, restarting and
 -- deleting all need the agent's terminal down first; worktree changes survive.
 function M.stop_wait(workspace, job)
   M.stop(workspace)
@@ -724,19 +738,19 @@ function M.restart(workspace)
       .. "? Its conversation stops; worktree changes are kept.") ~= "Restart with the current task" then
       return
     end
-    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal before restarting")
+    assert(M.stop_wait(workspace, job), "The agent did not stop; inspect its terminal before restarting")
   end
   workspace.restarts = (workspace.restarts or 0) + 1
   workspace.finished = nil -- a restart makes the task unfinished again
-  workspace.session = (workspace.source == "local" and "task-" or "issue-") .. workspace.id .. "-r" .. workspace.restarts
+  workspace.session = session_name(workspace) .. "-r" .. workspace.restarts
   workspace.session_file, workspace.started = nil, nil
   M.save(workspace)
   M.start(workspace)
 end
 
--- Finish a task: stop pi if it is still running, commit whatever the agent left
+-- Finish a task: stop the agent if it is still running, commit whatever the agent left
 -- in its worktree, merge the branch into the primary checkout's current branch,
--- and mark it finished. A human decision from the dashboard (m) or Space a m;
+-- and mark it finished. A human decision from the panel (m);
 -- agents never merge.
 function M.finish(workspace)
   M.validate(workspace)
@@ -749,23 +763,17 @@ function M.finish(workspace)
   end
   assert(primary and primary.path and primary.branch,
     "No checked-out branch in the primary worktree to merge into")
-  local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
-  assert(result.code == 0, "Cannot inspect worktree status: " .. M.clean(result.stderr))
-  local records = vim.split(result.stdout, "\0", { plain = true, trimempty = true })
-  local count, i = 0, 1
-  while i <= #records do
-    count = count + 1
-    i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
-  end
+  local count, status_error = changed_count(workspace.path)
+  assert(count, "Cannot inspect worktree status: " .. tostring(status_error))
   local message = tasks.label(workspace) .. "\n\n"
-    .. (running and "Pi is stopped first; worktree changes are kept.\n" or "")
+    .. (running and "The agent is stopped first; worktree changes are kept.\n" or "")
     .. "Worktree: " .. (count == 0 and "clean" or count .. " changed file(s) will be committed") .. "\n"
     .. "Merges " .. workspace.branch .. " into " .. primary.branch .. " (at " .. primary.path .. ")\n"
     .. (workspace.finished and "Already finished before; the merge is repeated." or "")
-  local action = running and "Stop pi, commit and merge" or "Commit and merge"
+  local action = running and "Stop the agent, commit and merge" or "Commit and merge"
   assert(M.choose({ "Cancel", action }, message) == action, "Finish cancelled")
   if running then
-    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal before finishing")
+    assert(M.stop_wait(workspace, job), "The agent did not stop; inspect its terminal before finishing")
   end
   if count > 0 then
     git(workspace.path, "add", "-A")
@@ -797,10 +805,10 @@ end
 function M.delete(workspace)
   assert(workspace.source == "local", "Only local tasks can be deleted")
   local job = M.jobs[workspace.id]
-  -- The caller has already confirmed the deletion; a running pi is stopped first
+  -- The caller has already confirmed the deletion; a running agent is stopped first
   -- (its worktree changes were kept only until this point anyway).
   if job and not job.exited then
-    assert(M.stop_wait(workspace, job), "pi did not stop; inspect its terminal, then delete again")
+    assert(M.stop_wait(workspace, job), "The agent did not stop; inspect its terminal, then delete again")
   end
   -- The worktree or task file may already be gone (removed externally, or a
   -- partially failed delete); tolerate that so a stale row can always be cleaned.
@@ -812,7 +820,7 @@ function M.delete(workspace)
     end
   end
   for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
-    if vim.t[tab].pi_issue == workspace.id then
+    if vim.t[tab].taskbay_workspace == workspace.id then
       for _, buf in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
         local buffer = vim.api.nvim_win_get_buf(buf)
         assert(not vim.bo[buffer].modified, "Save or discard modified files before deleting " .. tasks.label(workspace))
@@ -828,6 +836,8 @@ function M.delete(workspace)
     M.validate(workspace)
     git(root, "worktree", "remove", "--force", workspace.path)
   end
+  -- Task numbers are reused, so the branch goes too; the user confirmed losing its work.
+  M.run({ "git", "branch", "-D", workspace.branch }, root, true)
   tasks.delete(workspace)
   assert(vim.fn.delete(directory(workspace), "rf") == 0, "Cannot remove workspace state: " .. directory(workspace))
   M.jobs[workspace.id] = nil
@@ -835,17 +845,17 @@ function M.delete(workspace)
   M.changed()
 end
 
--- Ask a live, settled agent to keep going; Enter is sent after the paste so pi submits it.
+-- Ask a live, settled agent to keep going; Enter is sent after the paste so the agent submits it.
 function M.continue(workspace)
   local job = M.jobs[workspace.id]
-  assert(job and not job.exited, "Start " .. tasks.label(workspace) .. "'s pi with p before continuing it")
-  assert(job.activity == "idle", "Pi is " .. tostring(job.activity) .. "; continue once it is idle")
+  assert(job and not job.exited, "Start " .. tasks.label(workspace) .. "'s agent with p before continuing it")
+  assert(job.activity == "idle", "The agent is " .. tostring(job.activity) .. "; continue once it is idle")
   local text = M.status(workspace) == "no changes"
       and "Your last turn left the worktree unchanged, so the task is not done. Implement it now in this "
         .. "worktree with your tools, then report what changed."
     or "Continue this task where you left off in this worktree, then report what changed."
   M.paste(workspace, text, true)
-  vim.notify("Asked " .. tasks.label(workspace) .. " to continue", vim.log.levels.INFO, { title = "Pi Tasks" })
+  vim.notify("Asked " .. tasks.label(workspace) .. " to continue", vim.log.levels.INFO, { title = "Taskbay" })
 end
 
 function M.quit()
@@ -854,7 +864,7 @@ function M.quit()
       for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         assert(
           not (vim.bo[buf].modified and (vim.bo[buf].buftype == "" or vim.bo[buf].buftype == "acwrite")),
-          "Save or discard modified files before :PiQuit. Agents are still running."
+          "Save or discard modified files before :TaskbayQuit. Agents are still running."
         )
       end
     end
@@ -866,7 +876,7 @@ function M.quit()
     if #active > 0 then
       local choice = M.choose(
         { "Cancel", "Stop agents and quit" },
-        ("Stop %d pi agent(s)? Worktrees and sessions are kept."):format(#active)
+        ("Stop %d agent(s)? Worktrees and sessions are kept."):format(#active)
       )
       if choice ~= "Stop agents and quit" then return end
       check_buffers()
@@ -880,7 +890,7 @@ function M.quit()
           end
           return true
         end, 20),
-        "Agents are still stopping; inspect Space a w before quitting"
+        "Agents are still stopping; inspect " .. M.key("panel") .. " before quitting"
       )
     end
     vim.cmd.qall()
@@ -981,14 +991,13 @@ function M.refresh(workspace)
     return
   end
   workspace.refreshing = true
-  local result = M.run({ "git", "status", "--porcelain=v1", "-z", "--untracked-files=all" }, workspace.path, true)
+  local count, message = changed_count(workspace.path)
   workspace.refreshing = false
   if workspace.refresh_again then
     workspace.refresh_again = false
     return M.refresh(workspace)
   end
-  if result.code ~= 0 then
-    local message = M.clean(result.stderr)
+  if not count then
     if workspace.git_error ~= message then
       notify("Cannot refresh " .. tasks.label(workspace) .. ": " .. message)
     end
@@ -997,12 +1006,6 @@ function M.refresh(workspace)
     M.changed()
     return
   end
-  local records = vim.split(result.stdout, "\0", { plain = true, trimempty = true })
-  local count, i = 0, 1
-  while i <= #records do
-    count = count + 1
-    i = i + (records[i]:sub(1, 2):find("[RC]") and 2 or 1)
-  end
   workspace.files, workspace.git_error, workspace.refreshed_at = count, nil, uv.hrtime()
   M.changed()
 end
@@ -1010,27 +1013,21 @@ end
 function M.setup()
   if initialized then return end
   initialized = true
-  local group = vim.api.nvim_create_augroup("pi_issues", { clear = true })
+  local group = vim.api.nvim_create_augroup("taskbay", { clear = true })
   if _G.LazyVim then
-    LazyVim.root.detectors.pi_issue = function()
+    LazyVim.root.detectors.taskbay = function()
       local workspace = M.current()
       return workspace and { workspace.path } or {}
     end
     local spec = vim.g.root_spec or { "lsp", { ".git", "lua" }, "cwd" }
-    table.insert(spec, 1, "pi_issue")
+    table.insert(spec, 1, "taskbay")
     vim.g.root_spec = spec
   end
-  vim.api.nvim_create_autocmd("TabEnter", {
+  -- Entering a task tab or returning from the agent re-counts the task's changed files.
+  vim.api.nvim_create_autocmd({ "TabEnter", "TermLeave", "FocusGained" }, {
     group = group,
-    callback = function()
-      if _G.LazyVim then LazyVim.root.cache = {} end
-      local workspace = M.current()
-      if workspace then M.task(function() M.refresh(workspace) end) end
-    end,
-  })
-  vim.api.nvim_create_autocmd({ "TermLeave", "FocusGained" }, {
-    group = group,
-    callback = function()
+    callback = function(event)
+      if event.event == "TabEnter" and _G.LazyVim then LazyVim.root.cache = {} end
       local workspace = M.current()
       if workspace then M.task(function() M.refresh(workspace) end) end
     end,
@@ -1040,10 +1037,7 @@ function M.setup()
     callback = function()
       for id, job in pairs(M.jobs) do
         if not job.exited then vim.fn.jobstop(job.channel) end
-        if job.watcher and not job.watcher:is_closing() then
-          job.watcher:stop()
-          job.watcher:close()
-        end
+        close_watcher(job)
         if job.exited then M.unlock(M.workspaces[id]) end
       end
     end,

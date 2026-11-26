@@ -1,17 +1,18 @@
--- Shared harness for end-to-end pi task tests: an isolated copy of the real LazyVim config
--- in an embedded Neovim, driven through RPC with real keystrokes.
+-- Shared harness for end-to-end taskbay tests: an embedded Neovim driven through RPC with real
+-- keystrokes. It boots tests/minimal_init.lua (snacks.nvim and taskbay), or with
+-- TASKBAY_E2E_CONFIG=dotfiles (or opts.config = "dotfiles") the config of the dotfiles that carry the plugin.
 -- opts.stub: replace pi with the scripted offline agent (default true).
 -- opts.env: extra environment for the editor and the pi processes it starts.
 local uv = vim.uv
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 return function(opts)
 opts = opts or {}
-local repo_root = vim.fn.getcwd()
--- Not vim.fn.tempname(): Neovim removes that directory on exit, which defeats PI_E2E_KEEP.
-local temp = assert(uv.fs_mkdtemp(uv.os_tmpdir() .. "/" .. (opts.name or "pi-e2e") .. "-XXXXXX"))
+-- Not vim.fn.tempname(): Neovim removes that directory on exit, which defeats TASKBAY_E2E_KEEP.
+local temp = assert(uv.fs_mkdtemp(uv.os_tmpdir() .. "/" .. (opts.name or "taskbay-e2e") .. "-XXXXXX"))
 local repo = temp .. "/project"
 local log_file, release = temp .. "/agents.jsonl", temp .. "/release"
-local verbose = vim.env.PI_E2E_VERBOSE == "1"
-local keep = vim.env.PI_E2E_KEEP == "1"
+local verbose = vim.env.TASKBAY_E2E_VERBOSE == "1"
+local keep = vim.env.TASKBAY_E2E_KEEP == "1"
 vim.fn.mkdir(repo, "p")
 vim.fn.mkdir(temp .. "/bin", "p")
 vim.fn.mkdir(temp .. "/data/nvim", "p")
@@ -25,23 +26,24 @@ end
 sh({ "git", "init", "-b", "main" })
 sh({ "git", "config", "user.name", "Test" })
 sh({ "git", "config", "user.email", "test@example.invalid" })
-vim.fn.writefile({ "# Project", "", "Fixture for pi task tests." }, repo .. "/README.md")
+vim.fn.writefile({ "# Project", "", "Fixture for taskbay tests." }, repo .. "/README.md")
 vim.fn.writefile({ "def greet():", "    return 'hi'" }, repo .. "/app.py")
 sh({ "git", "add", "." })
 sh({ "git", "commit", "-m", "Initial" })
 
 -- The editor keeps its default "pi" command; PATH resolves it to the scripted agent.
-if opts.stub ~= false then vim.fn.writefile({ "#!/bin/sh", "exec python3 " .. vim.fn.shellescape(repo_root .. "/nvim/tests/fixtures/pi_agent.py") .. ' "$@"' },
+if opts.stub ~= false then vim.fn.writefile({ "#!/bin/sh", "exec python3 " .. vim.fn.shellescape(plugin .. "/tests/fixtures/pi_agent.py") .. ' "$@"' },
   temp .. "/bin/pi")
 assert(uv.fs_chmod(temp .. "/bin/pi", 493)) end
-vim.fn.writefile({
-  "vim.opt.rtp:prepend(" .. vim.inspect(repo_root .. "/nvim") .. ")",
+local dotfiles = (opts.config or vim.env.TASKBAY_E2E_CONFIG) == "dotfiles"
+vim.fn.writefile(dotfiles and {
+  "vim.opt.rtp:prepend(" .. vim.inspect(vim.fs.dirname(plugin)) .. ")",
   "require('config.lazy')",
   "local config, plugin = require('lazy.core.config'), require('lazy.core.plugin')",
   "for _, name in ipairs({ 'mason.nvim', 'mason-lspconfig.nvim', 'nvim-treesitter' }) do",
   "  if config.plugins[name] then plugin.values(config.plugins[name], 'opts', false).ensure_installed = {} end",
   "end",
-}, temp .. "/init.lua")
+} or { "dofile(" .. vim.inspect(plugin .. "/tests/minimal_init.lua") .. ")" }, temp .. "/init.lua")
 
 local env = vim.fn.environ()
 env.PATH = temp .. "/bin:" .. env.PATH
@@ -87,14 +89,28 @@ local function start_editor()
   errors:read_start(function(_, data) if data then stderr[#stderr + 1] = data end end)
 end
 
-local function rpc(method, ...)
+local function request(method, args, timeout)
   sequence = sequence + 1
   local id = sequence
-  input:write(vim.mpack.encode({ 0, id, method, { ... } }))
-  assert(vim.wait(opts.rpc_timeout or 10000, function() return replies[id] ~= nil or exited ~= nil end, 5),
-    method .. " timed out: " .. table.concat(stderr))
-  assert(replies[id], "Editor exited during " .. method)
-  local reply = replies[id]
+  input:write(vim.mpack.encode({ 0, id, method, args }))
+  vim.wait(timeout, function() return replies[id] ~= nil or exited ~= nil end, 5)
+  return replies[id]
+end
+local function rpc(method, ...)
+  local reply = request(method, { ... }, opts.rpc_timeout or 10000)
+  if not reply and exited == nil then
+    -- A blocking prompt (hit-enter after an error) defers non-fast requests; fast
+    -- nvim_get_mode and nvim_input still answer, so name the prompt and dismiss it.
+    local mode = (request("nvim_get_mode", {}, 10000) or {})[4]
+    if type(mode) == "table" and mode.blocking then
+      request("nvim_input", { "<CR>" }, 10000)
+      local seen = (request("nvim_exec2", { "messages", { output = true } }, 10000) or {})[4]
+      error(("%s blocked at a prompt (mode %s)\n:messages\n%s"):format(method, mode.mode,
+        type(seen) == "table" and seen.output or "(unavailable)"), 2)
+    end
+    error(method .. " timed out: " .. table.concat(stderr), 2)
+  end
+  assert(reply, "Editor exited during " .. method)
   if reply[3] ~= vim.NIL then error(method .. ": " .. vim.inspect(reply[3]), 2) end
   return reply[4]
 end
@@ -102,7 +118,7 @@ local function lua(code, ...) return rpc("nvim_exec_lua", code, { ... }) end
 local function keys(text) rpc("nvim_input", text) end
 local function messages()
   local ok, state = pcall(lua, [[
-    local core = require("util.pi_issues")
+    local core = require("taskbay.core")
     local lines = vim.deepcopy(_G.e2e_messages or {})
     if vim.notify ~= _G.e2e_notify then lines[#lines + 1] = "-- WARNING: vim.notify was replaced; capture incomplete" end
     lines[#lines + 1] = ("-- mode=%s ft=%s buftype=%s tabs=%d"):format(vim.fn.mode(), vim.bo.filetype, vim.bo.buftype,
@@ -130,7 +146,7 @@ local function messages()
   return ok and table.concat(state, "\n") or ("(editor state unavailable: " .. tostring(state) .. ")")
 end
 local function wait_for(label, code, timeout, ...)
-  if vim.env.PI_E2E_TRACE == "1" then print("  wait: " .. label) end
+  if vim.env.TASKBAY_E2E_TRACE == "1" then print("  wait: " .. label) end
   local args, deadline = { ... }, uv.now() + (timeout or 8000)
   -- Poll without nesting vim.wait: rpc() must be able to time out on its own.
   while lua(code, unpack(args)) ~= true do
@@ -179,7 +195,7 @@ local helpers = [[
     rawset(t, key, value)
   end
   _G.e2e = {}
-  local core = require("util.pi_issues")
+  local core = require("taskbay.core")
   function e2e.by_number(number)
     for _, workspace in pairs(core.workspaces) do
       if workspace.number == number then return workspace end
@@ -210,7 +226,7 @@ local helpers = [[
   function e2e.dashboard_row(number)
     local lines = e2e.float_lines("Task Workspaces") or {}
     for row, line in ipairs(lines) do
-      if line:find("/" .. number .. "%-") then return row end
+      if line:find(" #" .. number .. " ", 1, true) then return row end
     end
   end
 ]]
@@ -219,9 +235,10 @@ local function boot()
   start_editor()
   rpc("nvim_ui_attach", 160, 45, { rgb = true, ext_linegrid = true })
   wait_for("Editor did not finish starting", [[
-    return vim.v.vim_did_enter == 1 and package.loaded["util.pi_issues_ui"] ~= nil
-      and vim.fn.exists(":PiTasks") == 2
-      and (not require("lazy.core.config").plugins["noice.nvim"] or package.loaded["noice"] ~= nil)
+    return vim.v.vim_did_enter == 1 and package.loaded["taskbay.ui"] ~= nil
+      and vim.fn.exists(":Taskbay") == 2
+      and (not package.loaded["lazy"] or not require("lazy.core.config").plugins["noice.nvim"]
+        or package.loaded["noice"] ~= nil)
   ]], 20000)
   vim.wait(300)
   lua(helpers)
@@ -230,7 +247,7 @@ local function boot()
 end
 
 local H = {
-  temp = temp, repo = repo, release = release, sh = sh, rpc = rpc, lua = lua, keys = keys, wait_for = wait_for,
+  opts = opts, temp = temp, repo = repo, release = release, sh = sh, rpc = rpc, lua = lua, keys = keys, wait_for = wait_for,
   pick = pick, step = step, agents = agents, messages = messages, boot = boot, close = close_editor,
 }
 function H.exited() return exited end
@@ -240,7 +257,7 @@ function H.run(summary, scenario)
   close_editor()
   if not ok then
     io.stderr:write(keep and ("kept test files in " .. temp .. "\n")
-      or "rerun with PI_E2E_KEEP=1 to keep the test repository, state and logs\n")
+      or "rerun with TASKBAY_E2E_KEEP=1 to keep the test repository, state and logs\n")
   end
   if ok or not keep then
     vim.fn.delete(temp, "rf")

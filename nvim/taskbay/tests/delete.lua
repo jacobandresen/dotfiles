@@ -1,11 +1,13 @@
--- Run: timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_task_delete.lua
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nvim")
-local core = require("util.pi_issues")
-local tasks = require("util.pi_tasks")
+-- Run: timeout 60 nvim --headless -u NONE -i NONE -l tests/delete.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+vim.opt.rtp:prepend(plugin)
+vim.g.mapleader = " "
+local core = require("taskbay.core")
+local tasks = require("taskbay.store")
 local temp = vim.fn.tempname()
 local repo_path = temp .. "/repo"
 vim.fn.mkdir(repo_path, "p")
-vim.g.pi_issues = { state_dir = temp .. "/state" }
+vim.g.taskbay = { state_dir = temp .. "/state" }
 _G.LazyVim = { root = function() return repo_path end }
 
 local function await(fn)
@@ -75,5 +77,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi task deletion: pending files, prepared worktrees and persisted sessions passed")
+print("taskbay delete: pending files, prepared worktrees and persisted sessions passed")
 vim.cmd("qa!")

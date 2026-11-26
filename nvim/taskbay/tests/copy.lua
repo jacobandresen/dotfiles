@@ -1,11 +1,13 @@
--- Run: timeout 30 nvim --headless -u NONE -i NONE -l nvim/tests/pi_task_copy.lua
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nvim")
-local core = require("util.pi_issues")
-local tasks = require("util.pi_tasks")
-local ui = require("util.pi_issues_ui")
+-- Run: timeout 30 nvim --headless -u NONE -i NONE -l tests/copy.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+vim.opt.rtp:prepend(plugin)
+vim.g.mapleader = " "
+local core = require("taskbay.core")
+local tasks = require("taskbay.store")
+local ui = require("taskbay.ui")
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp .. "/repo", "p")
-vim.g.pi_issues = { state_dir = temp .. "/state" }
+vim.g.taskbay = { state_dir = temp .. "/state" }
 _G.LazyVim = { root = setmetatable({}, { __call = function() return temp .. "/repo" end }) }
 local messages, gh_calls, creations = {}, {}, {}
 vim.notify = function(message) messages[#messages + 1] = tostring(message) end
@@ -23,7 +25,7 @@ local remote = { title = 'Remote "task"', body = "## Description\n\n- [ ] First 
 local original_run = core.run
 core.run = function(argv, cwd, optional, stdin)
   if argv[1] ~= "gh" then return original_run(argv, cwd, optional, stdin) end
-  assert(core.settings().github_enabled, "Disabled integration must not invoke gh")
+  assert(core.settings().remote_enabled, "Disabled integration must not invoke gh")
   gh_calls[#gh_calls + 1] = argv
   if argv[2] == "repo" then
     return { code = 0, stdout = vim.json.encode({
@@ -53,7 +55,7 @@ local function action(fn)
   assert(vim.wait(5000, function() return coroutine.status(thread) == "dead" end, 10), table.concat(messages, "\n"))
 end
 local function enabled(value)
-  vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues, { github_enabled = value })
+  vim.g.taskbay = vim.tbl_extend("force", vim.g.taskbay, { remote_enabled = value })
 end
 
 local ok, failure = xpcall(function()
@@ -66,14 +68,14 @@ local ok, failure = xpcall(function()
   await(function() core.git(temp .. "/repo", "commit", "-m", "Initial") end)
   local repo = await(function() return core.repository(temp .. "/repo") end)
   -- Disabled integration: import refuses early with an actionable message (no coroutine).
-  ui.import_task("42")
+  require("taskbay.remote").import_task("42")
   assert(#gh_calls == 0 and messages[#messages]:find("disabled", 1, true))
   enabled(true)
-  action(function() return ui.import_task("42") end)
+  action(function() return require("taskbay.remote").import_task("42") end)
   assert(#tasks.list(repo) == 0 and #creations == 0, "Cancelling import must not create a task")
   choice = "Import as local task"
-  action(function() return ui.import_task("42") end)
-  local imported = vim.b.pi_issue_draft.target
+  action(function() return require("taskbay.remote").import_task("42") end)
+  local imported = vim.b.taskbay_task.target
   assert(imported.source == "local" and imported.number == 1)
   local copied = tasks.get(imported)
   assert(copied.title == remote.title and copied.body == remote.body, "Import must preserve title and Markdown")
@@ -90,55 +92,66 @@ local ok, failure = xpcall(function()
   enabled(false)
   local calls = #gh_calls
   -- Disabled integration: export refuses early with an actionable message (no coroutine).
-  ui.export_task()
+  require("taskbay.remote").export_task()
   assert(#gh_calls == calls and #creations == 0 and messages[#messages]:find("disabled", 1, true))
   enabled(true)
   choice = "Cancel"
-  action(ui.export_task)
+  action(require("taskbay.remote").export_task)
   assert(#creations == 0 and tasks.get(imported).title == "Local revision",
     "Cancelled export may save locally but must not publish")
   choice = "Create GitHub issue"
   on_confirm = function() vim.api.nvim_buf_set_lines(buf, 2, -1, false, { "Changed while confirming" }) end
-  action(ui.export_task)
+  action(require("taskbay.remote").export_task)
   assert(#creations == 0 and messages[#messages]:find("changed during confirmation", 1, true))
   on_confirm = nil
   fail_create = true
-  action(ui.export_task)
+  action(require("taskbay.remote").export_task)
   assert(#creations == 0 and messages[#messages]:find("GitHub creation failed", 1, true))
   fail_create = false
-  action(ui.export_task)
+  action(require("taskbay.remote").export_task)
   assert(#creations == 1 and creations[1].title == "Local revision"
     and creations[1].body == "Changed while confirming", "Export must publish saved title/body via stdin")
   assert(vim.uv.fs_stat(tasks.file(imported)) and tasks.get(imported).title == "Local revision")
-  assert(vim.b.pi_issue_draft.target.source == "local" and next(core.jobs) == nil,
+  assert(vim.b.taskbay_task.target.source == "local" and next(core.jobs) == nil,
     "Export must not switch task identity or launch an agent")
   assert(remote.title == 'Remote "task"' and remote.body:find("Existing progress", 1, true),
     "Copying must not alter the source GitHub issue")
   on_confirm = function()
     on_confirm = nil
-    action(ui.export_task)
+    action(require("taskbay.remote").export_task)
     assert(messages[#messages]:find("already in progress", 1, true))
   end
-  action(ui.export_task)
+  action(require("taskbay.remote").export_task)
   assert(#creations == 2, "Concurrent export requests must not create duplicate issues")
   for _, url in ipairs({
     "https://github.com/other/repo/issues/42", "https://other.example/test/repo/issues/42",
     "https://github.com/test/repo/issues/9007199254740992",
   }) do
     create_url = url
-    action(ui.export_task)
+    action(require("taskbay.remote").export_task)
     assert(messages[#messages]:find("Unexpected issue URL; inspect GitHub before retrying", 1, true),
       "Do not report success for an unexpected issue destination or ID")
   end
   create_url = nil
-  vim.t.pi_issue = "active-github"
+  vim.t.taskbay_workspace = "active-github"
   core.workspaces["active-github"] = {
     source = "github", host = "github.com", repo = "test/repo", number = 42, path = repo.root,
   }
   choice = "Import as local task"
-  action(function() return ui.import_task() end)
-  assert(vim.b.pi_issue_draft.target.number == 2 and #tasks.list(repo) == 2,
+  action(function() return require("taskbay.remote").import_task() end)
+  assert(vim.b.taskbay_task.target.number == 2 and #tasks.list(repo) == 2,
     "Import without an argument uses the active GitHub issue")
+  -- Selected picker rows import the same way; without an issue at hand, import opens the picker.
+  action(function()
+    return require("taskbay.remote").import_issues({ source = "github", host = "github.com", repo = "test/repo", root = repo.root }, { { number = 42 } })
+  end)
+  assert(#tasks.list(repo) == 3, "Picker selections are imported as local tasks")
+  vim.t.taskbay_workspace, core.workspaces["active-github"] = nil, nil
+  local picker, opened = require("taskbay.remote").import_picker, false
+  require("taskbay.remote").import_picker = function() opened = true end
+  require("taskbay.remote").import_task()
+  require("taskbay.remote").import_picker = picker
+  assert(opened, "Import without a number or active issue opens the picker")
 end, function(err) return debug.traceback(err) end)
 
 vim.fn.delete(temp, "rf")
@@ -146,5 +159,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n\nMSGS: " .. table.concat(messages, " || ") .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi task copies: disabled integration, confirmed import/export, preserved Markdown and originals passed")
+print("taskbay copy: disabled integration, confirmed import/export, preserved Markdown and originals passed")
 vim.cmd("qa!")

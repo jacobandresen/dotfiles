@@ -1,16 +1,12 @@
+-- The agent terminal outside the task panel: show / hide a task's agent, a standalone
+-- agent elsewhere, and sending files, selections and review requests to it.
 local M = {}
 
-local command = {
-  "pi",
-  "--theme",
-  vim.fn.stdpath("config") .. "/themes/pi-retrobox.json",
-  "--use-theme",
-  "retrobox",
-}
+local function command() return require("taskbay.core").agent().terminal() end
 
 local function opts()
   return {
-    cwd = LazyVim.root(),
+    cwd = require("taskbay.core").root(),
     count = 1,
     win = {
       position = "right",
@@ -20,23 +16,16 @@ local function opts()
   }
 end
 
--- resume: a stopped task's leftover terminal starts (resumes) pi instead of hiding.
+-- resume: a stopped task's leftover terminal starts (resumes) the agent in its place instead of hiding.
 function M.toggle(resume)
-  local core = require("util.pi_issues")
+  local core = require("taskbay.core")
   local workspace = core.current()
   if workspace then
     local job = core.jobs[workspace.id]
     if job then
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if vim.api.nvim_win_get_buf(win) == job.buf then
-          if resume and job.exited then
-            return core.task(function()
-              core.start(workspace)
-              if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == job.buf then
-                vim.api.nvim_win_close(win, false)
-              end
-            end)
-          end
+          if resume and job.exited then return core.task(function() core.start(workspace) end) end
           if #vim.api.nvim_tabpage_list_wins(0) == 1 then
             vim.api.nvim_win_set_buf(win, vim.api.nvim_create_buf(true, false))
           else
@@ -49,24 +38,25 @@ function M.toggle(resume)
     end
     return core.task(function() core.start(workspace) end)
   end
-  if vim.fn.executable("pi") ~= 1 then return vim.notify("pi is not installed", vim.log.levels.WARN) end
+  local argv = command()
+  if vim.fn.executable(argv[1]) ~= 1 then return vim.notify(argv[1] .. " is not installed", vim.log.levels.WARN) end
   if not Snacks then
     return vim.notify("Snacks is not available yet; try again shortly", vim.log.levels.WARN)
   end
-  Snacks.terminal.toggle(command, opts())
+  Snacks.terminal.toggle(argv, opts())
 end
 
 local function running()
   if not Snacks then return end
   local options = opts()
   options.create = false
-  local term = Snacks.terminal.get(command, options)
+  local term = Snacks.terminal.get(command(), options)
   if term and term:buf_valid() and vim.bo[term.buf].buftype == "terminal" then return term end
 end
 
--- True while context can be sent: a managed agent runs or a pi terminal exists.
+-- True while context can be sent: a managed agent runs or an agent terminal exists.
 function M.available()
-  return require("util.pi_issues").live() > 0 or running() ~= nil
+  return require("taskbay.core").live() > 0 or running() ~= nil
 end
 
 -- The exact text to transfer: whole file, whole selected lines, or the precise
@@ -74,19 +64,14 @@ end
 local function transfer_text(source)
   local first, last_line = vim.fn.line("'<"), vim.fn.line("'>")
   local mode = vim.fn.visualmode()
-  local text
-  if mode == "V" then
-    text = table.concat(vim.api.nvim_buf_get_lines(source, first - 1, last_line, false), "\n")
-  else
-    text = table.concat(vim.api.nvim_buf_get_text(source, first - 1, vim.fn.col("'<") - 1,
-      last_line - 1, vim.fn.col("'>"), {}), "\n")
-  end
+  -- getregion keeps a multibyte last character whole; '> marks only its first byte.
+  local text = table.concat(vim.fn.getregion(vim.fn.getpos("'<"), vim.fn.getpos("'>"), { type = mode }), "\n")
   return text, mode == "V" and (" lines %d-%d"):format(first, last_line)
     or (" %d:%d-%d:%d"):format(first, vim.fn.col("'<"), last_line, vim.fn.col("'>"))
 end
 
 function M.send(visual)
-  local core = require("util.pi_issues")
+  local core = require("taskbay.core")
   local workspace = core.current()
   local source = vim.api.nvim_get_current_buf()
   if visual then
@@ -97,21 +82,20 @@ function M.send(visual)
   end
   local term = not workspace and running() or nil
   local job = workspace and core.jobs[workspace.id]
-  if not term and (not job or job.exited) then return vim.notify("Start pi with Space a p", vim.log.levels.WARN) end
+  if not term and (not job or job.exited) then return vim.notify("Start the agent with " .. core.key("agent"), vim.log.levels.WARN) end
   local file = vim.api.nvim_buf_get_name(source)
   if file == "" then return vim.notify("Save the buffer first", vim.log.levels.WARN) end
   local root = workspace and workspace.path or opts().cwd
   if not core.inside(file, root) then
     return vim.notify(
-      "This file is outside the current pi worktree; switch issue tabs before sending",
+      "This file is outside the current task's worktree; switch task tabs before sending",
       vim.log.levels.WARN
     )
   end
   local path = core.real(file):sub(#core.real(root) + 2)
-  local content, label = transfer_text(source)
-  if not visual then
-    content, label = table.concat(vim.api.nvim_buf_get_lines(source, 0, -1, false), "\n"), ""
-  end
+  -- Only selections read the visual marks: for whole-file sends they may be stale or unset.
+  local content, label = table.concat(vim.api.nvim_buf_get_lines(source, 0, -1, false), "\n"), ""
+  if visual then content, label = transfer_text(source) end
   if #content > 100000 then
     return vim.notify("Context is larger than 100 KB; send a smaller selection", vim.log.levels.WARN)
   end
@@ -132,17 +116,14 @@ function M.send(visual)
 end
 
 function M.review()
-  local core = require("util.pi_issues")
+  local core = require("taskbay.core")
   local workspace = core.current()
   local job = workspace and core.jobs[workspace.id]
-  if not job or job.exited then return vim.notify("Start the task's pi with Space a p first", vim.log.levels.WARN) end
-  if not job.model or job.model == "" or job.model == "unavailable" then
-    return vim.notify("Pi has not reported its active model yet; inspect its terminal", vim.log.levels.WARN)
+  if not job or job.exited then return vim.notify("Start the task's agent with " .. core.key("agent") .. " first", vim.log.levels.WARN) end
+  if not job.model or job.model == "" then
+    return vim.notify("The agent has not reported its active model yet; inspect its terminal", vim.log.levels.WARN)
   end
-  local text = "Use the existing subagent tool with agent: reviewer, async: false, model: "
-    .. job.model
-    .. " and the current cwd. Review this task's changes against its description and repository instructions. "
-    .. "Do not edit files, use workflow scripts, or start background agents."
+  local text = core.agent().review(job.model)
   vim.api.nvim_chan_send(job.channel, "\27[200~" .. text .. "\27[201~")
   core.show(workspace)
 end

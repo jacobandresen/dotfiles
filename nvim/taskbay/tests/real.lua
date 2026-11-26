@@ -1,23 +1,25 @@
 -- Opt-in end-to-end run with the REAL pi binary, the pinned extension and a LOCAL model.
--- Writes three tasks with Space a n, picks them with Space a i, starts all three at once,
+-- Writes three tasks with Space a n, starts each from the workspace panel (Space a w, p),
 -- and waits until each agent has implemented its own task in its own worktree.
 -- Only a model whose provider baseUrl is on this machine is accepted; the isolated pi
 -- config has no credentials, so hosted providers cannot be reached.
 --   make test-pi-real   (PI_REAL_MODEL=ollama/<id>, PI_REAL_TIMEOUT=<seconds>, PI_REAL_FOLLOWUPS=<n>)
 local uv = vim.uv
-local root = vim.fn.getcwd()
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+-- The pi settings template and local models (the dotfiles' pi/agent by default).
+local agent = vim.env.TASKBAY_PI_AGENT_DIR or vim.fs.normalize(plugin .. "/../../pi/agent")
 local function fail(message)
   io.stderr:write("pi real: " .. message .. "\n")
   vim.cmd("cquit 1")
 end
 if vim.fn.executable("pi") ~= 1 then fail("pi is not installed") end
-if not uv.fs_stat(root .. "/nvim/pi/node_modules/pi-subagents/bundle/index.js") then
-  fail("pinned pi extension missing: run :PiTaskSetup")
+if not uv.fs_stat(plugin .. "/agents/pi/node_modules/pi-subagents/bundle/index.js") then
+  fail("pinned pi extension missing: run :TaskbaySetup")
 end
 
 -- Resolve and verify the local model before anything starts.
 local function json(path) return vim.json.decode(table.concat(vim.fn.readfile(path), "\n")) end
-local settings, models = json(root .. "/pi/agent/settings.json.template"), json(root .. "/pi/agent/models.json")
+local settings, models = json(agent .. "/settings.json.template"), json(agent .. "/models.json")
 local wanted = vim.env.PI_REAL_MODEL or (settings.defaultProvider .. "/" .. settings.defaultModel)
 local provider_name, model_id = wanted:match("^([^/]+)/(.+)$")
 local provider = provider_name and models.providers[provider_name]
@@ -49,10 +51,10 @@ if vim.env.PI_REAL_THINKING then
 end
 settings.lastChangelogVersion = vim.trim(vim.fn.system({ "pi", "--version" }))
 vim.fn.writefile({ vim.json.encode(settings) }, agent_dir .. "/settings.json")
-vim.fn.writefile(vim.fn.readfile(root .. "/pi/agent/models.json"), agent_dir .. "/models.json")
+vim.fn.writefile(vim.fn.readfile(agent .. "/models.json"), agent_dir .. "/models.json")
 
-local H = dofile(root .. "/nvim/tests/pi_harness.lua")({
-  stub = false, name = "pi-real", rpc_timeout = 120000, cleanup = { agent_dir }, env = { PI_CODING_AGENT_DIR = agent_dir },
+local H = dofile(plugin .. "/tests/harness.lua")({
+  stub = false, name = "taskbay-real", rpc_timeout = 120000, cleanup = { agent_dir }, env = { PI_CODING_AGENT_DIR = agent_dir },
 })
 local repo, sh, lua, keys, wait_for, pick, step = H.repo, H.sh, H.lua, H.keys, H.wait_for, H.pick, H.step
 local timeout = tonumber(vim.env.PI_REAL_TIMEOUT or "1800") * 1000
@@ -61,7 +63,7 @@ local max_followups = tonumber(vim.env.PI_REAL_FOLLOWUPS or "2")
 local function result_path(number) return repo .. "-worktrees/task-" .. number .. "/result-" .. number .. ".txt" end
 local function read(path) return uv.fs_stat(path) and vim.trim(table.concat(vim.fn.readfile(path), "\n")) or nil end
 
-H.run("pi real: three tasks implemented concurrently by local " .. wanted, function()
+H.run("taskbay real: three tasks implemented concurrently by local " .. wanted, function()
   print("pi real: using local model " .. wanted .. " (timeout " .. timeout / 1000 .. "s)")
   H.boot()
   step("write three tasks with Space a n")
@@ -72,17 +74,19 @@ H.run("pi real: three tasks implemented concurrently by local " .. wanted, funct
       .. "Its entire content must be the single word %s followed by a newline. "
       .. "Do not change or create any other file. Do not run tests.<Esc>:write<CR>"):format(number, number, word))
     wait_for("Task " .. number .. " is saved", [[
-      local info = vim.b.pi_issue_draft
+      local info = vim.b.taskbay_task
       return info ~= nil and info.target.number == ... and not vim.bo.modified
     ]], 8000, number)
   end
 
-  step("pick all three and start them")
-  keys("<Esc><Space>ai")
-  wait_for("Space a i lists three tasks", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 3")
-  keys("<Tab><Tab><Tab>")
-  wait_for("Three tasks selected", "return #Snacks.picker.get()[1]:selected() == 3")
-  keys("<CR>")
+  step("start all three from the workspace panel")
+  for number = 1, 3 do
+    keys("<C-\\><C-n><Esc><Space>aw")
+    wait_for("The panel lists task " .. number, "return e2e.dashboard_row(...) ~= nil", 30000, number)
+    lua("vim.api.nvim_win_set_cursor(0, { e2e.dashboard_row(...), 0 })", number)
+    keys("p")
+    wait_for("Task " .. number .. " starts", "local job = e2e.job(...); return job ~= nil and not job.exited", 30000, number)
+  end
   wait_for("Three real pi processes start and report", [[
     if e2e.live() ~= 3 then return false end
     for number = 1, 3 do
@@ -179,9 +183,9 @@ H.run("pi real: three tasks implemented concurrently by local " .. wanted, funct
   end
   assert(sh({ "git", "status", "--porcelain" }) == "?? .tasks/", "The main checkout must stay untouched")
 
-  step(":PiQuit stops the agents")
-  keys("<C-\\><C-n><Esc>:PiQuit<CR>")
-  wait_for(":PiQuit asks", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 2")
+  step(":TaskbayQuit stops the agents")
+  keys("<C-\\><C-n><Esc>:TaskbayQuit<CR>")
+  wait_for(":TaskbayQuit asks", "local p = Snacks.picker.get()[1]; return p ~= nil and p:count() == 2")
   pick("Stop agents", "Stop agents and quit")
-  assert(vim.wait(15000, function() return H.exited() ~= nil end, 50), "PiQuit must exit the editor")
+  assert(vim.wait(15000, function() return H.exited() ~= nil end, 50), "TaskbayQuit must exit the editor")
 end)

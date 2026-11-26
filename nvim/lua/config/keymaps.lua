@@ -28,7 +28,7 @@ map("n", "<leader>gd", function() Snacks.lazydocker() end, { desc = "Lazydocker"
 map(
   "n",
   "<leader>gD",
-  function() require("util.pi_issues_ui").review(require("util.pi_issues").current()) end,
+  function() require("taskbay").review() end,
   { desc = "Changed Files (Diff)" }
 )
 

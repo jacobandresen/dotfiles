@@ -1,11 +1,13 @@
--- Run: timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_tasks.lua
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nvim")
-local core = require("util.pi_issues")
-local tasks = require("util.pi_tasks")
-local editor = require("util.pi_issue_edit")
+-- Run: timeout 60 nvim --headless -u NONE -i NONE -l tests/tasks.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+vim.opt.rtp:prepend(plugin)
+vim.g.mapleader = " "
+local core = require("taskbay.core")
+local tasks = require("taskbay.store")
+local editor = require("taskbay.editor")
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp .. "/repo", "p")
-vim.g.pi_issues = { state_dir = temp .. "/state", pi = vim.fn.getcwd() .. "/nvim/tests/fixtures/pi_stub.py" }
+vim.g.taskbay = { state_dir = temp .. "/state", pi = { cmd = plugin .. "/tests/fixtures/pi_stub.py" } }
 local messages = {}
 vim.notify = function(message) messages[#messages + 1] = tostring(message) end
 _G.LazyVim = { root = setmetatable({ detectors = {}, cache = {} }, {
@@ -67,7 +69,7 @@ local ok, failure = xpcall(function()
     function() tasks.get({ host = "github.com", repo = "test/repo", number = 1, path = repo.root }) end,
     function() tasks.update({ host = "github.com", repo = "test/repo", number = 1, path = repo.root }, "Title", "Body") end,
     function() tasks.create({ host = "github.com", repo = "test/repo", root = repo.root }, "Title", "Body") end,
-  }) do expect_error(fn, "GitHub integration is disabled") end
+  }) do expect_error(fn, "issue tracker integration is disabled") end
   local a = tasks.create(repo, "Improve search")
   local b = tasks.create(repo, "Fix login")
   assert(a.number == 1 and b.number == 2 and a.task_file == "001-improve-search.md")
@@ -143,11 +145,11 @@ local ok, failure = xpcall(function()
   assert(workspace.task_file == a.task_file and tasks.identity(workspace) == tasks.identity(a))
   local github = { source = "github", host = "github.com", repo = "test/repo", root = repo.root, common = repo.common }
   expect_error(function() core.prepare(github, { number = 1, title = "GitHub issue" }, "HEAD", true) end, "disabled")
-  vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues, { github_enabled = true })
+  vim.g.taskbay = vim.tbl_extend("force", vim.g.taskbay, { remote_enabled = true })
   local github_workspace = await(function()
     return core.prepare(github, { number = 1, title = "GitHub issue" }, "HEAD", true)
   end)
-  vim.g.pi_issues = vim.tbl_extend("force", vim.g.pi_issues, { github_enabled = false })
+  vim.g.taskbay = vim.tbl_extend("force", vim.g.taskbay, { remote_enabled = false })
   assert(workspace.id ~= github_workspace.id and workspace.path ~= github_workspace.path,
     "A local task and GitHub issue with the same number must have distinct worktrees")
   assert(not vim.uv.fs_stat(workspace.path .. "/.tasks"), "Untracked task files are not copied into worktrees")
@@ -212,7 +214,7 @@ local ok, failure = xpcall(function()
     "A restarted task instructs pi to pick up the existing worktree work")
   core.stop(workspace)
   assert(vim.wait(4000, function() return restarted.exited end, 10))
-  local restored = dofile(vim.fs.dirname(core.path()) .. "/lua/util/pi_issues.lua")
+  local restored = dofile(vim.api.nvim_get_runtime_file("lua/taskbay/core.lua", false)[1])
   restored.load()
   assert(restored.workspaces[workspace.id].task_file == a.task_file)
   assert(tasks.get(restored.workspaces[workspace.id]).title == "External checkpoint")
@@ -221,12 +223,12 @@ local ok, failure = xpcall(function()
   vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/snacks.nvim")
   _G.Snacks = require("snacks")
   Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
-  local ui = require("util.pi_issues_ui")
+  local ui = require("taskbay.ui")
   ui.setup()
   -- GitHub keys exist (and appear in which-key) only while the integration is on.
   local function dash_buf()
     for _, b in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_get_name(b):find("^pi://issues/", 1, false) then return b end
+      if vim.api.nvim_buf_get_name(b):find("^taskbay://panel/", 1, false) then return b end
     end
   end
   local function dash_desc(key)
@@ -245,88 +247,78 @@ local ok, failure = xpcall(function()
     end
     return footer
   end
-  assert(core.settings().github_enabled == false, "Tests run with the GitHub integration off")
+  assert(core.settings().remote_enabled == false, "Tests run with the GitHub integration off")
   ui.dashboard()
   assert(dash_desc("e") == "missing" and dash_desc("I") == "missing" and dash_desc("g") == "missing",
     "The dashboard must not map GitHub actions while the integration is off")
   assert(dash_footer():find("export", 1, true) == nil and dash_footer():find("? help", 1, true),
     ("The footer must not list GitHub actions while the integration is off (footer=%s)"):format(dash_footer()))
-  -- Every listed key must currently do something: agent commands wait for a
-  -- running agent, workspace commands need a workspace, both exist here.
-  assert(dash_footer():find("E revise", 1, true) == nil and dash_footer():find("x stop", 1, true) == nil
-    and dash_footer():find("a switch", 1, true) == nil,
-    "Revise, stop and switch need a running agent and must not be listed when none runs")
-  assert(dash_footer():find("m finish", 1, true) and dash_footer():find("D base", 1, true)
-    and dash_footer():find("R restart", 1, true),
-    ("Workspace commands must be listed while a workspace exists (footer=%s)"):format(dash_footer()))
+  -- The footer lists only what the selected row can do: here a stopped workspace.
+  assert(dash_footer():find("R restart", 1, true) and dash_footer():find("m finish", 1, true)
+    and dash_footer():find("x stop", 1, true) == nil,
+    ("The footer must follow the selected row (footer=%s)"):format(dash_footer()))
   assert(dash_desc("m") == "Finish: Commit, Merge, Mark Finished" and dash_desc("d") == "Working Diff"
-    and dash_desc("p") == "Start / Focus Pi", "Dashboard keys carry descriptions")
-  vim.fn.feedkeys("?", "xt") -- the dashboard help popup must open and adapt
-  local help_buf = vim.api.nvim_get_current_buf()
-  local help_text = table.concat(vim.api.nvim_buf_get_lines(help_buf, 0, -1, false), "\n")
-  assert(help_text:find("new local task", 1, true), "The task help must list creation commands")
-  assert(help_text:find("export", 1, true) == nil,
-    "The task help must not list GitHub actions while the integration is off")
-  assert(help_text:find("revise", 1, true) == nil,
-    "The task help must not list task revision while no agent runs")
+    and dash_desc("p") == "Start / Resume Agent", "Dashboard keys carry descriptions")
+  for _, key in ipairs({ "a", "E", "Q", "i", "g" }) do
+    assert(dash_desc(key) == "missing", "Duplicate or hint key must not be mapped: " .. key)
+  end
+  local panel_win = vim.api.nvim_get_current_win()
+  vim.fn.feedkeys("?", "xt")
+  local help_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  assert(help_text:find("n  new task", 1, true) and help_text:find("GitHub is off", 1, true),
+    "The help lists creation and says how to enable GitHub")
   vim.fn.feedkeys("q", "xt")
-  -- Space a a / a s appear only while an agent runs; every task command
-  -- (Space a g / v / e / f / R / m / r) only while a task is selected; the
-  -- poll keeps all of them in sync.
+  assert(vim.api.nvim_get_current_win() == panel_win, "Closing the help returns to the panel")
+  -- Space a s appears only while pi runs, Space a v / r only while a task is
+  -- selected; actions owned by the panel are never mapped globally.
   local expect_map = core.live() > 0
-  local expect_task = core.current() ~= nil or (vim.b.pi_issue_draft or {}).target ~= nil
-  assert(vim.wait(4000, function()
-    for _, map in ipairs({ { "<leader>aa", expect_map }, { "<leader>as", expect_map },
-      { "<leader>ag", expect_task }, { "<leader>av", expect_task }, { "<leader>ae", expect_task },
-      { "<leader>af", expect_task }, { "<leader>aR", expect_task }, { "<leader>am", expect_task },
-      { "<leader>ar", expect_task } }) do
+  local expect_task = core.current() ~= nil or (vim.b.taskbay_task or {}).target ~= nil
+  local function maps_follow(task)
+    for _, map in ipairs({ { "<leader>as", expect_map }, { "<leader>av", task }, { "<leader>ar", task },
+      { "<leader>aa", false }, { "<leader>ag", false }, { "<leader>ae", false }, { "<leader>af", false },
+      { "<leader>aR", false }, { "<leader>am", false } }) do
       if (vim.fn.maparg(map[1], "n") ~= "") ~= map[2] then return false end
     end
     return true
-  end, 20), "The pi key mappings must follow the running-agent and task-selection state")
+  end
+  assert(vim.wait(4000, function() return maps_follow(expect_task) end, 20),
+    "The pi key mappings must follow the running-agent and task-selection state")
   -- In a tab with no current task the task keys must disappear.
   vim.cmd.tabnew()
   vim.cmd.enew()
-  local unselected_ok = vim.wait(4000, function()
-    for _, key in ipairs({ "<leader>ag", "<leader>av", "<leader>ae", "<leader>af",
-      "<leader>aR", "<leader>am", "<leader>ar" }) do
-      if vim.fn.maparg(key, "n") ~= "" then return false end
-    end
-    return true
-  end, 20)
+  local unselected_ok = vim.wait(4000, function() return maps_follow(false) end, 20)
   vim.cmd.tabclose()
   assert(unselected_ok, "Task command mappings must be absent when no task is selected")
-  ui.toggle_github()
-  assert(core.settings().github_enabled and not vim.api.nvim_buf_is_valid(dash_buf() or -1),
+  ui.toggle_remote()
+  assert(core.settings().remote_enabled and not vim.api.nvim_buf_is_valid(dash_buf() or -1),
     "Toggling must close a stale dashboard so its keys rebuild")
   ui.dashboard()
-  assert(dash_desc("e") == "Export to a New GitHub Issue" and dash_desc("I") == "Import Open GitHub Issues"
-    and dash_desc("g") == "GitHub Issues",
-    ("The dashboard maps GitHub actions with descriptions while the integration is on (e=%s I=%s g=%s)")
-      :format(dash_desc("e"), dash_desc("I"), dash_desc("g")))
-  assert(dash_footer():find("e export", 1, true), "The footer lists GitHub actions while the integration is on")
-  ui.toggle_github() -- restore the off state for the rest of the suite
-  assert(core.settings().github_enabled == false)
-  ui.tasks()
+  assert(dash_desc("e") == "Export to a New GitHub Issue" and dash_desc("I") == "Import GitHub Issues",
+    ("The dashboard maps GitHub actions with descriptions while the integration is on (e=%s I=%s)")
+      :format(dash_desc("e"), dash_desc("I")))
+  assert(dash_desc("g") == "missing" and dash_desc("i") == "missing",
+    "The dashboard must not offer a task or GitHub issue picker (panel-only selection)")
+  ui.toggle_remote() -- restore the off state for the rest of the suite
+  assert(core.settings().remote_enabled == false)
+  ui.dashboard()
   assert(vim.wait(5000, function()
-    local picker = Snacks.picker.get()[1]
-    return picker and picker:count() == 2
+    local buffer = dash_buf()
+    return buffer ~= nil and #vim.fn.win_findbuf(buffer) > 0 and vim.api.nvim_buf_line_count(buffer) > 4
   end, 10), table.concat(messages, "\n"))
-  local picker = Snacks.picker.get()[1]
-  assert(picker.opts.title == "repo / Local Tasks")
-  picker.opts.actions.view_issue(picker)
+  -- Tasks are selected from the workspace panel rows only; v views the row's task.
+  vim.fn.feedkeys("v", "xt")
   assert(vim.wait(3000, function()
-    return vim.b.pi_issue_draft and vim.b.pi_issue_draft.target.source == "local"
+    return vim.b.taskbay_task and vim.b.taskbay_task.target.source == "local"
   end, 10))
-  vim.cmd("PiTaskNew Review the remaining tests")
+  vim.cmd("TaskbayNew Review the remaining tests")
   assert(vim.wait(5000, function()
-    return vim.b.pi_issue_draft and vim.b.pi_issue_draft.target.number == 3
+    return vim.b.taskbay_task and vim.b.taskbay_task.target.number == 3
   end, 10), table.concat(messages, "\n"))
   assert(#tasks.list(repo) == 3 and core.jobs[workspace.id].exited,
     "Creating a task opens its Markdown without starting an agent")
   local input = core.input
   core.input = function() error("New tasks must open directly, without asking for a predefined title") end
-  vim.cmd("PiTaskNew")
+  vim.cmd("TaskbayNew")
   assert(vim.wait(5000, function() return vim.bo.buftype == "acwrite" end, 10))
   local draft = vim.api.nvim_get_current_buf()
   assert(#tasks.list(repo) == 3 and vim.api.nvim_buf_get_lines(draft, 0, -1, false)[1] == "# ",
@@ -340,35 +332,26 @@ local ok, failure = xpcall(function()
   assert(not vim.uv.fs_stat(temp .. "/elsewhere.md") and #tasks.list(repo) == 3
     and messages[#messages]:find("without a filename", 1, true), "Do not silently ignore a requested destination")
   vim.cmd("silent write")
-  assert(vim.wait(5000, function() return vim.b.pi_issue_draft and vim.b.pi_issue_draft.target.number == 4 end, 10),
+  assert(vim.wait(5000, function() return vim.b.taskbay_task and vim.b.taskbay_task.target.number == 4 end, 10),
     table.concat(messages, "\n"))
-  local own = vim.b.pi_issue_draft.target
+  local own = vim.b.taskbay_task.target
   assert(vim.bo.buftype == "" and not vim.bo.modified and own.task_file == "004-my-own-task.md")
   assert(tasks.get(own).body == "My description.\n\n- [ ] My next step", "Keep the user's own Markdown")
   vim.api.nvim_buf_set_lines(draft, 2, -1, false, { "A second edit." })
   vim.cmd("silent write")
   assert(#tasks.list(repo) == 4 and tasks.get(own).body == "A second edit.",
     "Later saves update the task instead of creating another one")
-  core.input = function(prompt, default)
-    assert(prompt:find("Base ref", 1, true) and default == "HEAD")
-    return default
-  end
-  ui.tasks("local", "My own task", 50, repo)
+  ui.dashboard()
+  local row
   assert(vim.wait(5000, function()
-    local selected = Snacks.picker.get()[1]
-    return selected and selected:count() == 1
-  end, 10), table.concat(messages, "\n"))
-  picker = Snacks.picker.get()[1]
-  picker.opts.actions.review_launch(picker)
-  assert(vim.wait(5000, function()
-    return vim.inspect(vim.api.nvim_win_get_config(0).title):find("Review Task Launch", 1, true)
-  end, 10), table.concat(messages, "\n"))
-  local start
-  for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
-    if mapping.lhs == "s" then start = mapping.callback end
-  end
-  assert(start, "The launch review must offer starting pi")
-  start()
+    local buffer = dash_buf()
+    if not buffer or #vim.fn.win_findbuf(buffer) == 0 then return false end
+    for index, line in ipairs(vim.api.nvim_buf_get_lines(buffer, 0, -1, false)) do
+      if line:find("#4 My own task", 1, true) then row = index; return true end
+    end
+  end, 10), "The written task must be selectable in the workspace panel: " .. table.concat(messages, "\n"))
+  vim.api.nvim_win_set_cursor(vim.fn.win_findbuf(dash_buf())[1], { row, 0 })
+  vim.fn.feedkeys("p", "xt")
   assert(vim.wait(10000, function()
     local active = core.current()
     local running = active and core.jobs[active.id]
@@ -403,7 +386,7 @@ local ok, failure = xpcall(function()
   vim.fn.feedkeys("v\27", "xt") -- the last visual mode must be charwise
   vim.fn.setpos("'<", { notes, 1, 7, 0 })
   vim.fn.setpos("'>", { notes, 1, 10, 0 })
-  require("util.agents").send(true)
+  require("taskbay.terminal").send(true)
   local pasted
   assert(vim.wait(5000, function()
     local found = vim.fs.find("paste.txt", { path = temp, limit = 50 })[1]
@@ -417,18 +400,114 @@ local ok, failure = xpcall(function()
     and pasted:find("\nbeta\n```", 1, true), "The exact selection must reach pi: " .. tostring(pasted))
   assert(not pasted:find("alpha", 1, true), "A charwise selection must not transfer whole lines")
   vim.cmd.stopinsert()
+  -- Panel X deletes only after confirmation: a new row loses its task file, a
+  -- workspace row also its worktree and session. Long titles are clipped.
+  local function panel_select(text)
+    ui.dashboard()
+    local index
+    assert(vim.wait(5000, function()
+      local buffer = dash_buf()
+      if not buffer or #vim.fn.win_findbuf(buffer) == 0 then return false end
+      for i, line in ipairs(vim.api.nvim_buf_get_lines(buffer, 0, -1, false)) do
+        if line:find(text, 1, true) then index = i; return true end
+      end
+      vim.api.nvim_set_current_win(vim.fn.win_findbuf(buffer)[1])
+      vim.fn.feedkeys("]", "xt") -- the row may be on another page
+    end, 50), "Panel row missing: " .. text)
+    vim.api.nvim_set_current_win(vim.fn.win_findbuf(dash_buf())[1])
+    vim.api.nvim_win_set_cursor(0, { index, 0 })
+    return vim.api.nvim_get_current_line()
+  end
+  local choose = core.choose
+  -- Re-opening an open panel focuses it; v / f / e act on the selected row.
+  local draft = tasks.create(repo, "Draft row")
+  for i = 1, 5 do tasks.create(repo, "Filler " .. i) end
+  panel_select("Draft row")
+  ui.dashboard()
+  assert(vim.api.nvim_get_current_buf() == dash_buf(), "Re-opening focuses the open panel")
+  assert(vim.wait(3000, function() return vim.api.nvim_get_current_line():find("Draft row", 1, true) ~= nil end, 10),
+    "Re-opening reloads the rows and keeps the selection")
+  local revealed = tasks.create(repo, "Revealed")
+  ui.task_created(revealed)
+  assert(vim.wait(3000, function()
+    return vim.api.nvim_get_current_line():find("#" .. revealed.number .. " Revealed", 1, true) ~= nil
+  end, 10), "A task written while the panel is open appears there, selected (on its page)")
+  assert(vim.api.nvim_win_get_height(0) >= vim.api.nvim_buf_line_count(0) or vim.api.nvim_win_get_height(0) == vim.o.lines - 6,
+    "The panel grows with its rows")
+  local fields, seen = require("taskbay.fields"), nil
+  local fields_open, export = fields.open, require("taskbay.remote").export_task
+  fields.open = function(target) seen = target end
+  panel_select("Draft row")
+  vim.fn.feedkeys("f", "xt")
+  assert(seen and seen.number == draft.number, "f opens a new row's fields")
+  panel_select("Draft row")
+  vim.fn.feedkeys("v", "xt")
+  assert(vim.wait(3000, function() return (vim.b.taskbay_task or {}).target and vim.b.taskbay_task.target.number == draft.number end, 10),
+    "v opens a new row's task text")
+  ui.toggle_remote()
+  require("taskbay.remote").export_task = function(target) seen = target end
+  seen = nil
+  panel_select("Draft row")
+  vim.fn.feedkeys("e", "xt")
+  assert(vim.wait(3000, function() return seen and seen.number == draft.number end, 10), "e exports a new row")
+  seen = nil
+  panel_select("#4 My own task")
+  vim.fn.feedkeys("e", "xt")
+  assert(vim.wait(3000, function() return seen and seen.id == active.id end, 10), "e exports a workspace row")
+  ui.toggle_remote()
+  fields.open, require("taskbay.remote").export_task = fields_open, export
+  for _, item in ipairs(tasks.list(repo)) do
+    if item.title == "Draft row" or item.title == "Revealed" or item.title:find("^Filler") then tasks.delete(item) end
+  end
+  -- :TaskbayReload reloads the draft's issue; :TaskbaySetup reports a successful install.
+  local editor = require("taskbay.editor")
+  local editor_open, reloaded = editor.open, nil
+  editor.open = function(target, reload) reloaded = { target = target, reload = reload } end
+  vim.b.taskbay_task = { target = { number = 5 } }
+  vim.cmd("TaskbayReload")
+  editor.open, vim.b.taskbay_task = editor_open, nil
+  assert(reloaded.reload and reloaded.target.number == 5, ":TaskbayReload reloads the draft's issue")
+  local executable, run = vim.fn.executable, core.run
+  vim.fn.executable = function(name) return name == "npm" and 1 or executable(name) end
+  core.run = function() return { stdout = "added 1 package" } end
+  vim.cmd("TaskbaySetup")
+  assert(vim.wait(3000, function() return messages[#messages]:find("Pinned pi-subagents installed", 1, true) ~= nil end, 10))
+  vim.fn.executable, core.run = executable, run
+  -- A new row already shows its checklist progress.
+  local checklist = tasks.create(repo, "Checklist row", "- [x] a\n- [ ] b")
+  assert(panel_select("Checklist row"):find("Checklist row  1/2", 1, true), "New rows show checklist progress")
+  vim.cmd.close()
+  tasks.delete(checklist)
+  local long = tasks.file(tasks.create(repo, "Long " .. ("x"):rep(200)))
+  local own_file = tasks.file(own)
+  assert(panel_select("Long xxx"):find("x...", 1, true), "Long titles are clipped with an ellipsis")
+  core.choose = function() return "Cancel" end
+  vim.fn.feedkeys("X", "xt")
+  assert(vim.wait(2000, function() return #vim.fn.win_findbuf(dash_buf() or -1) == 0 end, 10))
+  assert(vim.uv.fs_stat(long), "Cancel keeps the task")
+  panel_select("Long xxx")
+  core.choose = function() return "Delete local task file" end
+  vim.fn.feedkeys("X", "xt")
+  assert(vim.wait(3000, function() return not vim.uv.fs_stat(long) end, 10), "X deletes a new task's file")
+  panel_select("#4 My own task")
+  core.choose = function() return "Delete task, worktree and session" end
+  vim.fn.feedkeys("X", "xt")
+  assert(vim.wait(8000, function()
+    return not core.workspaces[active.id] and not vim.uv.fs_stat(active.path) and not vim.uv.fs_stat(own_file)
+  end, 10), "X deletes a workspace with its worktree and task file: " .. table.concat(messages, "\n"))
+  core.choose = choose
   local fresh = temp .. "/fresh"
   vim.fn.mkdir(fresh, "p")
   await(function() core.git(fresh, "init", "-b", "main") end)
   local fresh_repo = await(function() return core.repository(fresh) end)
   local fresh_task = tasks.create(fresh_repo, "Plan the demo")
-  ui.launch(fresh_repo, { fresh_task })
+  ui.launch(fresh_repo, fresh_task)
   assert(vim.wait(5000, function()
     return messages[#messages]:find("no commits yet", 1, true) ~= nil
   end, 10), "A repository without commits must explain how to start: " .. messages[#messages])
   assert(not vim.uv.fs_stat(temp .. "/fresh-worktrees"), "No worktree is created without a base commit")
   local count = #messages
-  vim.cmd("PiTasks github")
+  vim.cmd("TaskbayImport")
   assert(#messages > count and messages[#messages]:find("GitHub integration is disabled", 1, true))
 end, debug.traceback)
 
@@ -444,5 +523,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi tasks: offline providers, safe files, editing, new-task launch and session resume passed")
+print("taskbay tasks: offline providers, safe files, editing, new-task launch and session resume passed")
 vim.cmd("qa!")

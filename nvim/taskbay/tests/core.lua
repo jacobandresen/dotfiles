@@ -1,12 +1,14 @@
--- Run: timeout 60 nvim --headless -u NONE -i NONE -l nvim/tests/pi_issues.lua
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nvim")
-local core = require("util.pi_issues")
-local ui = require("util.pi_issues_ui")
+-- Run: timeout 60 nvim --headless -u NONE -i NONE -l tests/core.lua
+local plugin = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+vim.opt.rtp:prepend(plugin)
+vim.g.mapleader = " "
+local core = require("taskbay.core")
+local ui = require("taskbay.ui")
 local uv = vim.uv
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp .. "/repo", "p")
-vim.g.pi_issues = {
-  state_dir = temp .. "/state", pi = vim.fn.getcwd() .. "/nvim/tests/fixtures/pi_stub.py", github_enabled = true,
+vim.g.taskbay = {
+  state_dir = temp .. "/state", pi = { cmd = plugin .. "/tests/fixtures/pi_stub.py" }, remote_enabled = true,
 }
 local messages = {}
 vim.notify = function(message) messages[#messages + 1] = tostring(message) end
@@ -64,6 +66,25 @@ local ok, failure = pcall(function()
   core.open(b)
   local tab_b = vim.api.nvim_get_current_tabpage()
   assert(core.current() == b and vim.fn.getcwd() == b.path)
+  -- LazyVim's root is the task's worktree first.
+  assert(vim.g.root_spec[1] == "taskbay" and LazyVim.root.detectors.taskbay()[1] == b.path, vim.inspect(vim.g.root_spec))
+  -- Hints name the configured keys with the configured leader.
+  assert(core.key("toggle") == "F6" and core.key("panel") == "Space a w", core.key("panel"))
+  local settings = vim.g.taskbay
+  vim.g.taskbay, vim.g.mapleader = vim.tbl_extend("force", settings, { keys = { panel = "<leader>tw" } }), ","
+  assert(core.key("panel") == ", t w" and core.key("new") == ", a n", core.key("panel"))
+  vim.g.taskbay, vim.g.mapleader = settings, " "
+  -- The plugin entry point: setup stores options, the statusline names the task tab's agent.
+  -- Without LazyVim the root outside task tabs is the buffer's Git root.
+  local lazyvim, tab = _G.LazyVim, vim.api.nvim_get_current_tabpage()
+  vim.cmd.tabnew(vim.fn.fnameescape(temp .. "/repo/README.md"))
+  _G.LazyVim = nil
+  assert(core.root() == temp .. "/repo", core.root())
+  _G.LazyVim = lazyvim
+  vim.cmd.tabclose()
+  vim.api.nvim_set_current_tabpage(tab)
+  local taskbay = require("taskbay")
+  assert(taskbay.statusline():find("Pi ", 1, true), taskbay.statusline())
   core.open(a)
   assert(vim.api.nvim_get_current_tabpage() == tab_a and core.root() == a.path)
   assert(#vim.api.nvim_list_tabpages() == 3, "Duplicate opens must reuse their tab")
@@ -153,6 +174,19 @@ local ok, failure = pcall(function()
     expect_error(function() core.lock(a, "test") end, "owner changed during recovery")
   end)
   core.choose = choose
+  -- choose: a multi-line prompt is titled by its first line and shows the rest above the choices.
+  local select, seen = vim.ui.select, {}
+  vim.ui.select = function(items, opts, on_choice) seen[#seen + 1] = opts; on_choice(items[2]) end
+  local preview_lines
+  await(function()
+    assert(core.choose({ "Cancel", "Go" }, "One line") == "Go")
+    assert(core.choose({ "Cancel", "Go" }, "Title\n\nFirst detail\nSecond detail\n") == "Go")
+  end)
+  vim.ui.select = select
+  assert(seen[1].prompt == "One line" and not seen[1].snacks, "Single-line prompts pass through")
+  assert(seen[2].snacks.preview({ preview = { set_lines = function(_, l) preview_lines = l end } }))
+  assert(seen[2].prompt == "Title" and vim.deep_equal(preview_lines, { "First detail", "Second detail" })
+    and seen[2].snacks.layout.layout.height == 2 + 2 + 5, "Details show above the choices")
   assert(
     vim.json.decode(table.concat(vim.fn.readfile(owner_file))).token == "other-editor",
     "A late recovery confirmation must not unlink a replacement owner"
@@ -193,17 +227,17 @@ local ok, failure = pcall(function()
   vim.api.nvim_win_set_buf(0, source)
   vim.api.nvim_buf_set_name(source, b.path .. "/same name.txt")
   vim.api.nvim_buf_set_lines(source, 0, -1, false, { "second issue unsaved" })
-  require("util.agents").send(false)
+  require("taskbay.terminal").send(false)
   assert(not core.jobs[b.id], "Sending without pi must never create a job")
   core.open(a)
   vim.api.nvim_win_set_buf(0, source)
-  require("util.agents").send(false)
+  require("taskbay.terminal").send(false)
   assert(messages[#messages]:find("outside"), "Reject context from another worktree")
   local own = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_win_set_buf(0, own)
   vim.api.nvim_buf_set_name(own, a.path .. "/same name.txt")
   vim.api.nvim_buf_set_lines(own, 0, -1, false, { "first issue unsaved" })
-  require("util.agents").send(false)
+  require("taskbay.terminal").send(false)
   assert(
     vim.wait(3000, function()
       local path = core.directory(a) .. "/paste.txt"
@@ -216,7 +250,7 @@ local ok, failure = pcall(function()
   assert(not pasted:find("second issue", 1, true))
   local model = job.model
   job.model = nil
-  require("util.agents").review()
+  require("taskbay.terminal").review()
   assert(messages[#messages]:find("active model", 1, true), "Do not guess a reviewer model before status arrives")
   job.model = model
   local send = vim.api.nvim_chan_send
@@ -225,11 +259,11 @@ local ok, failure = pcall(function()
     assert(channel == job.channel, "Send the reviewer request to the current issue")
     review = text
   end
-  require("util.agents").review()
+  require("taskbay.terminal").review()
   vim.api.nvim_chan_send = send
   assert(review and review:find("model: github-copilot/gpt-6.1-sol", 1, true),
     "Reviewers must follow the active session model")
-  require("util.agents").toggle()
+  require("taskbay.terminal").toggle()
   assert(not job.exited and vim.fn.jobwait({ job.channel }, 0)[1] == -1, "Hiding terminal must not stop pi")
   core.show(a)
   core.open(b)
@@ -275,8 +309,8 @@ local ok, failure = pcall(function()
     end
     return run(argv, ...)
   end
-  local settings = vim.g.pi_issues
-  vim.g.pi_issues = vim.tbl_extend("force", settings, { max_agents = 1 })
+  local settings = vim.g.taskbay
+  vim.g.taskbay = vim.tbl_extend("force", settings, { max_agents = 1 })
   local attempts = {}
   for _, workspace in ipairs({ c, d }) do
     core.task(function()
@@ -285,7 +319,7 @@ local ok, failure = pcall(function()
     end)
   end
   assert(vim.wait(5000, function() return vim.tbl_count(attempts) == 2 end, 10), "Concurrent launches did not finish")
-  core.run, vim.g.pi_issues = run, settings
+  core.run, vim.g.taskbay = run, settings
   assert(attempts[c.id].started ~= attempts[d.id].started, "Concurrent launches must obey the live agent cap")
   for _, workspace in ipairs({ c, d }) do
     core.stop(workspace)
@@ -296,7 +330,7 @@ local ok, failure = pcall(function()
     end
     return true
   end, 10))
-  local restored = dofile(vim.fs.dirname(core.path()) .. "/lua/util/pi_issues.lua")
+  local restored = dofile(vim.api.nvim_get_runtime_file("lua/taskbay/core.lua", false)[1])
   restored.load()
   assert(restored.workspaces[a.id].session_file == a.session_file, "Restore exact persisted session")
   assert(next(restored.jobs) == nil, "Loading saved workspaces must not start agents")
@@ -307,7 +341,7 @@ local ok, failure = pcall(function()
     Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
     vim.o.showtabline = 0
     for _, width in ipairs({ vim.o.columns }) do
-      ui.review(a)
+      require("taskbay.review").review(a)
       assert(
         vim.wait(5000, function()
           local pickers = Snacks.picker.get()
@@ -329,44 +363,57 @@ local ok, failure = pcall(function()
       picker:close()
       vim.wait(100)
     end
-  end
-  local original_input, original_choose = core.input, ui.confirm_launch
-  core.input = function() return "main" end
-  local moved_sha = cmd({ "git", "rev-parse", "HEAD" }, a.path)
-  ui.confirm_launch = function()
-    git("update-ref", "refs/heads/main", moved_sha)
-    return "Prepare only"
-  end
-  ui.launch(
-    repo,
-    { { number = 11, title = "Existing" }, { number = -1, title = "Invalid" }, { number = 13, title = "Third" } },
-    { review = true }
-  )
-  assert(
-    vim.wait(
-      5000,
-      function() return messages[#messages] and messages[#messages]:find("2 prepared; 0 started", 1, true) end,
-      10
-    ),
-    "Batch must continue after a partial failure: " .. table.concat(messages, "\n")
-  )
-  assert(messages[#messages]:find("Invalid issue number", 1, true))
-  for _, workspace in pairs(core.workspaces) do
-    if workspace.number == 13 then
-      assert(workspace.base_sha == sha, "Launch must use the exact base SHA shown before confirmation")
+    -- Preview edge cases, driven through a stub preview.
+    local function preview(item)
+      local shown
+      item.cwd = a.path
+      require("taskbay.review").preview({ item = item, picker = { closed = false, current = function() return item end }, preview = {
+        reset = function() end, set_title = function() end, highlight = function() end,
+        set_lines = function(_, lines) shown = lines end, win = { valid = function() return true end },
+      } })
+      assert(vim.wait(5000, function() return shown ~= nil and shown[1] ~= "Loading diff..." end, 10))
+      return shown
     end
-  end
-  git("update-ref", "refs/heads/main", sha)
-  core.input, ui.confirm_launch = original_input, original_choose
-  local confirmation
-  core.task(function() confirmation = ui.confirm_launch({ "test/repo", "Cancel must not launch anything." }) end)
-  local confirmation_buf = vim.api.nvim_get_current_buf()
-  for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(confirmation_buf, "n")) do
-    if mapping.lhs == "q" then mapping.callback() end
-  end
-  assert(vim.wait(1000, function() return confirmation == "Cancel" end, 10), "Launch preview must support cancellation")
-  for _, current in pairs(core.jobs) do
-    assert(current.exited, "Prepare-only must not launch")
+    assert(preview({ file = "same name.txt", base = "no-such-ref" })[1] == "Diff failed:")
+    vim.fn.writefile(vim.fn["repeat"]({ "x" }, 10001), a.path .. "/big.txt")
+    assert(preview({ file = "big.txt", untracked = true })[1]:find("truncated to 10,000", 1, true))
+    vim.fn.delete(a.path .. "/big.txt")
+    assert(preview({ file = "absent.txt" })[1]:find("No textual diff", 1, true))
+    -- Picker actions: refresh, scope switch, and confirm on deleted and present files.
+    local function next_picker(title)
+      local found
+      assert(vim.wait(5000, function()
+        found = Snacks.picker.get()[1]
+        return found ~= nil and found.opts.title:find(title, 1, true) ~= nil
+      end, 10), "Picker missing: " .. title)
+      return found
+    end
+    require("taskbay.review").review(a)
+    local p = next_picker("working changes")
+    p.opts.actions.refresh_issue(p)
+    p = next_picker("working changes")
+    local count = #messages
+    p.opts.confirm(p, { file = "gone.txt", status = "D" })
+    assert(messages[count + 1]:find("Deleted file", 1, true) and not p.closed, "Deleted files stay in the picker")
+    p.opts.confirm(p, { file = "review.txt" })
+    assert(vim.api.nvim_buf_get_name(0) == a.path .. "/review.txt" and core.current() == a, "Confirm opens the file")
+    require("taskbay.review").review(a)
+    p = next_picker("working changes")
+    p.opts.actions.issue_scope(p)
+    assert(vim.wait(5000, function()
+      local q = Snacks.picker.get()[1]
+      return (q and q.opts.title:find("issue changes", 1, true)) or messages[#messages]:find("No issue changes", 1, true)
+    end, 10), "The scope key switches to the recorded base")
+    for _, q in ipairs(Snacks.picker.get()) do q:close() end
+    require("taskbay.review").review(nil)
+    p = next_picker("working changes")
+    p.opts.actions.issue_scope(p)
+    assert(messages[#messages]:find("requires a task workspace", 1, true))
+    local files = core.files
+    core.files = function() return {} end
+    require("taskbay.review").review(a)
+    assert(vim.wait(3000, function() return messages[#messages]:find("No working changes", 1, true) end, 10))
+    core.files = files
   end
   ui.dashboard()
   local panel = vim.api.nvim_get_current_win()
@@ -378,7 +425,7 @@ local ok, failure = pcall(function()
   assert(vim.api.nvim_tabpage_is_valid(tab_b) and uv.fs_stat(a.path), "Closing the panel preserves tabs/worktrees")
 
   -- Finishing (local task): commit the worktree, merge into the main checkout, mark finished.
-  local tasks = require("util.pi_tasks")
+  local tasks = require("taskbay.store")
   local lrepo = { root = temp .. "/repo", common = temp .. "/repo/.git", source = "local", repo = "repo", host = "local" }
   local local_task = tasks.create(lrepo, "Finish me")
   local lws = await(function() return core.prepare(lrepo, local_task, "main", true) end)
@@ -392,7 +439,7 @@ local ok, failure = pcall(function()
   await(function()
     core.choose = function(items, prompt)
       ok_finish = prompt
-      return "Stop pi, commit and merge"
+      return "Stop the agent, commit and merge"
     end
     ok_finish, err_finish = pcall(core.finish, lws)
     core.choose = real_finish_choose
@@ -411,40 +458,22 @@ local ok, failure = pcall(function()
   assert(ok_finish, err_finish)
   assert(lws.finished and core.status(lws) == "finished", "A repeated finish stays finished")
 
-  -- Current-tab commands follow a draft buffer's target when no task tab has focus.
-  core.open(b)
-  vim.cmd("tabnew")
-  local ltarget = { source = "local", task_root = lrepo.root, number = local_task.number,
-    task_file = local_task.task_file, path = lrepo.root, repo = "repo", host = "local", title = local_task.title }
-  vim.b.pi_issue_draft = { target = ltarget }
-  local draft_mark = #messages
-  core.choose = function() return "Commit and merge" end
-  ui.finish_current()
-  -- Wait for the finish to fully merge (lws.finished is already set from above).
-  assert(vim.wait(8000, function()
-    for i = draft_mark, #messages do
-      if tostring(messages[i]):find("merged again", 1, true) then return true end
-    end
-    return false
-  end, 10), "finish_current must follow the draft buffer's target")
-  ui.restart_current()
-  core.choose = real_finish_choose
+  -- Restarting clears the finished state and replays the task; deleting removes everything.
+  await(function() core.restart(lws) end)
   assert(vim.wait(8000, function() return lws.finished == nil end, 10), "Restarting clears the finished state")
   assert(vim.wait(8000, function()
     local rjob = core.jobs[lws.id]
     return rjob and not rjob.exited and rjob.sequence ~= nil
-  end, 10), "A restart from a draft buffer relaunches pi")
+  end, 10), "A restart relaunches pi")
   assert(vim.tbl_contains(core.jobs[lws.id].argv, "Implement the attached task."),
     "A restart replays the task text in a fresh conversation")
-  core.choose = function() return "Delete local task" end
-  ui.delete_current()
+  await(function() core.delete(lws) end)
   assert(vim.wait(8000, function()
     return not core.jobs[lws.id] and not core.workspaces[lws.id]
       and not uv.fs_stat(lws.path)
       and vim.fn.glob(lrepo.root .. "/.tasks/" .. local_task.number .. "-*") == ""
-  end, 10), "delete_current stops pi and removes worktree, task file and sidecar")
-  core.choose = real_finish_choose
-  vim.cmd("tabclose")
+  end, 10), "Deleting stops pi and removes worktree, task file and sidecar")
+  assert(cmd({ "git", "branch", "--list", lws.branch }, lrepo.root) == "", "Deleting removes the task branch")
 
   -- Deleting while pi runs: deletion stops pi itself, then removes everything.
   local delete_task = tasks.create(lrepo, "Delete me running")
@@ -516,18 +545,18 @@ local ok, failure = pcall(function()
   git("init", "-b", "main", temp .. "/bare")
   local bare = { root = temp .. "/bare", common = temp .. "/bare/.git", source = "local", repo = "bare", host = "local" }
   local launch_msg = #messages
-  ui.launch(bare, { { number = 1, title = "No commits" } })
+  ui.launch(bare, { number = 1, title = "No commits" })
   assert(vim.wait(5000, function() return #messages > launch_msg and tostring(messages[#messages]):find("no commits yet", 1, true)
     end, 10), "An unborn repository gets the commit-first explanation: " .. table.concat(messages, "\n"))
   vim.fn.delete(temp .. "/bare", "rf")
 
   -- Toggling the GitHub integration flips the setting and tells the user.
-  local before = core.settings().github_enabled
-  ui.toggle_github()
-  assert(core.settings().github_enabled == not before)
+  local before = core.settings().remote_enabled
+  ui.toggle_remote()
+  assert(core.settings().remote_enabled == not before)
   assert(tostring(messages[#messages]):find(before and "disabled" or "enabled", 1, true))
-  ui.toggle_github()
-  assert(core.settings().github_enabled == before)
+  ui.toggle_remote()
+  assert(core.settings().remote_enabled == before)
 
   -- Dependency installation guards on npm instead of running mid-suite.
   local exec = vim.fn.executable
@@ -535,6 +564,121 @@ local ok, failure = pcall(function()
   ui.install()
   vim.fn.executable = exec
   assert(tostring(messages[#messages]):find("npm is required", 1, true), "install explains a missing npm")
+
+  -- Core error paths.
+  local function last(pattern)
+    return vim.wait(3000, function() return tostring(messages[#messages]):find(pattern, 1, true) ~= nil end, 10)
+  end
+  local function fails(fn, pattern) expect_error(function() await(fn) end, pattern) end
+  fails(function() core.run({ "false" }) end, "false failed (1)")
+  local bad = core.settings().state_dir .. "/" .. ("f"):rep(24)
+  vim.fn.mkdir(bad, "p")
+  write(bad .. "/workspace.json", { "{}" })
+  dofile(vim.api.nvim_get_runtime_file("lua/taskbay/core.lua", false)[1]).load()
+  assert(last("Cannot restore workspace metadata"), "Invalid saved metadata is reported, not loaded")
+  vim.fn.delete(bad, "rf")
+
+  -- A branch checked out elsewhere is reused only on request and never while locked.
+  local elsewhere = temp .. "/elsewhere-77"
+  git("worktree", "add", "-b", tasks.branch({ source = repo.source, host = repo.host, repo = repo.repo, number = 77 }),
+    elsewhere, "HEAD")
+  fails(function() core.prepare(repo, { number = 77, title = "Elsewhere" }, "main") end, "already checked out")
+  git("worktree", "lock", elsewhere)
+  fails(function() core.prepare(repo, { number = 77, title = "Elsewhere" }, "main", true) end, "Worktree is locked")
+  git("worktree", "unlock", elsewhere)
+  assert(await(function() return core.prepare(repo, { number = 77, title = "Elsewhere" }, "main", true) end).path
+    == core.real(elsewhere), "Reuse adopts the existing worktree")
+
+  -- A branch without a worktree is reused only on request.
+  git("branch", tasks.branch({ source = repo.source, host = repo.host, repo = repo.repo, number = 78 }))
+  fails(function() core.prepare(repo, { number = 78, title = "Branch only" }, "main") end, "Branch already exists")
+  assert(uv.fs_stat(await(function() return core.prepare(repo, { number = 78, title = "Branch only" }, "main", true) end).path))
+
+  -- An abandoned lock (editor and agent both gone) is recovered after confirmation.
+  local dead = vim.fn.jobstart({ "true" })
+  local dead_pid = vim.fn.jobpid(dead)
+  vim.fn.jobwait({ dead })
+  core.write(core.directory(a) .. "/owner.json", vim.json.encode({ pid = dead_pid, token = "gone" }))
+  local choose = core.choose
+  core.choose = function() return "Recover abandoned lock" end
+  core.lock(a, "recovered")
+  core.unlock(a)
+  core.choose = choose
+
+  -- A started task without a saved session never silently starts a new conversation.
+  local session_file = a.session_file
+  a.session_file = nil
+  fails(function() core.start(a) end, "did not report a saved session")
+  a.session_file = session_file
+  -- Losing the last slot while recovering ownership keeps the workspace for later.
+  local lock, live = core.lock, core.live
+  core.lock = function(...)
+    lock(...)
+    core.live = function() return core.settings().max_agents end
+  end
+  fails(function() core.start(a) end, "during ownership recovery")
+  core.lock, core.live = lock, live
+  -- A watcher that cannot start fails the launch and releases the lock.
+  local new_fs_event = vim.uv.new_fs_event
+  vim.uv.new_fs_event = function()
+    return { start = function() return nil, "boom" end, stop = function() end, close = function() end,
+      is_closing = function() return false end }
+  end
+  fails(function() core.start(a) end, "Cannot watch the agent lifecycle: boom")
+  -- Watcher errors, unreadable status files and a silent pi are reported.
+  local on_event, on_timeout
+  vim.uv.new_fs_event = function()
+    local watcher = new_fs_event()
+    return setmetatable({ start = function(_, path, flags, callback)
+      on_event = callback
+      return watcher:start(path, flags, callback)
+    end }, { __index = function(_, key) return function(_, ...) return watcher[key](watcher, ...) end end })
+  end
+  local defer_fn = vim.defer_fn
+  vim.defer_fn = function(fn, ms)
+    if ms == 5000 then on_timeout = fn else return defer_fn(fn, ms) end
+  end
+  await(function() core.start(a) end)
+  vim.uv.new_fs_event, vim.defer_fn = new_fs_event, defer_fn
+  local job = core.jobs[a.id]
+  on_event("boom")
+  assert(last("Agent status watcher: boom"))
+  write(core.directory(a) .. "/" .. job.run .. ".json", { "{" })
+  on_event(nil, job.run .. ".json")
+  assert(last("Cannot read agent status"))
+  job.sequence = nil
+  on_timeout()
+  assert(job.activity == "unknown" and last("lifecycle reporting is unavailable"))
+  -- Cancelling a restart keeps the running conversation.
+  core.choose = function() return "Cancel" end
+  await(function() core.restart(a) end)
+  assert(core.jobs[a.id] == job and not job.exited, "A cancelled restart changes nothing")
+  core.choose = choose
+  -- Quitting stops live agents and closes their watchers.
+  vim.api.nvim_exec_autocmds("VimLeavePre", { group = "taskbay" })
+  assert(vim.wait(4000, function() return job.exited end, 10) and job.watcher:is_closing(), "Quit stops pi and its watcher")
+
+  -- Finish reports merge conflicts; delete refuses unsaved task edits.
+  local conflict = tasks.create(lrepo, "Conflicting work")
+  local cws = await(function() return core.prepare(lrepo, { number = conflict.number, title = conflict.title }, "main") end)
+  write(cws.path .. "/conflict.txt", { "worktree" })
+  write(lrepo.root .. "/conflict.txt", { "main" })
+  cmd({ "git", "add", "conflict.txt" }, lrepo.root)
+  cmd({ "git", "commit", "-m", "Conflict" }, lrepo.root)
+  core.choose = function() return "Commit and merge" end
+  fails(function() core.finish(cws) end, "Merge failed")
+  cmd({ "git", "merge", "--abort" }, lrepo.root)
+  vim.cmd.edit(vim.fn.fnameescape(tasks.file(cws)))
+  vim.api.nvim_buf_set_lines(0, -1, -1, false, { "unsaved" })
+  fails(function() core.delete(cws) end, "Save or discard modified task buffers")
+  vim.bo.modified = false
+  core.choose = choose
+
+  -- Refresh reports Git failures once and clears the file count.
+  vim.fn.mkdir(temp .. "/not-git", "p")
+  local broken = vim.tbl_extend("force", a, { id = "broken", path = temp .. "/not-git" })
+  await(function() core.refresh(broken) end)
+  assert(broken.files == nil and broken.git_error and last("Cannot refresh"))
 end)
 
 for id, job in pairs(core.jobs) do
@@ -551,5 +695,5 @@ if not ok then
   io.stderr:write(tostring(failure) .. "\n")
   vim.cmd("cquit 1")
 end
-print("pi issues: routing, Git scopes, lifecycle, context, stop/resume and dashboard passed")
+print("taskbay core: routing, Git scopes, lifecycle, context, stop/resume and dashboard passed")
 vim.cmd("qa!")

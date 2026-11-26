@@ -9,5 +9,6 @@ External tools this config expects: [DEPENDENCIES.md](DEPENDENCIES.md).
 Only pi-agent is available in a terminal split. New sessions use pi-agent's
 configured default model, with the pinned pi-subagents extension for foreground
 delegation using the active session model. Keep the AI menu and keymaps limited to pi.
-Task workflows default to local `.tasks/*.md` files. GitHub operations require
-`vim.g.pi_issues.github_enabled = true`; keep local task paths offline.
+Task workflows (the local taskbay plugin in `taskbay/`) default to local `.tasks/*.md`
+files. GitHub operations require the tracker integration (`remote_enabled`); keep local
+task paths offline.
