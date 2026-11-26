@@ -643,6 +643,8 @@ local ok, failure = pcall(function()
   local job = core.jobs[a.id]
   on_event("boom")
   assert(last("Agent status watcher: boom"))
+  -- The stub writes its own (valid) status first; a slow start must not overwrite the broken file below.
+  assert(vim.wait(10000, function() return job.sequence ~= nil end, 10), "The stub reports its status")
   write(core.directory(a) .. "/" .. job.run .. ".json", { "{" })
   on_event(nil, job.run .. ".json")
   assert(last("Cannot read agent status"))
