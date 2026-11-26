@@ -1,5 +1,7 @@
 # ⚓ taskbay.nvim
 
+[![tests](https://github.com/jacobandresen/taskbay.nvim/actions/workflows/test.yml/badge.svg)](https://github.com/jacobandresen/taskbay.nvim/actions/workflows/test.yml)
+
 ```
             |    |    |                     ~ the taskbay ~
            )_)  )_)  )_)          write the orders, launch the boats,
@@ -84,15 +86,24 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "taskbay.nvim",
-  dir = "~/path/to/taskbay", -- or the repository once published
+  "jacobandresen/taskbay.nvim",
+  version = "*",   -- the latest release
   lazy = false,
   dependencies = { "folke/snacks.nvim" },
   opts = {},
 }
 ```
 
-Then run `:TaskbaySetup` once; it installs the pinned pi extension with `npm ci`.
+lazy.nvim runs `build.lua` on install and update, which installs the pinned pi
+extension with `npm ci`. With another plugin manager, run `:TaskbaySetup` once.
+`:help taskbay` has the short version of everything below.
+
+## 🎬 Watch a voyage
+
+`asciinema play demo/taskbay.cast` replays a one-minute session: two tasks
+written, two agents at sea at once, a diff inspected, one task brought home and
+merged. It's recorded with the offline scripted agent; `python3 demo/record.py`
+records a fresh take (needs tmux).
 
 ## Why hackers like it
 

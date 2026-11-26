@@ -334,7 +334,7 @@ local ok, failure = pcall(function()
   restored.load()
   assert(restored.workspaces[a.id].session_file == a.session_file, "Restore exact persisted session")
   assert(next(restored.jobs) == nil, "Loading saved workspaces must not start agents")
-  local snacks = vim.fn.stdpath("data") .. "/lazy/snacks.nvim"
+  local snacks = (vim.env.TASKBAY_SNACKS or (vim.fn.stdpath("data") .. "/lazy/snacks.nvim"))
   if uv.fs_stat(snacks) then
     vim.opt.rtp:append(snacks)
     _G.Snacks = require("snacks")

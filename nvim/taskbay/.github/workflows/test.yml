@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [v0.11.0, stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: folke/snacks.nvim
+          path: .deps/snacks.nvim
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the pi driver's extension
+        run: nvim --headless -u NONE -i NONE -l build.lua
+      - name: Git identity for the test repositories
+        run: |
+          git config --global user.name CI
+          git config --global user.email ci@example.invalid
+          git config --global init.defaultBranch main
+      - name: Offline suite
+        env:
+          TASKBAY_SNACKS: ${{ github.workspace }}/.deps/snacks.nvim
+        run: nvim --headless -u NONE -i NONE -l tests/run.lua
+      - name: Line coverage (must stay at 100%)
+        env:
+          TASKBAY_SNACKS: ${{ github.workspace }}/.deps/snacks.nvim
+        run: nvim --headless -u NONE -i NONE -l tests/coverage.lua

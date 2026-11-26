@@ -11,6 +11,3 @@ lazy/
 
 # Claude Code session files
 .claude/
-
-# The pinned pi extension of taskbay's pi driver is installed with :TaskbaySetup.
-taskbay/agents/pi/node_modules/

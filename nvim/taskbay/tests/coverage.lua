@@ -98,4 +98,4 @@ end
 print(("total %d/%d lines (%.1f%%)"):format(covered, total, 100 * covered / total))
 if #failed > 0 then print("failed under tracing:\n" .. table.concat(failed, "\n")) end
 vim.fn.delete(out)
-vim.cmd(#failed > 0 and "cquit 1" or "qa!")
+vim.cmd((#failed > 0 or covered < total) and "cquit 1" or "qa!")

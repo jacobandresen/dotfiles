@@ -220,7 +220,7 @@ local ok, failure = xpcall(function()
   assert(tasks.get(restored.workspaces[workspace.id]).title == "External checkpoint")
   assert(next(restored.jobs) == nil, "Restoring local task metadata must not start agents")
 
-  vim.opt.rtp:append(vim.fn.stdpath("data") .. "/lazy/snacks.nvim")
+  vim.opt.rtp:append(vim.env.TASKBAY_SNACKS or (vim.fn.stdpath("data") .. "/lazy/snacks.nvim"))
   _G.Snacks = require("snacks")
   Snacks.setup({ picker = { enabled = true }, notifier = { enabled = false } })
   local ui = require("taskbay.ui")

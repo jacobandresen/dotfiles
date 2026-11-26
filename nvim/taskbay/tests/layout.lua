@@ -75,7 +75,7 @@ local ok, failure = pcall(function()
     require("taskbay.ui").setup()
     core.open(workspace)
   ]],
-    { plugin, vim.fn.stdpath("data") .. "/lazy/snacks.nvim", temp }
+    { plugin, (vim.env.TASKBAY_SNACKS or (vim.fn.stdpath("data") .. "/lazy/snacks.nvim")), temp }
   )
   lua([[
     local core = require("taskbay.core")

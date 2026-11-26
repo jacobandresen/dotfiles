@@ -1,5 +1,5 @@
 {
-  "name": "dotfiles-pi-issues",
+  "name": "taskbay-pi-agent",
   "private": true,
   "type": "module",
   "dependencies": {
